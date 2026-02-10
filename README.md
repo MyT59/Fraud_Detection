@@ -78,7 +78,3 @@ These metrics are important due to class imbalance commonly found in fraud datas
   - Matplotlib / Seaborn
 - Development Environment:
   - Jupyter Notebook / VS Code
-
----
-
-## 📁 Project Structure
