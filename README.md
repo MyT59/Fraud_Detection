@@ -19,12 +19,6 @@ By applying machine learning, this system aims to detect hidden patterns and ano
 The system applies **supervised and/or unsupervised learning** techniques depending on data availability.
 
 ### Common approaches used:
-- **Supervised Learning** (if labeled data is available)
-  - Logistic Regression
-  - Random Forest
-  - Decision Tree
-  - Support Vector Machine (SVM)
-
 - **Unsupervised Learning** (for anomaly detection)
   - Isolation Forest
   - K-Means Clustering
