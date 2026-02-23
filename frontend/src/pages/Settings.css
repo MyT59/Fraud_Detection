@@ -655,3 +655,76 @@
     width: 100%;
   }
 }
+/* ─── Logout Button in Sidebar ───────────────────────────── */
+.settings-tab-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 4px 0;
+}
+
+.settings-tab-logout {
+  width: 100%;
+}
+
+.settings-tab-logout:hover {
+  background: #fef2f2 !important;
+}
+
+.settings-tab-logout:hover .tab-label {
+  color: #dc2626;
+}
+
+.settings-tab-logout:hover .tab-description {
+  color: #ef4444;
+}
+
+.tab-icon-logout {
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+}
+
+.settings-tab-logout:hover .tab-icon-logout {
+  background: #dc2626 !important;
+  color: white !important;
+}
+
+/* ─── Logout Confirm Modal ───────────────────────────────── */
+.logout-modal {
+  max-width: 420px;
+}
+
+.logout-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0.5rem 0;
+}
+
+.logout-icon-wrap {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #fef2f2;
+  border: 2px solid #fecaca;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: #dc2626;
+  margin-bottom: 1.25rem;
+}
+
+.logout-modal-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 0.5rem;
+}
+
+.logout-modal-sub {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  margin: 0;
+  line-height: 1.5;
+}

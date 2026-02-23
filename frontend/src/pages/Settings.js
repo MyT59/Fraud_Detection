@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import ProfileSettings from '../components/settings/ProfileSettings';
-import SecuritySettings from '../components/settings/SecuritySettings';
+import ProfileSettings      from '../components/settings/ProfileSettings';
+import SecuritySettings     from '../components/settings/SecuritySettings';
 import NotificationSettings from '../components/settings/NotificationSettings';
-import SystemSettings from '../components/settings/SystemSettings';
-import ApiSettings from '../components/settings/ApiSettings';
-import SettingsTabs from '../components/settings/SettingsTabs';
+import SystemSettings       from '../components/settings/SystemSettings';
+import ApiSettings          from '../components/settings/ApiSettings';
+import SettingsTabs         from '../components/settings/SettingsTabs';
 import './Settings.css';
 import PageLoader from '../components/common/PageLoader';
 
 const Settings = () => {
-  const [loading, setLoading] = useState(true);
+  const [loading,     setLoading]     = useState(true);
+  const [activeTab,   setActiveTab]   = useState('profile');
+  const [saveStatus,  setSaveStatus]  = useState(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  const [activeTab, setActiveTab] = useState('profile');
-  const [saveStatus, setSaveStatus] = useState(null);
-
-  // Mock user data
   const [userData, setUserData] = useState({
     name: 'Admin User',
     email: 'admin@frauddetection.com',
@@ -55,74 +54,38 @@ const Settings = () => {
   });
 
   const handleSave = (tab, data) => {
-    // Simulate save operation
     setSaveStatus('saving');
-    
     setTimeout(() => {
-      switch(tab) {
-        case 'profile':
-          setUserData(data);
-          break;
-        case 'security':
-          setSecurityData(data);
-          break;
-        case 'notifications':
-          setNotificationData(data);
-          break;
-        case 'system':
-          setSystemData(data);
-          break;
-        case 'api':
-          setApiData(data);
-          break;
-        default:
-          break;
+      switch (tab) {
+        case 'profile':       setUserData(data);         break;
+        case 'security':      setSecurityData(data);     break;
+        case 'notifications': setNotificationData(data); break;
+        case 'system':        setSystemData(data);       break;
+        case 'api':           setApiData(data);          break;
+        default: break;
       }
-      
       setSaveStatus('success');
       setTimeout(() => setSaveStatus(null), 3000);
     }, 1000);
   };
 
+  const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
+    localStorage.removeItem('isLoggedIn');
+    window.location.href = '/login';
+  };
+
   const renderTabContent = () => {
-    switch(activeTab) {
-      case 'profile':
-        return (
-          <ProfileSettings 
-            data={userData}
-            onSave={(data) => handleSave('profile', data)}
-          />
-        );
-      case 'security':
-        return (
-          <SecuritySettings 
-            data={securityData}
-            onSave={(data) => handleSave('security', data)}
-          />
-        );
-      case 'notifications':
-        return (
-          <NotificationSettings 
-            data={notificationData}
-            onSave={(data) => handleSave('notifications', data)}
-          />
-        );
-      case 'system':
-        return (
-          <SystemSettings 
-            data={systemData}
-            onSave={(data) => handleSave('system', data)}
-          />
-        );
-      case 'api':
-        return (
-          <ApiSettings 
-            data={apiData}
-            onSave={(data) => handleSave('api', data)}
-          />
-        );
-      default:
-        return null;
+    switch (activeTab) {
+      case 'profile':       return <ProfileSettings      data={userData}         onSave={(d) => handleSave('profile', d)} />;
+      case 'security':      return <SecuritySettings     data={securityData}     onSave={(d) => handleSave('security', d)} />;
+      case 'notifications': return <NotificationSettings data={notificationData} onSave={(d) => handleSave('notifications', d)} />;
+      case 'system':        return <SystemSettings       data={systemData}       onSave={(d) => handleSave('system', d)} />;
+      case 'api':           return <ApiSettings          data={apiData}          onSave={(d) => handleSave('api', d)} />;
+      default:              return null;
     }
   };
 
@@ -136,6 +99,7 @@ const Settings = () => {
   return (
     <div className="settings-page">
       <div className="container-fluid py-4">
+
         {/* Header */}
         <div className="page-header mb-4">
           <h1 className="page-title">
@@ -154,15 +118,16 @@ const Settings = () => {
         )}
 
         <div className="row">
-          {/* Settings Tabs */}
+          {/* Sidebar Tabs */}
           <div className="col-lg-3 mb-4">
-            <SettingsTabs 
+            <SettingsTabs
               activeTab={activeTab}
               onTabChange={setActiveTab}
+              onLogout={handleLogout}
             />
           </div>
 
-          {/* Settings Content */}
+          {/* Content */}
           <div className="col-lg-9">
             <div className="settings-content-wrapper">
               {renderTabContent()}
@@ -170,6 +135,50 @@ const Settings = () => {
           </div>
         </div>
       </div>
+
+      {/* Logout Confirm Modal */}
+      {showLogoutConfirm && (
+        <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="modal-content logout-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h5>
+                <i className="bi bi-box-arrow-right me-2 text-danger"></i>
+                Konfirmasi Log Out
+              </h5>
+              <button className="btn-close" onClick={() => setShowLogoutConfirm(false)}></button>
+            </div>
+            <div className="modal-body">
+              <div className="logout-modal-body">
+                <div className="logout-icon-wrap">
+                  <i className="bi bi-box-arrow-right"></i>
+                </div>
+                <p className="logout-modal-text">
+                  Apakah kamu yakin ingin keluar dari akun ini?
+                </p>
+                <p className="logout-modal-sub">
+                  Sesi aktif akan diakhiri dan kamu perlu login kembali untuk mengakses sistem.
+                </p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                <i className="bi bi-x-circle me-1"></i>
+                Batal
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={confirmLogout}
+              >
+                <i className="bi bi-box-arrow-right me-1"></i>
+                Ya, Log Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

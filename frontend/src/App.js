@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar            from './components/Navbar';
 import Sidebar           from './components/Sidebar';
 import Dashboard         from './pages/Dashboard';
@@ -15,8 +15,15 @@ import AuditLog          from './pages/AuditLog';
 import AlertsLog         from './pages/AlertsLog';
 import FraudPatterns     from './pages/FraudPatterns';
 import ActivityTimeline  from './pages/ActivityTimeline';
+import Login             from './pages/Login';
 
 import './App.css';
+
+// ── Proteksi route: kalau belum login, redirect ke /login ──
+const ProtectedRoute = ({ children }) => {
+  const isLoggedIn = localStorage.getItem('isLoggedIn');
+  return isLoggedIn ? children : <Navigate to="/login" replace />;
+};
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 992);
@@ -31,30 +38,43 @@ function App() {
 
   return (
     <Router>
-      <div className="App">
-        <Navbar onToggleSidebar={() => setSidebarOpen(p => !p)} />
-        <div className={`app-container ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
-          <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
-          <main className="main-content">
-            <Routes>
-              <Route path="/"                   element={<Dashboard />} />
-              <Route path="/dashboard"          element={<Dashboard />} />
-              <Route path="/risk-management"    element={<RiskManagement />} />
-              <Route path="/manual-review"      element={<ManualReview />} />
-              <Route path="/review-history"     element={<ReviewHistory />} />
-              <Route path="/transactions"       element={<Transactions />} />
-              <Route path="/analytics"          element={<Analytics />} />
-              <Route path="/reports"            element={<Reports />} />
-              <Route path="/settings"           element={<Settings />} />
-              <Route path="/super-admin"        element={<SuperAdmin />} />
-              <Route path="/audit-log"          element={<AuditLog />} />
-              <Route path="/alerts"             element={<AlertsLog />} />
-              <Route path="/fraud-patterns"     element={<FraudPatterns />} />
-              <Route path="/activity-timeline"  element={<ActivityTimeline />} />
-            </Routes>
-          </main>
-        </div>
-      </div>
+      <Routes>
+        {/* ── Login — full screen, no navbar/sidebar ── */}
+        <Route path="/login" element={<Login />} />
+
+        {/* ── App shell — terlindungi, harus login dulu ── */}
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <div className="App">
+                <Navbar onToggleSidebar={() => setSidebarOpen(p => !p)} />
+                <div className={`app-container ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+                  <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
+                  <main className="main-content">
+                    <Routes>
+                      <Route path="/"                   element={<Dashboard />} />
+                      <Route path="/dashboard"          element={<Dashboard />} />
+                      <Route path="/risk-management"    element={<RiskManagement />} />
+                      <Route path="/manual-review"      element={<ManualReview />} />
+                      <Route path="/review-history"     element={<ReviewHistory />} />
+                      <Route path="/transactions"       element={<Transactions />} />
+                      <Route path="/analytics"          element={<Analytics />} />
+                      <Route path="/reports"            element={<Reports />} />
+                      <Route path="/settings"           element={<Settings />} />
+                      <Route path="/super-admin"        element={<SuperAdmin />} />
+                      <Route path="/audit-log"          element={<AuditLog />} />
+                      <Route path="/alerts"             element={<AlertsLog />} />
+                      <Route path="/fraud-patterns"     element={<FraudPatterns />} />
+                      <Route path="/activity-timeline"  element={<ActivityTimeline />} />
+                    </Routes>
+                  </main>
+                </div>
+              </div>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
     </Router>
   );
 }

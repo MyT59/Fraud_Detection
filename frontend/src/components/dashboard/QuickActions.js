@@ -57,13 +57,6 @@ const QuickActions = () => {
       route: '/reports'
     },
     {
-      id: 10,
-      title: 'Settings',
-      icon: 'bi-gear-fill',
-      color: 'secondary',
-      route: '/settings'
-    },
-    {
       id: 6,
       title: 'Super Admin',
       icon: 'bi-shield-lock-fill',
@@ -83,7 +76,21 @@ const QuickActions = () => {
       icon: 'bi-bell-fill',
       color: 'warning',
       route: '/alerts'
-    }
+    },
+    {
+      id: 12,
+      title: 'Fraud Patterns',
+      icon: 'bi-bug-fill',
+      color: 'danger',
+      route: '/fraud-patterns'
+    },
+    {
+      id: 10,
+      title: 'Settings',
+      icon: 'bi-gear-fill',
+      color: 'secondary',
+      route: '/settings'
+    },
   ];
 
   return (

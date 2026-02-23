@@ -1,12 +1,12 @@
 import React from 'react';
 
-const SettingsTabs = ({ activeTab, onTabChange }) => {
+const SettingsTabs = ({ activeTab, onTabChange, onLogout }) => {
   const tabs = [
-    { id: 'profile', icon: 'person-circle', label: 'Profile', description: 'Informasi personal' },
-    { id: 'security', icon: 'shield-lock', label: 'Security', description: 'Keamanan akun' },
-    { id: 'notifications', icon: 'bell', label: 'Notifications', description: 'Preferensi notifikasi' },
-    { id: 'system', icon: 'sliders', label: 'System', description: 'Pengaturan sistem' },
-    { id: 'api', icon: 'code-slash', label: 'API', description: 'Konfigurasi API' }
+    { id: 'profile',       icon: 'person-circle', label: 'Profile',       description: 'Informasi personal'    },
+    { id: 'security',      icon: 'shield-lock',   label: 'Security',      description: 'Keamanan akun'         },
+    { id: 'notifications', icon: 'bell',          label: 'Notifications', description: 'Preferensi notifikasi' },
+    { id: 'system',        icon: 'sliders',       label: 'System',        description: 'Pengaturan sistem'     },
+    { id: 'api',           icon: 'code-slash',    label: 'API',           description: 'Konfigurasi API'       }
   ];
 
   return (
@@ -33,6 +33,23 @@ const SettingsTabs = ({ activeTab, onTabChange }) => {
               )}
             </button>
           ))}
+
+          {/* Divider */}
+          <div className="settings-tab-divider" />
+
+          {/* Logout Button */}
+          <button
+            className="settings-tab-item settings-tab-logout"
+            onClick={onLogout}
+          >
+            <div className="tab-icon tab-icon-logout">
+              <i className="bi bi-box-arrow-right"></i>
+            </div>
+            <div className="tab-content">
+              <div className="tab-label">Log Out</div>
+              <div className="tab-description">Keluar dari akun</div>
+            </div>
+          </button>
         </div>
       </div>
     </div>

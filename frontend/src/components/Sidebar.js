@@ -12,7 +12,6 @@ const Sidebar = ({ isOpen, onClose }) => {
     { path: "/analytics",          icon: "bi-bar-chart",               label: "Analytics" },
     { path: "/activity-timeline",  icon: "bi-activity",                label: "Activity Timeline" },
     { path: "/reports",            icon: "bi-file-earmark-text",       label: "Reports" },
-    { path: "/settings",           icon: "bi-gear",                    label: "Settings" },
   ];
 
   const adminMenu = [
@@ -20,6 +19,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     { path: "/audit-log",      icon: "bi-clock-history",    label: "Audit Log" },
     { path: "/alerts",         icon: "bi-bell-fill",        label: "Alerts Log" },
     { path: "/fraud-patterns", icon: "bi-bug-fill",         label: "Fraud Patterns" },
+    { path: "/settings",       icon: "bi-gear",             label: "Settings" },
   ];
 
   return (
