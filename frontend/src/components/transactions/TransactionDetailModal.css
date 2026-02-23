@@ -1,0 +1,331 @@
+/* Transaction Detail Modal Styles */
+
+.detail-card {
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 1rem;
+  height: 100%;
+}
+
+.detail-card.border-danger {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.detail-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #737373;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+}
+
+.detail-value {
+  font-size: 0.95rem;
+  color: #262626;
+  font-weight: 500;
+}
+
+.user-avatar-large {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.fraud-indicators {
+  list-style: none;
+  padding-left: 0;
+  margin-top: 0.5rem;
+}
+
+.fraud-indicators li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.fraud-indicators li:last-child {
+  border-bottom: none;
+}
+
+.fraud-indicators li:before {
+  content: "⚠ ";
+  margin-right: 0.5rem;
+}
+
+/* ── Overlay ── */
+.txn-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1040;
+  animation: overlayIn 0.2s ease;
+}
+
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Modal Centering Wrapper ── */
+.txn-detail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1.5rem;
+  pointer-events: none;
+}
+
+.txn-detail-dialog {
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+  pointer-events: all;
+  animation: modalIn 0.25s cubic-bezier(0.34, 1.3, 0.64, 1);
+  border-radius: 12px;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.txn-detail-dialog::-webkit-scrollbar { width: 6px; }
+.txn-detail-dialog::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
+.txn-detail-dialog::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* ── Modal Content Box ── */
+.txn-modal-content {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.txn-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e5e5e5;
+  background: #fff;
+}
+
+.txn-modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #262626;
+  margin: 0;
+}
+
+.txn-btn-close {
+  background: none;
+  border: none;
+  color: #737373;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.txn-btn-close:hover {
+  background: #f5f5f5;
+  color: #262626;
+}
+
+/* ── Body ── */
+.txn-modal-body {
+  padding: 1.5rem;
+}
+
+/* ── Risk Banner ── */
+.txn-risk-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border: 1px solid transparent;
+}
+
+.txn-risk-banner.txn-risk-danger  { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+.txn-risk-banner.txn-risk-warning { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.txn-risk-banner.txn-risk-success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+
+.txn-risk-icon { font-size: 2rem; flex-shrink: 0; }
+.txn-risk-info { flex: 1; }
+
+.txn-risk-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.txn-progress {
+  height: 8px;
+  background: rgba(0,0,0,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+}
+
+.txn-progress-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.txn-progress-bar.txn-progress-danger  { background: #dc2626; }
+.txn-progress-bar.txn-progress-warning { background: #f59e0b; }
+.txn-progress-bar.txn-progress-success { background: #10b981; }
+
+/* ── Info Grid ── */
+.txn-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.txn-grid-full { grid-column: 1 / -1; }
+
+.txn-user-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.txn-amount {
+  color: #2563eb !important;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.txn-additional-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.txn-sub-label {
+  font-size: 0.75rem;
+  color: #737373;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.txn-sub-value {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #262626;
+}
+
+.txn-label-danger { color: #dc2626 !important; }
+
+/* ── Badges ── */
+.txn-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.txn-badge-danger  { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.txn-badge-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+
+/* ── Footer ── */
+.txn-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e5e5e5;
+  background: #fafafa;
+}
+
+/* ── Buttons ── */
+.txn-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.55rem 1.1rem;
+  border-radius: 7px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.txn-btn:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+
+.txn-btn-secondary { background: #e5e5e5; color: #262626; }
+.txn-btn-secondary:hover { background: #d4d4d4; }
+
+.txn-btn-success { background: #16a34a; color: #fff; }
+.txn-btn-success:hover { background: #15803d; }
+
+.txn-btn-danger { background: #dc2626; color: #fff; }
+.txn-btn-danger:hover { background: #b91c1c; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .txn-detail-modal {
+    padding: 0;
+    align-items: flex-end !important;
+  }
+  .txn-detail-dialog {
+    max-height: 95vh;
+    border-radius: 12px 12px 0 0;
+  }
+  .txn-modal-content {
+    border-radius: 12px 12px 0 0;
+  }
+  .txn-grid {
+    grid-template-columns: 1fr;
+  }
+  .txn-grid-full {
+    grid-column: 1;
+  }
+  .txn-additional-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .txn-modal-footer {
+    flex-wrap: wrap;
+  }
+  .txn-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .txn-additional-grid {
+    grid-template-columns: 1fr;
+  }
+}

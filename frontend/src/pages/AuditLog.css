@@ -1,0 +1,91 @@
+.auditlog-page {
+  padding: 32px;
+  max-width: 1200px;
+}
+
+/* ── Page Header ── */
+.al-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.al-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.al-header-icon {
+  width: 48px;
+  height: 48px;
+  background: #6366f1;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.al-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #111827;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.al-subtitle {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  margin-top: 3px;
+}
+
+/* ── Section card ── */
+.al-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.al-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.al-card-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.al-card-title i {
+  color: #9ca3af;
+}
+
+.al-count {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: #9ca3af;
+  margin-left: 4px;
+}
+
+@media (max-width: 768px) {
+  .auditlog-page { padding: 20px 16px; }
+  .al-title { font-size: 1.1rem; }
+}

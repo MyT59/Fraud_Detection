@@ -1,0 +1,111 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  --page-bg:    #f0f2f5;
+  --surface:    #ffffff;
+  --border:     #e2e8f0;
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-muted:     #94a3b8;
+  --accent-hist: #7c3aed;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+.review-history-page {
+  font-family: 'IBM Plex Sans', sans-serif;
+  padding: 2rem;
+  max-width: 1440px;
+  margin: 0 auto;
+  background: var(--page-bg);
+  min-height: 100vh;
+}
+
+/* ── Page Header ── */
+.rh-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.rh-header-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.rh-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(124,58,237,.3);
+}
+
+.rh-header-content h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -.4px;
+  margin: 0 0 .2rem;
+}
+
+.rh-subtitle {
+  color: var(--text-secondary);
+  font-size: .9rem;
+  margin: 0;
+}
+
+/* ── Header Actions ── */
+.rh-header-actions {
+  display: flex;
+  gap: .75rem;
+  align-items: center;
+}
+
+.rh-export-btn {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .625rem 1.25rem;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: .875rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .2s;
+  box-shadow: 0 2px 8px rgba(124,58,237,.25);
+}
+
+.rh-export-btn:hover {
+  background: linear-gradient(135deg, #6d28d9, #4338ca);
+  box-shadow: 0 4px 14px rgba(124,58,237,.35);
+  transform: translateY(-1px);
+}
+
+.rh-export-btn i { font-size: 1rem; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .review-history-page { padding: 1rem; }
+  .rh-page-header { flex-direction: column; align-items: stretch; }
+  .rh-header-content h1 { font-size: 1.4rem; }
+  .rh-header-actions { justify-content: flex-end; }
+}
+
+@media (max-width: 480px) {
+  .rh-header-icon { width: 44px; height: 44px; font-size: 1.25rem; }
+}

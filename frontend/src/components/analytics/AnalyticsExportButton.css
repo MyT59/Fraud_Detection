@@ -1,0 +1,150 @@
+/* Analytics Export Button Styles */
+
+.analytics-export-container {
+  position: relative;
+  display: inline-block;
+}
+
+.analytics-export-btn {
+  border-radius: 8px;
+  font-weight: 500;
+  padding: 0.625rem 1.25rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.2);
+}
+
+.analytics-export-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.analytics-export-btn:disabled {
+  transform: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.analytics-export-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: white;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  min-width: 320px;
+  z-index: 1000;
+  animation: dropdownSlideDown 0.3s ease-out;
+  overflow: hidden;
+}
+
+@keyframes dropdownSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e5e5;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #525252;
+  background: #fafafa;
+}
+
+.analytics-export-dropdown .dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.analytics-export-dropdown .dropdown-item:hover {
+  background-color: #fafafa;
+}
+
+.export-option {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+}
+
+.export-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fef2f2;
+  flex-shrink: 0;
+}
+
+.export-icon i {
+  font-size: 1.25rem;
+  color: #dc2626;
+}
+
+.export-info {
+  flex: 1;
+}
+
+.export-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #262626;
+  margin-bottom: 0.25rem;
+}
+
+.export-desc {
+  font-size: 0.8rem;
+  color: #737373;
+  line-height: 1.3;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background-color: #e5e5e5;
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .analytics-export-dropdown {
+    left: 0;
+    right: auto;
+    min-width: 280px;
+  }
+
+  .export-option {
+    padding: 0.875rem 1rem;
+  }
+
+  .export-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .export-icon i {
+    font-size: 1.1rem;
+  }
+
+  .export-title {
+    font-size: 0.875rem;
+  }
+
+  .export-desc {
+    font-size: 0.75rem;
+  }
+}

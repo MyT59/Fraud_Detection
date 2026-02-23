@@ -1,0 +1,281 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+.pdm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,.55);
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: pdmFadeIn .2s ease;
+}
+@keyframes pdmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.pdm-box {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0,0,0,.25);
+  overflow: hidden;
+  animation: pdmSlideUp .25s ease;
+}
+@keyframes pdmSlideUp {
+  from { opacity: 0; transform: translateY(20px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Top bar */
+.pdm-topbar { height: 5px; flex-shrink: 0; }
+
+/* Header */
+.pdm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem .75rem;
+  gap: 1rem;
+}
+.pdm-header-left { flex: 1; min-width: 0; }
+.pdm-category {
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #94a3b8;
+  display: block;
+  margin-bottom: .25rem;
+}
+.pdm-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.3;
+}
+.pdm-close {
+  background: #f1f5f9;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 1rem;
+  transition: all .2s;
+  flex-shrink: 0;
+}
+.pdm-close:hover { background: #e2e8f0; color: #0f172a; }
+
+/* Badges */
+.pdm-badges {
+  display: flex;
+  gap: .5rem;
+  padding: 0 1.5rem .75rem;
+  flex-wrap: wrap;
+}
+.pdm-risk-chip, .pdm-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .3rem .8rem;
+  border-radius: 20px;
+  font-size: .75rem;
+  font-weight: 700;
+}
+.pdm-risk-chip i, .pdm-status-chip i { font-size: .8rem; }
+
+/* Body */
+.pdm-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 1.5rem 1rem;
+}
+.pdm-body::-webkit-scrollbar { width: 5px; }
+.pdm-body::-webkit-scrollbar-track { background: #f1f5f9; }
+.pdm-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+.pdm-desc {
+  font-size: .875rem;
+  color: #475569;
+  line-height: 1.65;
+  margin: 0 0 1.25rem;
+}
+
+/* Metrics */
+.pdm-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: .75rem;
+  margin-bottom: 1.25rem;
+}
+.pdm-metric {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: .875rem .75rem;
+  text-align: center;
+}
+.pdm-metric-val {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+  margin-bottom: .25rem;
+}
+.pdm-metric-lbl {
+  font-size: .62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #94a3b8;
+}
+
+/* Section */
+.pdm-section { margin-bottom: 1.25rem; }
+.pdm-section-title {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #475569;
+  margin-bottom: .75rem;
+}
+.pdm-section-title i { font-size: .9rem; color: #7c3aed; }
+
+/* Indicators */
+.pdm-indicator-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+.pdm-indicator-item {
+  display: flex;
+  align-items: flex-start;
+  gap: .25rem;
+  font-size: .85rem;
+  color: #334155;
+  line-height: 1.5;
+}
+.pdm-indicator-item i { font-size: 1.3rem; margin-top: -.05rem; }
+
+/* Actions */
+.pdm-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+.pdm-action-item {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: .7rem .9rem;
+  font-size: .85rem;
+  color: #334155;
+}
+.pdm-action-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #7c3aed;
+  color: #fff;
+  font-size: .68rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Trend */
+.pdm-trend-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: .5rem;
+}
+.pdm-trend-label { font-size: .8rem; color: #64748b; }
+.pdm-trend-val {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .85rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+}
+.pdm-trend-val.up { color: #dc2626; }
+.pdm-trend-val.down { color: #059669; }
+
+.pdm-trend-bar-wrap {
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.pdm-trend-bar-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+
+/* Meta */
+.pdm-meta-row {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  font-size: .75rem;
+  color: #94a3b8;
+  padding-top: .75rem;
+  border-top: 1px solid #f1f5f9;
+}
+.pdm-meta-row span { display: flex; align-items: center; gap: .35rem; }
+.pdm-meta-row i { font-size: .8rem; }
+
+/* Footer */
+.pdm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: .75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+.pdm-btn-close {
+  display: flex; align-items: center; gap: .4rem;
+  padding: .625rem 1.1rem;
+  background: #f1f5f9; border: 1px solid #e2e8f0;
+  border-radius: 8px; font-weight: 600; font-size: .85rem;
+  color: #475569; cursor: pointer; font-family: inherit;
+  transition: all .2s;
+}
+.pdm-btn-close:hover { background: #e2e8f0; color: #0f172a; }
+
+.pdm-btn-report {
+  display: flex; align-items: center; gap: .4rem;
+  padding: .625rem 1.1rem;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  border: none; border-radius: 8px; font-weight: 600;
+  font-size: .85rem; color: #fff; cursor: pointer;
+  font-family: inherit; transition: all .2s;
+}
+.pdm-btn-report:hover {
+  background: linear-gradient(135deg, #6d28d9, #4338ca);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .pdm-metrics-grid { grid-template-columns: repeat(2, 1fr); }
+  .pdm-box { max-height: 95vh; }
+}

@@ -1,0 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+.ptc-wrapper {
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  overflow: hidden;
+}
+
+.ptc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fafbfc;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.ptc-title {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .875rem;
+  font-weight: 700;
+  color: #0f172a;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.ptc-title i { color: #7c3aed; font-size: 1rem; }
+
+.ptc-subtitle {
+  font-size: .75rem;
+  color: #94a3b8;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Chart body */
+.ptc-chart {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+
+.ptc-row {
+  display: grid;
+  grid-template-columns: 20px 180px 1fr 44px;
+  align-items: center;
+  gap: .75rem;
+}
+
+.ptc-rank {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.ptc-label-wrap {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  min-width: 0;
+}
+
+.ptc-label {
+  font-size: .8rem;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ptc-risk-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ptc-risk-dot.high   { background: #dc2626; }
+.ptc-risk-dot.medium { background: #f59e0b; }
+.ptc-risk-dot.low    { background: #0284c7; }
+
+.ptc-bar-wrap {
+  background: #f1f5f9;
+  border-radius: 4px;
+  height: 22px;
+  overflow: visible;
+  position: relative;
+}
+
+.ptc-bar {
+  height: 100%;
+  border-radius: 4px;
+  min-width: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: .5rem;
+  transition: width .5s ease;
+  position: relative;
+}
+
+.ptc-bar-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.ptc-pct {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .72rem;
+  color: #64748b;
+  text-align: right;
+  min-width: 38px;
+}
+
+/* Legend */
+.ptc-legend {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: .75rem 1.5rem;
+  border-top: 1px solid #f1f5f9;
+  background: #fafbfc;
+  flex-wrap: wrap;
+}
+
+.ptc-leg-item {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.ptc-leg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.ptc-leg-dot.high   { background: #dc2626; }
+.ptc-leg-dot.medium { background: #f59e0b; }
+.ptc-leg-dot.low    { background: #0284c7; }
+
+/* Responsive */
+@media (max-width: 700px) {
+  .ptc-row { grid-template-columns: 20px 1fr 1fr 40px; }
+  .ptc-label-wrap { display: none; }
+}

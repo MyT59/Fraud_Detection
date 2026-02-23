@@ -1,0 +1,255 @@
+/* Report Share Modal Styles */
+
+/* ── Backdrop: lighter & blur ── */
+.modal-backdrop.fade.show {
+  opacity: 0.35 !important;
+  background-color: #0c0c0e !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* ── Modal perfectly centered ── */
+.modal.fade.show.d-block {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal.fade.show.d-block .modal-dialog {
+  margin: 0 auto;
+  width: 100%;
+  max-width: 580px;
+}
+
+.share-modal-content {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+}
+
+.modal-header {
+  border-bottom: 1px solid #e5e5e5;
+  padding: 1.25rem 1.5rem;
+}
+
+.modal-title {
+  font-weight: 600;
+  color: #262626;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+/* Report Info Banner */
+.report-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+}
+
+.info-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.info-icon i {
+  font-size: 1.5rem;
+  color: #dc2626;
+}
+
+.report-info-banner h6 {
+  font-weight: 600;
+  color: #262626;
+  margin: 0;
+}
+
+/* Share Methods Tabs */
+.share-methods {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.method-tab {
+  flex: 1;
+  padding: 0.875rem 1rem;
+  border: 1px solid #e5e5e5;
+  background: white;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  color: #525252;
+}
+
+.method-tab:hover {
+  background: #f5f5f5;
+  border-color: #d4d4d4;
+}
+
+.method-tab.active {
+  background: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+.method-tab i {
+  font-size: 1.5rem;
+}
+
+.method-tab span {
+  font-size: 0.875rem;
+}
+
+/* Share Content */
+.share-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.form-label {
+  font-weight: 500;
+  color: #525252;
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.form-label i {
+  color: #dc2626;
+}
+
+.form-control,
+.form-select {
+  border-radius: 8px;
+  border: 1px solid #e5e5e5;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+/* Link Generated */
+.link-generated {
+  text-align: center;
+  padding: 1rem;
+}
+
+.success-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #f0fdf4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.success-icon i {
+  font-size: 2rem;
+  color: #10b981;
+}
+
+.link-generated h6 {
+  font-weight: 600;
+  color: #262626;
+  margin-bottom: 0.5rem;
+}
+
+.link-box {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+.link-box .form-control {
+  flex: 1;
+  background: #fafafa;
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+}
+
+.link-box .btn {
+  padding: 0.625rem 1.25rem;
+  white-space: nowrap;
+}
+
+.link-info {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  padding: 1rem;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.link-info .info-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #525252;
+}
+
+.link-info .info-item i {
+  color: #dc2626;
+  font-size: 1rem;
+}
+
+/* Modal Footer */
+.modal-footer {
+  border-top: 1px solid #e5e5e5;
+  padding: 1rem 1.5rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .share-methods {
+    flex-direction: column;
+  }
+
+  .method-tab {
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .link-box {
+    flex-direction: column;
+  }
+
+  .link-info {
+    flex-direction: column;
+    gap: 0.75rem;
+    text-align: left;
+  }
+}

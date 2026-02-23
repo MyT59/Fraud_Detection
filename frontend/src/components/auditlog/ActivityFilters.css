@@ -1,0 +1,151 @@
+/* ── ActivityFilters ── prefix "af-" */
+
+.af-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding: 16px 20px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+/* Search */
+.af-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 200px;
+}
+
+.af-search-icon {
+  position: absolute;
+  left: 11px;
+  color: #9ca3af;
+  font-size: 0.875rem;
+  pointer-events: none;
+}
+
+.af-search {
+  width: 100%;
+  padding: 9px 36px 9px 32px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #111827;
+  background: #fafafa;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  font-family: inherit;
+}
+
+.af-search:focus {
+  border-color: #dc2626;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.07);
+}
+
+.af-search::placeholder { color: #c9d0db; }
+
+.af-clear {
+  position: absolute;
+  right: 9px;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  transition: color 0.15s;
+  line-height: 1;
+}
+
+.af-clear:hover { color: #374151; }
+
+/* Pills */
+.af-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.af-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 20px;
+  background: #fafafa;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.af-pill:hover {
+  border-color: #d1d5db;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.af-pill-active {
+  border-color: #dc2626 !important;
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+}
+
+.af-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.af-dot-create  { background: #16a34a; }
+.af-dot-edit    { background: #2563eb; }
+.af-dot-suspend { background: #ea580c; }
+.af-dot-delete  { background: #dc2626; }
+
+/* Reset */
+.af-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 20px;
+  background: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.af-reset:hover {
+  border-color: #d1d5db;
+  background: #f9fafb;
+  color: #374151;
+}
+
+@media (max-width: 640px) {
+  .af-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px;
+  }
+
+  .af-search-wrap { min-width: unset; }
+  .af-pills { justify-content: flex-start; }
+}

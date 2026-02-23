@@ -1,0 +1,79 @@
+/* Bulk Actions Bar Styles */
+
+.bulk-actions-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 2px solid #dc2626;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+  padding: 1rem 0;
+  z-index: 1000;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.selection-info {
+  color: #262626;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+}
+
+.selection-info i {
+  color: #dc2626;
+  font-size: 1.2rem;
+}
+
+.action-buttons .btn {
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.action-buttons .btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-buttons .vr {
+  width: 1px;
+  background-color: #e5e5e5;
+  align-self: stretch;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .bulk-actions-bar {
+    padding: 0.75rem 0;
+  }
+
+  .selection-info {
+    font-size: 0.875rem;
+  }
+
+  .action-buttons {
+    flex-wrap: wrap;
+  }
+
+  .action-buttons .btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .action-buttons .vr {
+    display: none;
+  }
+}

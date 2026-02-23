@@ -1,0 +1,138 @@
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 64px;
+  width: 240px;
+  height: calc(100vh - 64px);
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  z-index: 100;
+  overflow-y: auto;
+  transition: left 0.3s ease;
+}
+
+/* OVERLAY DARK BACKGROUND - BARU */
+.sidebar-overlay {
+  display: none;
+}
+
+.sidebar-nav {
+  padding: 1rem 0;
+}
+
+/* CLASS NAMES DIUBAH UNTUK AVOID BOOTSTRAP CONFLICT */
+.sidebar-menu {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar-menu-item {
+  margin-bottom: 0.25rem;
+  padding: 0 0.75rem;
+}
+
+.sidebar-menu-link {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem !important;
+  color: #6b7280 !important;
+  text-decoration: none !important;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+  position: relative;
+  background: transparent !important;
+  border: none !important;
+}
+
+.sidebar-menu-link:hover {
+  background: #f9fafb !important;
+  color: #374151 !important;
+}
+
+.sidebar-menu-link.active {
+  background: #fef2f2 !important;
+  color: #ef4444 !important;
+}
+
+.sidebar-menu-link i {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.sidebar-menu-label {
+  flex: 1;
+}
+
+.sidebar-menu-badge {
+  background: #ef4444;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.sidebar-menu-link.active .sidebar-menu-badge {
+  background: white;
+  color: #ef4444;
+}
+
+/* Custom scrollbar */
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: #f9fafb;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* RESPONSIVE - MOBILE & TABLET */
+@media (max-width: 992px) {
+  /* HIDE SIDEBAR BY DEFAULT */
+  .sidebar {
+    left: -240px;
+  }
+
+  /* SHOW SIDEBAR WHEN OPEN */
+  .sidebar.open {
+    left: 0;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+  }
+
+  /* DARK OVERLAY */
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    top: 64px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}

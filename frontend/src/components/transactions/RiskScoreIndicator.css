@@ -1,0 +1,129 @@
+/* Risk Score Indicator Styles */
+
+.risk-score-indicator {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Circle Container */
+.risk-circle-container {
+  position: relative;
+  display: inline-block;
+}
+
+/* SVG Circle */
+.risk-circle {
+  transform: rotate(-90deg);
+}
+
+.circle-bg {
+  fill: none;
+  stroke: #f5f5f5;
+  stroke-width: 3;
+}
+
+.circle-progress {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.6s ease;
+}
+
+.circle-danger {
+  stroke: #dc2626;
+}
+
+.circle-warning {
+  stroke: #f59e0b;
+}
+
+.circle-success {
+  stroke: #10b981;
+}
+
+/* Score Number */
+.risk-score-number {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  font-weight: 700;
+}
+
+/* Risk Label */
+.risk-label {
+  font-size: 0.75rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Size Variants */
+
+/* Small */
+.risk-indicator-small .risk-circle {
+  width: 40px;
+  height: 40px;
+}
+
+.risk-indicator-small .score-value {
+  font-size: 0.75rem;
+}
+
+.risk-indicator-small .score-max {
+  font-size: 0.5rem;
+}
+
+.risk-indicator-small .risk-label {
+  font-size: 0.65rem;
+}
+
+/* Medium (Default) */
+.risk-indicator-medium .risk-circle {
+  width: 60px;
+  height: 60px;
+}
+
+.risk-indicator-medium .score-value {
+  font-size: 1rem;
+}
+
+.risk-indicator-medium .score-max {
+  font-size: 0.65rem;
+  color: #a3a3a3;
+}
+
+/* Large */
+.risk-indicator-large .risk-circle {
+  width: 80px;
+  height: 80px;
+}
+
+.risk-indicator-large .score-value {
+  font-size: 1.5rem;
+}
+
+.risk-indicator-large .score-max {
+  font-size: 0.875rem;
+  color: #a3a3a3;
+}
+
+.risk-indicator-large .risk-label {
+  font-size: 0.875rem;
+}
+
+/* Animation */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.circle-danger {
+  animation: pulse 2s infinite;
+}

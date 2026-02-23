@@ -1,0 +1,302 @@
+/* ─── Activity Timeline Card ─────────────────────────────── */
+.activity-timeline-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ─── Header ─────────────────────────────────────────────── */
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f3f4f6;
+  flex-shrink: 0;
+  gap: 0.75rem;
+}
+
+.header-left {}
+
+.timeline-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 0.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.timeline-title i {
+  color: #6366f1;
+  font-size: 0.95rem;
+}
+
+.timeline-subtitle {
+  font-size: 0.775rem;
+  color: #9ca3af;
+  margin: 0;
+}
+
+/* Filter pills */
+.timeline-filter {
+  display: flex;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.filter-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #9ca3af;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.01em;
+}
+
+.filter-btn:hover {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.filter-btn.active {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4f46e5;
+}
+
+/* ─── Scrollable Content ─────────────────────────────────── */
+.timeline-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+  /* no max-height — let it fill the card */
+}
+
+.timeline-content::-webkit-scrollbar { width: 4px; }
+.timeline-content::-webkit-scrollbar-track { background: transparent; }
+.timeline-content::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 2px;
+}
+
+/* ─── Timeline Item ──────────────────────────────────────── */
+.timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 1.5rem;
+  position: relative;
+  transition: background 0.12s ease;
+}
+
+.timeline-item:hover {
+  background: #fafafa;
+}
+
+/* Subtle divider between items */
+.timeline-item + .timeline-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 4.25rem;
+  right: 1.5rem;
+  height: 1px;
+  background: #f3f4f6;
+}
+
+/* ─── Left column: icon ──────────────────────────────────── */
+.timeline-icon-col {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 1px;
+}
+
+.timeline-marker {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.timeline-item:hover .timeline-marker {
+  transform: scale(1.08);
+}
+
+.activity-red    { background: #fef2f2; color: #dc2626; border: 1.5px solid #fecaca; }
+.activity-green  { background: #f0fdf4; color: #10b981; border: 1.5px solid #bbf7d0; }
+.activity-blue   { background: #eff6ff; color: #3b82f6; border: 1.5px solid #bfdbfe; }
+.activity-orange { background: #fffbeb; color: #f59e0b; border: 1.5px solid #fde68a; }
+.activity-purple { background: #faf5ff; color: #8b5cf6; border: 1.5px solid #ddd6fe; }
+.activity-gray   { background: #f9fafb; color: #9ca3af; border: 1.5px solid #e5e7eb; }
+
+/* Vertical connector line */
+.timeline-connector {
+  width: 1.5px;
+  flex: 1;
+  min-height: 12px;
+  background: #e5e7eb;
+  margin-top: 5px;
+  border-radius: 1px;
+}
+
+/* ─── Right column: content ──────────────────────────────── */
+.timeline-body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Title row */
+.timeline-row-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.activity-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.activity-time {
+  font-size: 0.7rem;
+  color: #d1d5db;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 1px;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.activity-time i { font-size: 0.625rem; }
+
+/* Description */
+.activity-description {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin: 0 0 0.5rem;
+  line-height: 1.45;
+}
+
+/* Tags row */
+.activity-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.tag-detail {
+  font-size: 0.68rem;
+  padding: 0.18rem 0.55rem;
+  background: #f3f4f6;
+  color: #4b5563;
+  border-radius: 5px;
+  border: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.tag-detail strong {
+  color: #1f2937;
+  font-weight: 600;
+  margin-right: 0.2rem;
+}
+
+.tag-user {
+  font-size: 0.68rem;
+  color: #c4c9d4;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: auto;
+}
+
+.tag-user i { font-size: 0.625rem; }
+
+/* ─── Footer ─────────────────────────────────────────────── */
+.timeline-footer {
+  padding: 0.875rem 1.5rem;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.btn-load-more {
+  background: transparent;
+  border: 1px solid #e5e7eb;
+  color: #9ca3af;
+  padding: 0.5rem 1.5rem;
+  border-radius: 20px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.15s ease;
+}
+
+.btn-load-more:hover {
+  border-color: #a5b4fc;
+  color: #6366f1;
+  background: #eef2ff;
+}
+
+.btn-load-more i { font-size: 0.8rem; }
+
+/* ─── Responsive ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .timeline-header {
+    flex-wrap: wrap;
+  }
+
+  .timeline-filter {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+  }
+
+  .timeline-item {
+    padding: 0.75rem 1rem;
+  }
+
+  .timeline-item + .timeline-item::before {
+    left: 3.5rem;
+    right: 1rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .timeline-marker {
+    width: 32px;
+    height: 32px;
+    font-size: 0.8rem;
+  }
+
+  .activity-title {
+    font-size: 0.825rem;
+  }
+}
