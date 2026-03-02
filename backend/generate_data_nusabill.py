@@ -6,7 +6,8 @@ import pandas as pd
 
 TARGET_ROWS = 5000
 NUM_CUSTOMERS = 620
-FRAUD_PROB = 0.22
+# Lower fraud rate and increase overlap with normal behavior.
+FRAUD_PROB = 0.06
 
 base_time = datetime(2026, 1, 1)
 customers = [f"CUST{10000+i}" for i in range(NUM_CUSTOMERS)]
@@ -26,19 +27,28 @@ while len(data) < TARGET_ROWS:
     slots = TARGET_ROWS - len(data)
 
     bill_date = st["last_payment_time"] + timedelta(days=30)
-    payment_date = bill_date + timedelta(days=random.randint(0, 5))
+    delay_days = random.randint(0, 5)
+    if random.random() < 0.06:
+        delay_days = random.choice([-1, 0, 1])  # benign early/on-time variance
+    payment_date = bill_date + timedelta(days=delay_days)
     payment_amount = st["normal_bill"]
     refund_flag = 0
     channel = st["preferred_channel"]
     is_fraud = 0
 
+    # Harder normal samples: occasional API and slight amount mismatch.
+    if random.random() < 0.08:
+        channel = "API"
+    if random.random() < 0.05:
+        payment_amount = int(st["normal_bill"] * random.uniform(0.95, 1.05))
+
     if random.random() < FRAUD_PROB:
         fraud_type = random.choice(["underpay", "high_spike", "refund_abuse", "burst", "channel_switch"])
         if fraud_type == "underpay":
-            payment_amount = random.randint(1000, 10000)
+            payment_amount = int(st["normal_bill"] * random.uniform(0.25, 0.7))
             is_fraud = 1
         elif fraud_type == "high_spike":
-            payment_amount = int(st["normal_bill"] * random.uniform(10, 24))
+            payment_amount = int(st["normal_bill"] * random.uniform(2.0, 6.0))
             is_fraud = 1
         elif fraud_type == "refund_abuse":
             refund_flag = 1
@@ -47,7 +57,7 @@ while len(data) < TARGET_ROWS:
             channel = "API"
             is_fraud = 1
         else:
-            burst_n = min(random.randint(3, 5), slots)
+            burst_n = min(random.randint(2, 3), slots)
             for i in range(burst_n):
                 data.append(
                     [

@@ -7,7 +7,8 @@ import pandas as pd
 
 TARGET_ROWS = 5000
 NUM_USERS = 320
-FRAUD_PROB = 0.24
+# Lower fraud rate to be closer to realistic banking ratios in synthetic setup.
+FRAUD_PROB = 0.05
 
 base_time = datetime(2026, 1, 1)
 terminals = [f"T{1000+i}" for i in range(30)]
@@ -61,27 +62,78 @@ while len(data) < TARGET_ROWS:
     slots = TARGET_ROWS - len(data)
 
     if random.random() > FRAUD_PROB:
-        stan = add_row(data, acc, st, stan, is_fraud=0, processing=random.choice(["010000", "400000"]), response="00")
+        # Add realistic noisy normal cases so model does not overfit trivial rules.
+        processing = random.choice(["010000", "400000"])
+        response = "00"
+        gap_min = None
+        force_hour = None
+        if random.random() < 0.07:
+            response = random.choice(["51", "68"])
+        if random.random() < 0.06:
+            gap_min = random.randint(1, 3)
+        if random.random() < 0.08:
+            force_hour = random.choice([1, 2, 3, 4])
+        stan = add_row(
+            data,
+            acc,
+            st,
+            stan,
+            is_fraud=0,
+            processing=processing,
+            response=response,
+            gap_min=gap_min,
+            force_hour=force_hour,
+        )
         continue
 
     fraud_type = random.choice(["midnight", "impossible_travel", "bruteforce", "money_mule", "high_amount"])
     if fraud_type == "midnight":
-        stan = add_row(data, acc, st, stan, is_fraud=1, processing="010000", response="00", force_hour=random.choice([1, 2, 3, 4]), amount=int(st["normal_amount"] * random.uniform(1.8, 3.0)))
+        stan = add_row(
+            data,
+            acc,
+            st,
+            stan,
+            is_fraud=1,
+            processing="010000",
+            response="00",
+            force_hour=random.choice([1, 2, 3, 4]),
+            amount=int(st["normal_amount"] * random.uniform(1.2, 2.0)),
+        )
     elif fraud_type == "impossible_travel":
         new_terminal = random.choice([t for t in terminals if t != st["last_terminal"]])
-        stan = add_row(data, acc, st, stan, is_fraud=1, processing="010000", response="00", terminal=new_terminal, gap_min=random.randint(1, 8))
+        stan = add_row(
+            data,
+            acc,
+            st,
+            stan,
+            is_fraud=1,
+            processing="010000",
+            response="00",
+            terminal=new_terminal,
+            gap_min=random.randint(1, 5),
+        )
     elif fraud_type == "bruteforce":
-        for _ in range(min(random.randint(3, 5), slots)):
+        for _ in range(min(random.randint(2, 4), slots)):
             stan = add_row(data, acc, st, stan, is_fraud=1, processing="300000", response="55", gap_min=1)
             if len(data) >= TARGET_ROWS:
                 break
     elif fraud_type == "money_mule":
-        for _ in range(min(random.randint(2, 4), slots)):
+        for _ in range(min(random.randint(2, 3), slots)):
             stan = add_row(data, acc, st, stan, is_fraud=1, processing="400000", response="00", dest="DST999999", gap_min=2)
             if len(data) >= TARGET_ROWS:
                 break
     else:
-        stan = add_row(data, acc, st, stan, is_fraud=1, processing="010000", response="00", amount=int(st["normal_amount"] * random.uniform(10, 18)), gap_min=random.randint(5, 35))
+        stan = add_row(
+            data,
+            acc,
+            st,
+            stan,
+            is_fraud=1,
+            processing="010000",
+            response="00",
+            amount=int(st["normal_amount"] * random.uniform(3.5, 8.0)),
+            gap_min=random.randint(5, 35),
+        )
 
 columns = ["TERMINAL_ID", "MERCHANT_ID", "ACCOUNT_NUMBER", "DEST_ACCOUNT_NUMBER", "TIMESTAMP_DB", "AMOUNT", "STAN", "PROCESSING_CODE", "RESPONSE_CODE", "MTI", "IS_FRAUD"]
 df = pd.DataFrame(data, columns=columns).sort_values(["ACCOUNT_NUMBER", "TIMESTAMP_DB"]).reset_index(drop=True)

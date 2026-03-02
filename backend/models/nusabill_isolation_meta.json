@@ -5,8 +5,8 @@
   "contamination": 0.1,
   "anomaly_rate_fit_data": 0.1,
   "thresholds": {
-    "review_score_threshold": -7.672424436229452e-18,
-    "high_risk_score_threshold": -0.05131559837465713
+    "review_score_threshold": -5.2873490633507936e-17,
+    "high_risk_score_threshold": -0.06546683182589658
   },
   "numeric_features": [
     "BILL_AMOUNT",

@@ -1,14 +1,9 @@
 {
   "agenusa": {
-    "domain": "agenusa",
-    "dataset": "backend\\agenusa_isolation_dataset.csv",
+    "model_name": "agenusa",
+    "dataset": "backend\\agenusa_pattern_dataset.csv",
     "rows": 5000,
-    "contamination": 0.08,
-    "anomaly_rate_fit_data": 0.08,
-    "thresholds": {
-      "review_score_threshold": 0.0013669213365814284,
-      "high_risk_score_threshold": -0.005264531101156511
-    },
+    "fraud_rate": 0.0846,
     "numeric_features": [
       "AMOUNT",
       "PROCESSING_CODE",
@@ -33,18 +28,18 @@
       "MERCHANT_ID",
       "DEST_ACCOUNT_NUMBER"
     ],
-    "model_path": "backend\\models\\agenusa_isolation_forest.pkl"
+    "accuracy": 0.9912,
+    "precision_fraud": 0.9896907216494846,
+    "recall_fraud": 0.9056603773584906,
+    "f1_fraud": 0.9458128078817734,
+    "roc_auc": 0.990087742446233,
+    "model_path": "backend\\models\\agenusa_fds_model.pkl"
   },
   "nusabill": {
-    "domain": "nusabill",
-    "dataset": "backend\\nusabill_isolation_dataset.csv",
+    "model_name": "nusabill",
+    "dataset": "backend\\nusabill_pattern_dataset.csv",
     "rows": 5000,
-    "contamination": 0.1,
-    "anomaly_rate_fit_data": 0.1,
-    "thresholds": {
-      "review_score_threshold": -5.2873490633507936e-17,
-      "high_risk_score_threshold": -0.06546683182589658
-    },
+    "fraud_rate": 0.081,
     "numeric_features": [
       "BILL_AMOUNT",
       "PAYMENT_AMOUNT",
@@ -63,6 +58,11 @@
       "CHANNEL",
       "BILL_STATUS"
     ],
-    "model_path": "backend\\models\\nusabill_isolation_forest.pkl"
+    "accuracy": 0.9752,
+    "precision_fraud": 0.8240740740740741,
+    "recall_fraud": 0.8811881188118812,
+    "f1_fraud": 0.8516746411483254,
+    "roc_auc": 0.9927702953062929,
+    "model_path": "backend\\models\\nusabill_fds_model.pkl"
   }
 }

@@ -24,6 +24,16 @@ BACKEND_DIR = ROOT_DIR / "backend"
 MODELS_DIR = BACKEND_DIR / "models"
 
 
+def round_floats(obj: Any, digits: int = 6) -> Any:
+    if isinstance(obj, float):
+        return round(obj, digits)
+    if isinstance(obj, dict):
+        return {k: round_floats(v, digits) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [round_floats(v, digits) for v in obj]
+    return obj
+
+
 def confusion_details(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, int]:
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
     return {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)}
@@ -140,6 +150,55 @@ def evaluate_domain(domain: str, labeled_path: Path) -> dict[str, Any]:
     }
 
 
+def build_markdown_summary(report: dict[str, Any]) -> str:
+    lines: list[str] = []
+    lines.append("# Isolation Evaluation Summary")
+    lines.append("")
+    lines.append(f"- Generated at (UTC): `{report['generated_at_utc']}`")
+    lines.append(f"- Notes: {report['notes']}")
+    lines.append("")
+
+    for domain, data in report["domains"].items():
+        lines.append(f"## {domain}")
+        lines.append("")
+        lines.append(f"- Dataset: `{data['dataset']}`")
+        lines.append(f"- Rows: `{data['rows']}`")
+        lines.append(f"- Fraud Rate: `{data['fraud_rate']}`")
+        lines.append(
+            f"- Contamination: `{data['isolation_meta']['contamination']}` | Fit Anomaly Rate: `{data['isolation_meta']['fit_anomaly_rate']}`"
+        )
+        lines.append("")
+
+        default_m = data["evaluation"]["default_model_boundary"]
+        review_m = data["evaluation"]["review_threshold_boundary"]
+        tuned_m = data["evaluation"]["tuned_threshold_on_eval_data"]["metrics"]
+        tuned_t = data["evaluation"]["tuned_threshold_on_eval_data"]["threshold"]
+        default_th = data["isolation_meta"]["default_thresholds"]
+
+        lines.append("| Scenario | Accuracy | Precision Fraud | Recall Fraud | F1 Fraud | ROC-AUC |")
+        lines.append("|---|---:|---:|---:|---:|---:|")
+        lines.append(
+            f"| Default Model Boundary | {default_m['accuracy']} | {default_m['precision_fraud']} | {default_m['recall_fraud']} | {default_m['f1_fraud']} | {default_m['roc_auc']} |"
+        )
+        lines.append(
+            f"| Review Threshold (`{default_th['review_score_threshold']}`) | {review_m['accuracy']} | {review_m['precision_fraud']} | {review_m['recall_fraud']} | {review_m['f1_fraud']} | {review_m['roc_auc']} |"
+        )
+        lines.append(
+            f"| Tuned Threshold (`{tuned_t}`) | {tuned_m['accuracy']} | {tuned_m['precision_fraud']} | {tuned_m['recall_fraud']} | {tuned_m['f1_fraud']} | {tuned_m['roc_auc']} |"
+        )
+        lines.append("")
+
+        cm = review_m["confusion_matrix"]
+        lines.append(
+            f"- Review-threshold confusion matrix: `TN={cm['tn']}, FP={cm['fp']}, FN={cm['fn']}, TP={cm['tp']}`"
+        )
+        fp_n = len(data["error_samples_review_threshold"]["false_positive_top5"])
+        fn_n = len(data["error_samples_review_threshold"]["false_negative_top5"])
+        lines.append(f"- Error samples saved: `false_positive_top5={fp_n}`, `false_negative_top5={fn_n}`")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def main() -> None:
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     report = {
@@ -151,10 +210,24 @@ def main() -> None:
         },
     }
 
+    report = round_floats(report, digits=6)
     out_path = MODELS_DIR / "isolation_evaluation_report.json"
+    out_md_path = MODELS_DIR / "isolation_evaluation_summary.md"
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    out_md_path.write_text(build_markdown_summary(report), encoding="utf-8")
+
+    compact = {
+        d: {
+            "default_recall": v["evaluation"]["default_model_boundary"]["recall_fraud"],
+            "review_recall": v["evaluation"]["review_threshold_boundary"]["recall_fraud"],
+            "tuned_recall": v["evaluation"]["tuned_threshold_on_eval_data"]["metrics"]["recall_fraud"],
+            "tuned_threshold": v["evaluation"]["tuned_threshold_on_eval_data"]["threshold"],
+        }
+        for d, v in report["domains"].items()
+    }
     print(f"Isolation evaluation report tersimpan: {out_path.relative_to(ROOT_DIR)}")
-    print(json.dumps(report["domains"], indent=2))
+    print(f"Isolation summary tersimpan: {out_md_path.relative_to(ROOT_DIR)}")
+    print(json.dumps(compact, indent=2))
 
 
 if __name__ == "__main__":
