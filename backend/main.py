@@ -9,8 +9,8 @@ from isolation_engine import DOMAIN_ISO_CONFIG, score_history_isolation
 app = FastAPI()  
 
 DOMAIN_DEFAULT_THRESHOLDS = {
-    "agenusa": {"review_threshold": 0.3506, "high_risk_threshold": 0.5},
-    "nusabill": {"review_threshold": 0.1026, "high_risk_threshold": 0.5},
+    "agenusa": {"review_threshold": 0.4892, "high_risk_threshold": 0.5},
+    "nusabill": {"review_threshold": 0.5202, "high_risk_threshold": 0.9359},
 }
 
 
