@@ -1,12 +1,32 @@
+import pandas as pd
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from fds_engine import DOMAIN_CONFIG, score_history
 from isolation_engine import DOMAIN_ISO_CONFIG, score_history_isolation
 
-app = FastAPI()  
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+        headers={"Access-Control-Allow-Origin": "http://localhost:3000"},
+    )
 
 DOMAIN_DEFAULT_THRESHOLDS = {
     "agenusa": {"review_threshold": 0.4892, "high_risk_threshold": 0.5},
@@ -34,6 +54,52 @@ class IsolationHistoryRequest(BaseModel):
     review_score_threshold: float | None = None
     high_risk_score_threshold: float | None = None
 
+
+BACKEND_DIR = Path(__file__).resolve().parent
+
+
+# Endpoint: baca transaksi flagged langsung dari dataset CSV 
+@app.get("/transactions/flagged")
+def get_flagged_transactions(limit: int = 50):
+    """
+    Baca transaksi IS_FRAUD=1 dari dataset CSV untuk ManualReview.
+    Sumber data sementara sebelum database tersedia.
+    - limit: jumlah record per domain (default 50, total max 100)
+    """
+    try:
+        df_agenusa  = pd.read_csv(BACKEND_DIR / "agenusa_pattern_dataset.csv")
+        df_nusabill = pd.read_csv(BACKEND_DIR / "nusabill_pattern_dataset.csv")
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Dataset tidak ditemukan: {exc}"
+        )
+
+    flagged_agenusa = (
+        df_agenusa[df_agenusa["IS_FRAUD"] == 1]
+        .sample(frac=1, random_state=42)   
+        .head(limit)
+        .replace({float("nan"): None})    
+        .to_dict(orient="records")
+    )
+
+    flagged_nusabill = (
+        df_nusabill[df_nusabill["IS_FRAUD"] == 1]
+        .sample(frac=1, random_state=42)
+        .head(limit)
+        .replace({float("nan"): None})
+        .to_dict(orient="records")
+    )
+
+    return {
+        "agenusa":  flagged_agenusa,
+        "nusabill": flagged_nusabill,
+        "meta": {
+            "total_agenusa":  len(flagged_agenusa),
+            "total_nusabill": len(flagged_nusabill),
+            "source": "dataset_csv",
+            "note": "Ganti dengan query DB setelah database tersedia.",
+        },
+    }
 
 @app.get("/fds/domains")
 def list_domains():

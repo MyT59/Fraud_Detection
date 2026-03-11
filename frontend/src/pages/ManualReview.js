@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import PageLoader from "../components/common/PageLoader";
 import ReviewFilter from "../components/review/ReviewFilter";
+import { labelHistory } from "../services/mlService"; // ← BARU
+import { submitReview } from "../services/reviewService"; // ← BARU
 import "./ManualReview.css";
 
 /* ── Format helpers ── */
@@ -23,7 +25,7 @@ const fmtDate = (ds) => {
   });
 };
 
-/* ── Threshold dari evaluation_report.json ── 
+/* ── Threshold dari evaluation_report.json ──
    agenusa  (without_unique_ids) → review: 0.4828  | high_risk: 0.5000
    nusabill (without_unique_ids) → review: 0.4862  | high_risk: 0.9321 */
 const THRESHOLDS = {
@@ -35,12 +37,12 @@ const scoreToRisk = (score01, service) => {
   if (service === "agenusa") {
     if (score01 >= 0.88) return "critical";
     if (score01 >= 0.7) return "high";
-    if (score01 >= THRESHOLDS.agenusa.high_risk) return "medium"; // >= 0.50
-    return "low"; // >= 0.4828
+    if (score01 >= THRESHOLDS.agenusa.high_risk) return "medium";
+    return "low";
   } else {
-    if (score01 >= THRESHOLDS.nusabill.high_risk) return "critical"; // >= 0.9321
+    if (score01 >= THRESHOLDS.nusabill.high_risk) return "critical";
     if (score01 >= 0.75) return "high";
-    if (score01 >= THRESHOLDS.nusabill.review) return "medium"; // >= 0.4862
+    if (score01 >= THRESHOLDS.nusabill.review) return "medium";
     return "low";
   }
 };
@@ -62,11 +64,7 @@ const RISK_COLOR = {
 const getRiskColor = (l) => RISK_COLOR[l] || "#475569";
 const TXN_PER_PAGE = 5;
 
-/* Sample data — field PERSIS dari kedua dataset ──
-   Agenusa  : ACCOUNT_NUMBER, TIMESTAMP_DB, AMOUNT, DEST_ACCOUNT_NUMBER,
-              PROCESSING_CODE, RESPONSE_CODE + matched_patterns
-   Nusabill : CUSTOMER_ID, BILL_ID, BILL_AMOUNT, PAYMENT_AMOUNT,
-              CHANNEL, REFUND_FLAG + matched_patterns S── */
+/* ── SAMPLE_TRANSACTIONS – dipakai sebagai FALLBACK jika API tidak tersedia ── */
 const SAMPLE_TRANSACTIONS = [
   /* ── AGENUSA ── */
   {
@@ -321,6 +319,44 @@ const SAMPLE_TRANSACTIONS = [
   },
 ];
 
+/* ── Mapping hasil API → format seragam frontend ── */
+const mapApiResult = (result, domain, index) => {
+  const rec = result.record;
+  const rawScore = result.ml_fraud_score;
+  const prefix = domain === "agenusa" ? "AGN" : "NUS";
+  const id = `${prefix}-${String(index + 1).padStart(6, "0")}`;
+
+  if (domain === "agenusa") {
+    return {
+      id,
+      service: "agenusa",
+      status: "pending",
+      rawScore,
+      matched_patterns: result.matched_patterns || [],
+      ACCOUNT_NUMBER: rec.ACCOUNT_NUMBER,
+      TIMESTAMP_DB: rec.TIMESTAMP_DB,
+      AMOUNT: rec.AMOUNT,
+      DEST_ACCOUNT_NUMBER: rec.DEST_ACCOUNT_NUMBER,
+      PROCESSING_CODE: rec.PROCESSING_CODE,
+      RESPONSE_CODE: rec.RESPONSE_CODE,
+    };
+  } else {
+    return {
+      id,
+      service: "nusabill",
+      status: "pending",
+      rawScore,
+      matched_patterns: result.matched_patterns || [],
+      CUSTOMER_ID: rec.CUSTOMER_ID,
+      BILL_ID: rec.BILL_ID,
+      BILL_AMOUNT: rec.BILL_AMOUNT,
+      PAYMENT_AMOUNT: rec.PAYMENT_AMOUNT,
+      CHANNEL: rec.CHANNEL,
+      REFUND_FLAG: rec.REFUND_FLAG,
+    };
+  }
+};
+
 /* ── Normalisasi ke format seragam untuk tabel ── */
 const normalise = (raw) => {
   const score01 = raw.rawScore;
@@ -357,7 +393,7 @@ const normalise = (raw) => {
           : null,
       destOrBill: raw.BILL_ID,
       typeOrChannel: raw.CHANNEL,
-      dateTime: null, // nusabill tidak punya kolom tanggal
+      dateTime: null,
       anomalies: patterns,
     };
   }
@@ -470,6 +506,8 @@ const TxnModal = ({ txn, onClose, onReview }) => {
   const [decision, setDecision] = useState("");
   const [notes, setNotes] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [submitting, setSubmitting] = useState(false); // ← BARU: loading state submit
+
   const rColor = getRiskColor(txn.riskLevel);
   const isPending = txn.status === "pending";
   const isAgenusa = txn.service === "agenusa";
@@ -479,10 +517,14 @@ const TxnModal = ({ txn, onClose, onReview }) => {
     setDecision(d);
     setConfirming(true);
   };
-  const handleConfirm = () => onReview(txn.id, decision, notes);
   const handleCancel = () => {
     setDecision("");
     setConfirming(false);
+  };
+  const handleConfirm = async () => {
+    setSubmitting(true);
+    await onReview(txn, decision, notes); // ← kirim objek txn lengkap
+    setSubmitting(false);
   };
 
   return (
@@ -743,7 +785,11 @@ const TxnModal = ({ txn, onClose, onReview }) => {
                     />
                   </div>
                   <div className="modal-confirm-row">
-                    <button className="modal-btn-cancel" onClick={handleCancel}>
+                    <button
+                      className="modal-btn-cancel"
+                      onClick={handleCancel}
+                      disabled={submitting}
+                    >
                       Cancel
                     </button>
                     <button
@@ -753,9 +799,11 @@ const TxnModal = ({ txn, onClose, onReview }) => {
                           : "modal-btn-confirm-reject"
                       }
                       onClick={handleConfirm}
+                      disabled={submitting}
                     >
-                      Confirm{" "}
-                      {decision === "approved" ? "Approval" : "Rejection"}
+                      {submitting
+                        ? "Submitting..."
+                        : `Confirm ${decision === "approved" ? "Approval" : "Rejection"}`}
                     </button>
                   </div>
                 </div>
@@ -768,22 +816,96 @@ const TxnModal = ({ txn, onClose, onReview }) => {
   );
 };
 
-/* MAIN */
+/* ════════════════════════════════════════════════
+   MAIN COMPONENT
+════════════════════════════════════════════════ */
 const ManualReview = () => {
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState([]);
   const [selectedTxn, setSelectedTxn] = useState(null);
+  const [apiError, setApiError] = useState(false); // ← BARU: indikator fallback
 
+  /* ── Fetch dari ML API, fallback ke sample data jika gagal ── */
   useEffect(() => {
-    const data = SAMPLE_TRANSACTIONS.map(normalise);
-    setTransactions(data);
-    setLoading(false);
+    const fetchFromML = async () => {
+      try {
+        setLoading(true);
+        setApiError(false);
+
+        const BASE_URL =
+          process.env.REACT_APP_ML_API_URL || "http://localhost:8000";
+
+        // ── Step 1: Ambil transaksi flagged langsung dari dataset CSV via backend ──
+        const txnRes = await fetch(
+          `${BASE_URL}/transactions/flagged?limit=50`,
+        );
+        if (!txnRes.ok)
+          throw new Error(`Gagal fetch dataset: ${txnRes.status}`);
+        const { agenusa: agenusaRaw, nusabill: nusabillRaw } =
+          await txnRes.json();
+
+        // ── Step 2: Siapkan field lengkap sesuai kebutuhan fds_engine.py ──
+        const agenusaRecords = agenusaRaw.map((r) => ({
+          TERMINAL_ID: r.TERMINAL_ID || "T1000",
+          MERCHANT_ID: r.MERCHANT_ID || "M2000",
+          ACCOUNT_NUMBER: r.ACCOUNT_NUMBER,
+          DEST_ACCOUNT_NUMBER: r.DEST_ACCOUNT_NUMBER,
+          TIMESTAMP_DB: r.TIMESTAMP_DB,
+          AMOUNT: Number(r.AMOUNT),
+          STAN: r.STAN || 100000,
+          PROCESSING_CODE: Number(r.PROCESSING_CODE) || 10000,
+          RESPONSE_CODE: Number(r.RESPONSE_CODE) || 0,
+          MTI: r.MTI || "0200",
+        }));
+
+        const nusabillRecords = nusabillRaw.map((r) => ({
+          BILL_ID: r.BILL_ID,
+          CUSTOMER_ID: r.CUSTOMER_ID,
+          BILL_AMOUNT: Number(r.BILL_AMOUNT),
+          PAYMENT_AMOUNT: Number(r.PAYMENT_AMOUNT),
+          BILL_DATE: r.BILL_DATE || "2026-01-01",
+          PAYMENT_DATE: r.PAYMENT_DATE || "2026-01-05",
+          CHANNEL: r.CHANNEL || "Web",
+          BILL_STATUS: r.BILL_STATUS || "Paid",
+          REFUND_FLAG: Number(r.REFUND_FLAG) || 0,
+        }));
+
+        // ── Step 3: Kirim ke ML untuk scoring (paralel) ──
+        const [agenusaRes, nusabillRes] = await Promise.all([
+          labelHistory("agenusa", agenusaRecords, THRESHOLDS.agenusa),
+          labelHistory("nusabill", nusabillRecords, THRESHOLDS.nusabill),
+        ]);
+
+        // ── Step 4: Map hasil ML → format frontend, sort by fraudScore ──
+        const allTxns = [
+          ...agenusaRes.results.map((r, i) => mapApiResult(r, "agenusa", i)),
+          ...nusabillRes.results.map((r, i) =>
+            mapApiResult(r, "nusabill", i),
+          ),
+        ]
+          .map(normalise)
+          .sort((a, b) => b.fraudScore - a.fraudScore);
+
+        setTransactions(allTxns);
+      } catch (err) {
+        console.warn("ML API tidak tersedia, pakai sample data:", err.message);
+        setApiError(true);
+        // Fallback: pakai SAMPLE_TRANSACTIONS statis jika backend mati
+        setTransactions(SAMPLE_TRANSACTIONS.map(normalise));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFromML();
   }, []);
 
-  const handleReview = useCallback((txnId, decision, notes) => {
+  /* ── Handle review: update state + kirim feedback ke backend ── */
+  const handleReview = useCallback(async (txn, decision, notes) => {
+    // 1. Update state lokal langsung (optimistic update)
     setTransactions((prev) =>
       prev.map((t) =>
-        t.id === txnId
+        t.id === txn.id
           ? {
               ...t,
               status: decision,
@@ -794,6 +916,14 @@ const ManualReview = () => {
       ),
     );
     setSelectedTxn(null);
+
+    // 2. Kirim feedback ke backend untuk feedback loop retrain
+    //    (fire-and-forget — tidak blokir UI jika gagal)
+    try {
+      await submitReview(txn, decision, notes);
+    } catch (err) {
+      console.warn("Feedback review tidak terkirim ke backend:", err.message);
+    }
   }, []);
 
   if (loading) return <PageLoader message="Memuat Manual Review..." />;
@@ -805,6 +935,26 @@ const ManualReview = () => {
           <h1>Manual Review</h1>
           <p className="subtitle">Review and verify flagged transactions</p>
         </div>
+        {/* Banner kecil jika pakai fallback data */}
+        {apiError && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: ".5rem",
+              padding: ".5rem 1rem",
+              background: "#fef3c7",
+              border: "1px solid #fde68a",
+              borderRadius: "8px",
+              fontSize: ".8rem",
+              color: "#92400e",
+              fontWeight: 600,
+            }}
+          >
+            <i className="bi bi-exclamation-triangle-fill"></i>
+            ML API offline — menampilkan sample data
+          </div>
+        )}
       </div>
 
       {/* ── ReviewFilter owns ALL filter/sort/pagination state ── */}
@@ -821,10 +971,8 @@ const ManualReview = () => {
           datePickerPortal,
         }) => (
           <>
-            {/* Search bar + status tabs */}
             {filterBar}
 
-            {/* Flagged Transactions Table */}
             <div className="review-section">
               {sectionHeader}
 
@@ -838,156 +986,121 @@ const ManualReview = () => {
                   <table className="txn-table">
                     {tableHead}
                     <tbody>
-                      {paginatedTxns.map((t) => {
-                        return (
-                          <tr
-                            key={t.id}
-                            onClick={() => setSelectedTxn(t)}
-                            style={{ cursor: "pointer" }}
-                          >
-                            {/* ① Layanan */}
-                            <td>
-                              <ServiceBadge service={t.service} />
-                            </td>
-
-                            {/* ③ ID */}
-                            <td>
-                              <span className="cell-id">{t.id}</span>
-                            </td>
-
-                            {/* ④ Account / Customer */}
-                            <td>
-                              <div className="cell-user-name">
-                                {t.accountId}
-                              </div>
-                            </td>
-
-                            {/* ⑤ Amount */}
-                            <td>
-                              <span className="cell-amount">
-                                {fmt(t.amount)}
-                              </span>
-                              {t.amountNote && (
-                                <div
-                                  style={{
-                                    fontSize: ".72rem",
-                                    color: "#ea580c",
-                                    marginTop: "2px",
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  {t.amountNote}
-                                </div>
-                              )}
-                            </td>
-
-                            {/* ⑥ Dest / Bill ID */}
-                            <td className="hide-sm">
-                              <span
+                      {paginatedTxns.map((t) => (
+                        <tr
+                          key={t.id}
+                          onClick={() => setSelectedTxn(t)}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <td>
+                            <ServiceBadge service={t.service} />
+                          </td>
+                          <td>
+                            <span className="cell-id">{t.id}</span>
+                          </td>
+                          <td>
+                            <div className="cell-user-name">{t.accountId}</div>
+                          </td>
+                          <td>
+                            <span className="cell-amount">{fmt(t.amount)}</span>
+                            {t.amountNote && (
+                              <div
                                 style={{
-                                  fontFamily: "IBM Plex Mono, monospace",
-                                  fontSize: ".8rem",
-                                  color: "#475569",
+                                  fontSize: ".72rem",
+                                  color: "#ea580c",
+                                  marginTop: "2px",
+                                  fontWeight: 600,
                                 }}
                               >
-                                {t.destOrBill}
-                              </span>
-                            </td>
-
-                            {/* ⑦ Type / Channel */}
-                            <td className="hide-sm">
-                              <span
-                                style={{ fontSize: ".85rem", color: "#374151" }}
-                              >
-                                {t.typeOrChannel}
-                              </span>
-                              {t.service === "nusabill" && t.REFUND_FLAG ? (
-                                <span
-                                  style={{
-                                    display: "block",
-                                    fontSize: ".7rem",
-                                    color: "#7c3aed",
-                                    fontWeight: 700,
-                                    marginTop: "2px",
-                                  }}
-                                >
-                                  🔄 Refund
-                                </span>
-                              ) : null}
-                            </td>
-
-                            {/* ⑧ Date & Time */}
-                            <td className="hide-sm">
-                              {t.dateTime ? (
-                                <span className="cell-date">
-                                  {fmtDate(t.dateTime)}
-                                </span>
-                              ) : (
-                                <span
-                                  style={{
-                                    color: "#94a3b8",
-                                    fontSize: ".8rem",
-                                  }}
-                                >
-                                  —
-                                </span>
-                              )}
-                            </td>
-
-                            {/* ⑨ Patterns */}
-                            <td>
-                              {t.anomalies?.length > 0 ? (
-                                <span className="anomaly-pill">
-                                  <i className="bi bi-exclamation-triangle-fill"></i>
-                                  {t.anomalies.length}
-                                </span>
-                              ) : (
-                                <span
-                                  style={{
-                                    color: "#94a3b8",
-                                    fontSize: ".8rem",
-                                  }}
-                                >
-                                  —
-                                </span>
-                              )}
-                            </td>
-
-                            {/* ⑩ Risk */}
-                            <td className="center">
-                              <span
-                                className={`risk-badge risk-${t.riskLevel}`}
-                              >
-                                <span className="risk-score-num">
-                                  {t.fraudScore}
-                                </span>
-                                <span className="risk-label-text">
-                                  {t.riskLevel}
-                                </span>
-                              </span>
-                            </td>
-
-                            {/* ⑪ Status */}
-                            <td>
-                              <StatusTag status={t.status} />
-                            </td>
-
-                            {/* ⑫ Detail */}
-                            <td
-                              className="col-action"
-                              onClick={(e) => e.stopPropagation()}
+                                {t.amountNote}
+                              </div>
+                            )}
+                          </td>
+                          <td className="hide-sm">
+                            <span
+                              style={{
+                                fontFamily: "IBM Plex Mono, monospace",
+                                fontSize: ".8rem",
+                                color: "#475569",
+                              }}
                             >
-                              <button
-                                className="btn-detail"
-                                onClick={() => setSelectedTxn(t)}
+                              {t.destOrBill}
+                            </span>
+                          </td>
+                          <td className="hide-sm">
+                            <span
+                              style={{ fontSize: ".85rem", color: "#374151" }}
+                            >
+                              {t.typeOrChannel}
+                            </span>
+                            {t.service === "nusabill" && t.REFUND_FLAG ? (
+                              <span
+                                style={{
+                                  display: "block",
+                                  fontSize: ".7rem",
+                                  color: "#7c3aed",
+                                  fontWeight: 700,
+                                  marginTop: "2px",
+                                }}
                               >
-                                <i className="bi bi-eye"></i>Detail
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {/* Ghost rows to keep table height fixed at 10 rows */}
+                                🔄 Refund
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="hide-sm">
+                            {t.dateTime ? (
+                              <span className="cell-date">
+                                {fmtDate(t.dateTime)}
+                              </span>
+                            ) : (
+                              <span
+                                style={{ color: "#94a3b8", fontSize: ".8rem" }}
+                              >
+                                —
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {t.anomalies?.length > 0 ? (
+                              <span className="anomaly-pill">
+                                <i className="bi bi-exclamation-triangle-fill"></i>
+                                {t.anomalies.length}
+                              </span>
+                            ) : (
+                              <span
+                                style={{ color: "#94a3b8", fontSize: ".8rem" }}
+                              >
+                                —
+                              </span>
+                            )}
+                          </td>
+                          <td className="center">
+                            <span className={`risk-badge risk-${t.riskLevel}`}>
+                              <span className="risk-score-num">
+                                {t.fraudScore}
+                              </span>
+                              <span className="risk-label-text">
+                                {t.riskLevel}
+                              </span>
+                            </span>
+                          </td>
+                          <td>
+                            <StatusTag status={t.status} />
+                          </td>
+                          <td
+                            className="col-action"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              className="btn-detail"
+                              onClick={() => setSelectedTxn(t)}
+                            >
+                              <i className="bi bi-eye"></i>Detail
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Ghost rows untuk jaga tinggi tabel tetap 10 baris */}
                       {Array.from({ length: 10 - paginatedTxns.length }).map(
                         (_, i) => (
                           <tr key={`ghost-${i}`} className="txn-row-ghost">
@@ -1019,7 +1132,6 @@ const ManualReview = () => {
               />
             </div>
 
-            {/* Date picker modal (rendered by ReviewFilter) */}
             {datePickerPortal}
           </>
         )}
