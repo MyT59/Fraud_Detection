@@ -191,18 +191,7 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="txn-modal-footer">
-              <button type="button" className="txn-btn txn-btn-secondary" onClick={onClose}>
-                <i className="bi bi-x-circle me-2"></i>Close
-              </button>
-              <button type="button" className="txn-btn txn-btn-success">
-                <i className="bi bi-check-circle me-2"></i>Approve
-              </button>
-              <button type="button" className="txn-btn txn-btn-danger">
-                <i className="bi bi-x-octagon me-2"></i>Reject
-              </button>
-            </div>
+
           </div>
         </div>
       </div>

@@ -6,25 +6,25 @@ const FraudInsights = ({ transaction }) => {
 
   const getInsights = () => {
     const items = [];
+    const patterns = transaction.anomalies || [];
+    const isAgenusa = transaction.service === 'agenusa';
 
-    // High fraud score insight
+    // High fraud score
     if (transaction.fraudScore >= 80) {
       items.push({
         id: 'score',
-        type: 'warning',
-        title: 'High-Risk Pattern Detected',
-        description: `Fraud score of ${transaction.fraudScore}/100 matches known fraud patterns from previous cases.`,
+        title: 'High-Risk Score Flagged',
+        description: `Fraud score ${transaction.fraudScore}/100 exceeds the high-risk threshold (${isAgenusa ? '50' : '93'}) by a significant margin.`,
         confidence: transaction.fraudScore,
         icon: 'bi-exclamation-triangle-fill',
         color: 'danger',
-        recommendation: 'Proceed with additional verification'
+        recommendation: 'Proceed with immediate manual review'
       });
     } else if (transaction.fraudScore >= 60) {
       items.push({
         id: 'score',
-        type: 'warning',
-        title: 'Moderate Risk Pattern',
-        description: `Fraud score of ${transaction.fraudScore}/100 indicates moderate risk. Some patterns match previous flagged transactions.`,
+        title: 'Moderate Risk Score',
+        description: `Fraud score ${transaction.fraudScore}/100 is above review threshold. Transaction requires manual verification.`,
         confidence: transaction.fraudScore,
         icon: 'bi-exclamation-circle-fill',
         color: 'warning',
@@ -32,55 +32,119 @@ const FraudInsights = ({ transaction }) => {
       });
     }
 
-    // Device anomaly
-    if (transaction.anomalies?.some(a => a.toLowerCase().includes('device'))) {
-      items.push({
-        id: 'device',
-        type: 'info',
-        title: 'Unusual Device Activity',
-        description: `Transaction originated from ${transaction.device}. A new or unrecognized device was detected for this account.`,
-        confidence: 72,
-        icon: 'bi-phone-fill',
-        color: 'warning',
-        recommendation: 'Verify device ownership with user'
-      });
+    // Agenusa-specific patterns
+    if (isAgenusa) {
+      if (patterns.some(p => p.toLowerCase().includes('bruteforce') || p.toLowerCase().includes('pin'))) {
+        items.push({
+          id: 'pin',
+          title: 'PIN Bruteforce Pattern Detected',
+          description: `Multiple failed PIN attempts detected on account ${transaction.ACCOUNT_NUMBER} before successful transaction.`,
+          confidence: 91,
+          icon: 'bi-lock-fill',
+          color: 'danger',
+          recommendation: 'Freeze account PIN and notify account holder'
+        });
+      }
+      if (patterns.some(p => p.toLowerCase().includes('retry') || p.toLowerCase().includes('declined'))) {
+        items.push({
+          id: 'retry',
+          title: 'Rapid Retry After Decline',
+          description: 'Transaction was preceded by several declined attempts in quick succession — a known carding pattern.',
+          confidence: 83,
+          icon: 'bi-arrow-repeat',
+          color: 'warning',
+          recommendation: 'Check decline history and verify with account holder'
+        });
+      }
+      if (patterns.some(p => p.toLowerCase().includes('mule') || p.toLowerCase().includes('destination'))) {
+        items.push({
+          id: 'mule',
+          title: 'Money Mule Destination Flagged',
+          description: `Destination account ${transaction.DEST_ACCOUNT_NUMBER} is associated with money mule activity in historical data.`,
+          confidence: 88,
+          icon: 'bi-send-exclamation-fill',
+          color: 'danger',
+          recommendation: 'Block destination account and escalate to compliance team'
+        });
+      }
+      if (patterns.some(p => p.toLowerCase().includes('midnight') || p.toLowerCase().includes('unusual amount'))) {
+        items.push({
+          id: 'midnight',
+          title: 'Off-Hours High-Value Transaction',
+          description: `Transfer of ${new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR', minimumFractionDigits:0 }).format(transaction.AMOUNT)} occurred at an unusual hour.`,
+          confidence: 74,
+          icon: 'bi-moon-stars-fill',
+          color: 'warning',
+          recommendation: 'Confirm with account holder via OTP or call'
+        });
+      }
+      if (patterns.some(p => p.toLowerCase().includes('travel') || p.toLowerCase().includes('terminal'))) {
+        items.push({
+          id: 'travel',
+          title: 'Impossible Terminal Switch',
+          description: 'Transaction initiated from a terminal inconsistent with the account\'s recent geographic activity.',
+          confidence: 79,
+          icon: 'bi-geo-alt-fill',
+          color: 'warning',
+          recommendation: 'Verify terminal ID and account holder location'
+        });
+      }
     }
 
-    // Location anomaly
-    if (transaction.location === 'Unknown' || transaction.anomalies?.some(a => a.toLowerCase().includes('location') || a.toLowerCase().includes('vpn'))) {
-      items.push({
-        id: 'location',
-        type: 'danger',
-        title: 'Suspicious Location',
-        description: `Transaction location "${transaction.location}" is unverifiable or differs significantly from the user's typical location.`,
-        confidence: 88,
-        icon: 'bi-geo-alt-fill',
-        color: 'danger',
-        recommendation: 'Verify user location and block if VPN confirmed'
-      });
+    // Nusabill-specific patterns
+    if (!isAgenusa) {
+      if (patterns.some(p => p.toLowerCase().includes('burst') || p.toLowerCase().includes('payment pattern'))) {
+        items.push({
+          id: 'burst',
+          title: 'Burst Payment Pattern',
+          description: `Customer ${transaction.CUSTOMER_ID} submitted multiple bill payments in rapid succession — indicative of automated fraud tooling.`,
+          confidence: 86,
+          icon: 'bi-lightning-fill',
+          color: 'danger',
+          recommendation: 'Throttle API requests and verify customer identity'
+        });
+      }
+      if (patterns.some(p => p.toLowerCase().includes('refund'))) {
+        items.push({
+          id: 'refund',
+          title: 'Refund Abuse Pattern',
+          description: `Bill ${transaction.BILL_ID} has REFUND_FLAG=1 combined with suspicious payment behavior.`,
+          confidence: 82,
+          icon: 'bi-arrow-counterclockwise',
+          color: 'danger',
+          recommendation: 'Hold refund processing and investigate payment history'
+        });
+      }
+      if (patterns.some(p => p.toLowerCase().includes('channel switch') || p.toLowerCase().includes('api'))) {
+        items.push({
+          id: 'channel',
+          title: 'Sudden Channel Switch to API',
+          description: `Customer switched to API channel (${transaction.CHANNEL}) which differs from their typical payment channel — potential account takeover.`,
+          confidence: 71,
+          icon: 'bi-wifi-off',
+          color: 'warning',
+          recommendation: 'Require re-authentication for API channel transactions'
+        });
+      }
+      if (transaction.BILL_AMOUNT !== transaction.PAYMENT_AMOUNT) {
+        items.push({
+          id: 'underpay',
+          title: 'Payment Amount Mismatch',
+          description: `PAYMENT_AMOUNT (${new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR', minimumFractionDigits:0 }).format(transaction.PAYMENT_AMOUNT)}) does not match BILL_AMOUNT — possible partial payment manipulation.`,
+          confidence: 76,
+          icon: 'bi-currency-exchange',
+          color: 'warning',
+          recommendation: 'Verify payment intent and reconcile billing record'
+        });
+      }
     }
 
-    // New account
-    if (transaction.anomalies?.some(a => a.toLowerCase().includes('account age') || a.toLowerCase().includes('new account'))) {
-      items.push({
-        id: 'account',
-        type: 'warning',
-        title: 'New Account High-Value Transaction',
-        description: 'Account age is less than 7 days and is attempting a high-value transaction, which is a known fraud indicator.',
-        confidence: 80,
-        icon: 'bi-person-exclamation',
-        color: 'danger',
-        recommendation: 'Require enhanced KYC verification'
-      });
-    }
-
-    // If no specific insights, show clean history
+    // Fallback
     if (items.length === 0) {
       items.push({
         id: 'clean',
-        type: 'success',
         title: 'No Critical Patterns Found',
-        description: 'Transaction does not match high-risk patterns in the database.',
+        description: 'Transaction was flagged by score threshold only — no specific fraud pattern matched.',
         confidence: 85,
         icon: 'bi-check-circle-fill',
         color: 'success',
@@ -93,55 +157,75 @@ const FraudInsights = ({ transaction }) => {
 
   const getRiskFactors = () => {
     const baseScore = transaction.fraudScore;
+    const isAgenusa = transaction.service === 'agenusa';
+    const patterns  = transaction.anomalies || [];
+    const patternCount = patterns.length;
+
     return [
       {
-        factor: 'Transaction Amount',
-        score: Math.min(100, Math.round(transaction.amount / 500000)),
-        status: transaction.amount > 20000000 ? 'high' : transaction.amount > 5000000 ? 'medium' : 'low'
+        factor: isAgenusa ? 'Transfer Amount' : 'Bill Amount',
+        score: Math.min(100, Math.round(transaction.amount / 5000000)),
+        status: transaction.amount > 500000000 ? 'high' : transaction.amount > 100000000 ? 'medium' : 'low'
       },
       {
-        factor: 'Device Fingerprint',
-        score: transaction.anomalies?.some(a => a.toLowerCase().includes('device')) ? 65 : 20,
-        status: transaction.anomalies?.some(a => a.toLowerCase().includes('device')) ? 'medium' : 'low'
+        factor: 'Fraud Score',
+        score: baseScore,
+        status: baseScore >= 80 ? 'high' : baseScore >= 60 ? 'medium' : 'low'
       },
       {
-        factor: 'Location Matching',
-        score: transaction.location === 'Unknown' ? 90 : Math.round(baseScore * 0.6),
-        status: transaction.location === 'Unknown' ? 'high' : baseScore > 70 ? 'medium' : 'low'
+        factor: 'Matched Patterns',
+        score: Math.min(100, patternCount * 25),
+        status: patternCount >= 3 ? 'high' : patternCount >= 1 ? 'medium' : 'low'
       },
-      {
-        factor: 'Time Pattern',
-        score: transaction.anomalies?.some(a => a.toLowerCase().includes('time')) ? 55 : 25,
-        status: transaction.anomalies?.some(a => a.toLowerCase().includes('time')) ? 'medium' : 'low'
-      },
-      {
-        factor: 'User Behavior',
-        score: Math.round(baseScore * 0.25),
-        status: baseScore > 80 ? 'medium' : 'low'
-      }
+      isAgenusa
+        ? {
+            factor: 'PIN / Retry Behavior',
+            score: patterns.some(p => p.toLowerCase().includes('pin') || p.toLowerCase().includes('retry')) ? 75 : 15,
+            status: patterns.some(p => p.toLowerCase().includes('pin') || p.toLowerCase().includes('retry')) ? 'high' : 'low'
+          }
+        : {
+            factor: 'Refund & Channel Risk',
+            score: (transaction.REFUND_FLAG ? 50 : 0) + (transaction.CHANNEL === 'API' ? 35 : 0),
+            status: (transaction.REFUND_FLAG && transaction.CHANNEL === 'API') ? 'high' : (transaction.REFUND_FLAG || transaction.CHANNEL === 'API') ? 'medium' : 'low'
+          },
+      isAgenusa
+        ? {
+            factor: 'Destination Account',
+            score: patterns.some(p => p.toLowerCase().includes('mule') || p.toLowerCase().includes('destination')) ? 88 : 20,
+            status: patterns.some(p => p.toLowerCase().includes('mule') || p.toLowerCase().includes('destination')) ? 'high' : 'low'
+          }
+        : {
+            factor: 'Payment vs Bill Amount',
+            score: transaction.BILL_AMOUNT !== transaction.PAYMENT_AMOUNT
+              ? Math.min(100, Math.round(Math.abs(transaction.BILL_AMOUNT - transaction.PAYMENT_AMOUNT) / transaction.BILL_AMOUNT * 100 * 10))
+              : 5,
+            status: transaction.BILL_AMOUNT !== transaction.PAYMENT_AMOUNT ? 'medium' : 'low'
+          },
     ];
   };
 
-  // Similar cases based on transaction type and risk level
+  // Similar cases based on service prefix
   const getSimilarCases = () => {
-    const base = transaction.amount;
+    const base    = transaction.amount;
+    const prefix  = transaction.service === 'agenusa' ? 'AGN' : 'NUS';
+    const numPart = parseInt(transaction.id.replace(/[^0-9]/g, '')) || 1;
     return [
       {
-        id: 'TRX' + (parseInt(transaction.id.replace('TRX', '')) + 1188).toString().padStart(6, '0'),
+        id: `${prefix}-${String(numPart + 117).padStart(6, '0')}`,
         similarity: 87,
         outcome: transaction.fraudScore >= 80 ? 'fraud' : 'legit',
         amount: Math.round(base * 0.97),
         date: '2 days ago'
       },
       {
-        id: 'TRX' + (parseInt(transaction.id.replace('TRX', '')) + 1144).toString().padStart(6, '0'),
+        id: `${prefix}-${String(numPart + 144).padStart(6, '0')}`,
         similarity: 72,
         outcome: transaction.riskLevel === 'critical' ? 'fraud' : 'legit',
         amount: Math.round(base * 1.08),
         date: '1 week ago'
       },
       {
-        id: 'TRX' + (parseInt(transaction.id.replace('TRX', '')) + 1097).toString().padStart(6, '0'),
+        id: `${prefix}-${String(numPart + 197).padStart(6, '0')}`,
         similarity: 65,
         outcome: transaction.fraudScore >= 70 ? 'fraud' : 'legit',
         amount: Math.round(base * 1.05),

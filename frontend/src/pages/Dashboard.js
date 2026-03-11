@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import StatCard from '../components/dashboard/StatCard';
-import TransactionChart from '../components/dashboard/TransactionChart';
-import FraudChart from '../components/dashboard/FraudChart';
-import RecentAlerts from '../components/dashboard/RecentAlerts';
-import QuickActions from '../components/dashboard/QuickActions';
-import SystemHealth from '../components/dashboard/SystemHealth';
-import TopFraudPatterns from '../components/dashboard/TopFraudPatterns';
-import ActivityTimeline from '../components/dashboard/ActivityTimeline';
-import './Dashboard.css';
-import PageLoader from '../components/common/PageLoader';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import StatCard from "../components/dashboard/StatCard";
+import TransactionChart from "../components/dashboard/TransactionChart";
+import FraudChart from "../components/dashboard/FraudChart";
+import RecentAlerts from "../components/dashboard/RecentAlerts";
+import QuickActions from "../components/dashboard/QuickActions";
+import SystemHealth from "../components/dashboard/SystemHealth";
+import TopFraudPatterns from "../components/dashboard/TopFraudPatterns";
+import ActivityTimeline from "../components/dashboard/ActivityTimeline";
+import "./Dashboard.css";
+import PageLoader from "../components/common/PageLoader";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ const Dashboard = () => {
     totalTransactions: 1290,
     totalFraud: 56,
     fraudRate: 4.34,
-    modelAccuracy: 98.7
+    modelAccuracy: 98.7,
   });
 
   useEffect(() => {
@@ -38,8 +38,7 @@ const Dashboard = () => {
           <h1 className="page-title">Dashboard</h1>
           <p className="page-subtitle">Fraud Detection System Overview</p>
         </div>
-        <div className="header-actions">
-        </div>
+        <div className="header-actions"></div>
       </div>
 
       {/* Statistics Cards */}
@@ -111,7 +110,12 @@ const Dashboard = () => {
       <div className="summary-section">
         <div className="section-header">
           <h2 className="section-title">Recent Transactions</h2>
-          <button className="btn-link" onClick={() => navigate('/transactions')}>View All</button>
+          <button
+            className="btn-link"
+            onClick={() => navigate("/transactions")}
+          >
+            View All
+          </button>
         </div>
         <div className="table-container">
           <table className="data-table">
@@ -126,39 +130,79 @@ const Dashboard = () => {
             </thead>
             <tbody>
               <tr>
-                <td><span className="mono">#TXN-001234</span></td>
-                <td><strong>$2,450.00</strong></td>
+                <td>
+                  <span className="mono">#TXN-001234</span>
+                </td>
+                <td>
+                  <strong>$2,450.00</strong>
+                </td>
                 <td>Feb 13, 2026</td>
-                <td><span className="status-badge safe">Safe</span></td>
-                <td><span className="risk-low">Low</span></td>
+                <td>
+                  <span className="status-badge safe">Safe</span>
+                </td>
+                <td>
+                  <span className="risk-low">Low</span>
+                </td>
               </tr>
               <tr>
-                <td><span className="mono">#TXN-001233</span></td>
-                <td><strong>$12,450.00</strong></td>
+                <td>
+                  <span className="mono">#TXN-001233</span>
+                </td>
+                <td>
+                  <strong>$12,450.00</strong>
+                </td>
                 <td>Feb 13, 2026</td>
-                <td><span className="status-badge fraud">Fraud</span></td>
-                <td><span className="risk-high">High</span></td>
+                <td>
+                  <span className="status-badge fraud">Fraud</span>
+                </td>
+                <td>
+                  <span className="risk-high">High</span>
+                </td>
               </tr>
               <tr>
-                <td><span className="mono">#TXN-001232</span></td>
-                <td><strong>$850.00</strong></td>
+                <td>
+                  <span className="mono">#TXN-001232</span>
+                </td>
+                <td>
+                  <strong>$850.00</strong>
+                </td>
                 <td>Feb 13, 2026</td>
-                <td><span className="status-badge safe">Safe</span></td>
-                <td><span className="risk-low">Low</span></td>
+                <td>
+                  <span className="status-badge safe">Safe</span>
+                </td>
+                <td>
+                  <span className="risk-low">Low</span>
+                </td>
               </tr>
               <tr>
-                <td><span className="mono">#TXN-001231</span></td>
-                <td><strong>$5,230.00</strong></td>
+                <td>
+                  <span className="mono">#TXN-001231</span>
+                </td>
+                <td>
+                  <strong>$5,230.00</strong>
+                </td>
                 <td>Feb 12, 2026</td>
-                <td><span className="status-badge review">Review</span></td>
-                <td><span className="risk-medium">Medium</span></td>
+                <td>
+                  <span className="status-badge review">Review</span>
+                </td>
+                <td>
+                  <span className="risk-medium">Medium</span>
+                </td>
               </tr>
               <tr>
-                <td><span className="mono">#TXN-001230</span></td>
-                <td><strong>$1,100.00</strong></td>
+                <td>
+                  <span className="mono">#TXN-001230</span>
+                </td>
+                <td>
+                  <strong>$1,100.00</strong>
+                </td>
                 <td>Feb 12, 2026</td>
-                <td><span className="status-badge safe">Safe</span></td>
-                <td><span className="risk-low">Low</span></td>
+                <td>
+                  <span className="status-badge safe">Safe</span>
+                </td>
+                <td>
+                  <span className="risk-low">Low</span>
+                </td>
               </tr>
             </tbody>
           </table>

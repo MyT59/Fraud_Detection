@@ -85,6 +85,13 @@ const QuickActions = () => {
       route: '/fraud-patterns'
     },
     {
+      id: 13,                          // ← BARU
+      title: 'Retrain Schedule',
+      icon: 'bi-cpu',
+      color: 'info',
+      route: '/retrain-schedule'
+    },
+    {
       id: 10,
       title: 'Settings',
       icon: 'bi-gear-fill',

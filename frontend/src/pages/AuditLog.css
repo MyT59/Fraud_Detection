@@ -1,6 +1,6 @@
 .auditlog-page {
   padding: 32px;
-  max-width: 1200px;
+  width: 100%;
 }
 
 /* ── Page Header ── */
@@ -86,6 +86,10 @@
 }
 
 @media (max-width: 768px) {
-  .auditlog-page { padding: 20px 16px; }
-  .al-title { font-size: 1.1rem; }
+  .auditlog-page {
+    padding: 20px 16px;
+  }
+  .al-title {
+    font-size: 1.1rem;
+  }
 }

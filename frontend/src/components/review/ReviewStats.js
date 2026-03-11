@@ -6,10 +6,9 @@ const ReviewStats = ({ stats }) => {
     return total > 0 ? ((value / total) * 100).toFixed(1) : 0;
   };
 
-  const reviewedTotal = stats.approved + stats.rejected;
-  const approvalRate = calculatePercentage(stats.approved, reviewedTotal);
-  const rejectionRate = calculatePercentage(stats.rejected, reviewedTotal);
-  const avgReviewTime = stats.avgReviewTime || '2.5';
+  const reviewedTotal  = stats.approved + stats.rejected;
+  const approvalRate   = calculatePercentage(stats.approved, reviewedTotal);
+  const rejectionRate  = calculatePercentage(stats.rejected, reviewedTotal);
 
   const statsData = [
     {
@@ -19,7 +18,7 @@ const ReviewStats = ({ stats }) => {
       icon: 'bi-clock-history',
       color: 'warning',
       trend: stats.pendingTrend || 0,
-      subtitle: 'Awaiting review'
+      subtitle: 'Awaiting review',
     },
     {
       id: 2,
@@ -28,7 +27,7 @@ const ReviewStats = ({ stats }) => {
       icon: 'bi-check-circle-fill',
       color: 'success',
       trend: stats.approvedTrend || 0,
-      subtitle: `${approvalRate}% approval rate`
+      subtitle: `${approvalRate}% approval rate`,
     },
     {
       id: 3,
@@ -37,12 +36,26 @@ const ReviewStats = ({ stats }) => {
       icon: 'bi-x-circle-fill',
       color: 'danger',
       trend: stats.rejectedTrend || 0,
-      subtitle: `${rejectionRate}% rejection rate`
+      subtitle: `${rejectionRate}% rejection rate`,
     },
   ];
 
+  const getTrendClass = (trend) => {
+    if (trend > 0) return 'trend-up';
+    if (trend < 0) return 'trend-down';
+    return 'trend-neutral';
+  };
+
+  const getTrendIcon = (trend) => {
+    if (trend > 0) return 'bi-arrow-up';
+    if (trend < 0) return 'bi-arrow-down';
+    return 'bi-dash';
+  };
+
   return (
     <div className="review-stats-container">
+
+      {/* Header */}
       <div className="stats-header">
         <div className="header-content">
           <h3 className="stats-title">
@@ -58,28 +71,26 @@ const ReviewStats = ({ stats }) => {
         </div>
       </div>
 
+      {/* Stat Cards */}
       <div className="stats-grid">
         {statsData.map((stat) => (
           <div key={stat.id} className={`stat-box stat-${stat.color}`}>
-            <div className="stat-icon-wrapper">
+
+            {/* Icon + Trend */}
+            <div className="stat-top-row">
               <div className={`stat-icon bg-${stat.color}`}>
-                <i className={stat.icon}></i>
+                <i className={`bi ${stat.icon}`}></i>
               </div>
+
             </div>
 
+            {/* Value + Label */}
             <div className="stat-content">
+              <span className="stat-value">{stat.value}</span>
               <span className="stat-label">{stat.label}</span>
-              <div className="stat-value-row">
-                <span className="stat-value">{stat.value}</span>
-                {stat.trend !== 0 && (
-                  <span className={`stat-trend ${stat.trend > 0 ? 'trend-up' : 'trend-down'}`}>
-                    <i className={`bi bi-arrow-${stat.trend > 0 ? 'up' : 'down'}`}></i>
-                    {Math.abs(stat.trend)}%
-                  </span>
-                )}
-              </div>
               <span className="stat-subtitle">{stat.subtitle}</span>
             </div>
+
           </div>
         ))}
       </div>
@@ -89,18 +100,18 @@ const ReviewStats = ({ stats }) => {
         <div className="progress-header">
           <span className="progress-label">Review Progress</span>
           <span className="progress-value">
-            {reviewedTotal} / {stats.pending + reviewedTotal} transactions reviewed
+            {reviewedTotal} / {stats.pending + reviewedTotal} reviewed
           </span>
         </div>
         <div className="progress-bar">
-          <div 
+          <div
             className="progress-fill approved"
             style={{ width: `${calculatePercentage(stats.approved, stats.pending + reviewedTotal)}%` }}
-          ></div>
-          <div 
+          />
+          <div
             className="progress-fill rejected"
             style={{ width: `${calculatePercentage(stats.rejected, stats.pending + reviewedTotal)}%` }}
-          ></div>
+          />
         </div>
         <div className="progress-legend">
           <span className="legend-item">
@@ -117,6 +128,7 @@ const ReviewStats = ({ stats }) => {
           </span>
         </div>
       </div>
+
     </div>
   );
 };

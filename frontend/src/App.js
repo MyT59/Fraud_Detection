@@ -15,42 +15,48 @@ import AuditLog          from './pages/AuditLog';
 import AlertsLog         from './pages/AlertsLog';
 import FraudPatterns     from './pages/FraudPatterns';
 import ActivityTimeline  from './pages/ActivityTimeline';
+import RetrainSchedule   from './pages/RetrainSchedule';
 import Login             from './pages/Login';
-
 import './App.css';
 
-// ── Proteksi route: kalau belum login, redirect ke /login ──
 const ProtectedRoute = ({ children }) => {
   const isLoggedIn = localStorage.getItem('isLoggedIn');
   return isLoggedIn ? children : <Navigate to="/login" replace />;
 };
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 992);
+  const isMobile = () => window.innerWidth <= 992;
+
+  const [mobileOpen,  setMobileOpen]  = useState(false);
+  const [collapsed,   setCollapsed]   = useState(false);
 
   useEffect(() => {
-    const onResize = () => setSidebarOpen(window.innerWidth > 992);
+    const onResize = () => { if (!isMobile()) setMobileOpen(false); };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const closeSidebar = () => { if (window.innerWidth <= 992) setSidebarOpen(false); };
+  const handleToggleSidebar  = () => setMobileOpen(p => !p);
+  const closeMobileSidebar   = () => setMobileOpen(false);
+  const handleToggleCollapse = () => setCollapsed(p => !p);
 
   return (
     <Router>
       <Routes>
-        {/* ── Login — full screen, no navbar/sidebar ── */}
         <Route path="/login" element={<Login />} />
-
-        {/* ── App shell — terlindungi, harus login dulu ── */}
         <Route
           path="/*"
           element={
             <ProtectedRoute>
               <div className="App">
-                <Navbar onToggleSidebar={() => setSidebarOpen(p => !p)} />
-                <div className={`app-container ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
-                  <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
+                <Navbar onToggleSidebar={handleToggleSidebar} />
+                <div className={`app-container ${collapsed ? 'sidebar-collapsed' : 'sidebar-open'}`}>
+                  <Sidebar
+                    isOpen={mobileOpen}
+                    onClose={closeMobileSidebar}
+                    collapsed={collapsed}
+                    onToggleCollapse={handleToggleCollapse}
+                  />
                   <main className="main-content">
                     <Routes>
                       <Route path="/"                   element={<Dashboard />} />
@@ -67,6 +73,7 @@ function App() {
                       <Route path="/alerts"             element={<AlertsLog />} />
                       <Route path="/fraud-patterns"     element={<FraudPatterns />} />
                       <Route path="/activity-timeline"  element={<ActivityTimeline />} />
+                      <Route path="/retrain-schedule"   element={<RetrainSchedule />} />
                     </Routes>
                   </main>
                 </div>

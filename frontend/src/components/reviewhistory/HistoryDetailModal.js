@@ -19,6 +19,22 @@ const ACTION_META = {
   escalated: { icon: 'bi-arrow-up-circle-fill', label: 'Escalated',  cls: 'escalated', bg: '#eff6ff', color: '#2563eb' },
 };
 
+const ServiceBadge = ({ service }) => (
+  <span style={{
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: '4px',
+    fontSize: '.68rem',
+    fontWeight: 700,
+    letterSpacing: '.04em',
+    background: service === 'agenusa' ? '#eff6ff' : '#fdf4ff',
+    color:      service === 'agenusa' ? '#1d4ed8' : '#7c3aed',
+    border: `1px solid ${service === 'agenusa' ? '#bfdbfe' : '#e9d5ff'}`,
+  }}>
+    {service === 'agenusa' ? 'AGENUSA' : 'NUSABILL'}
+  </span>
+);
+
 const HistoryDetailModal = ({ item, onClose }) => {
   if (!item) return null;
   const meta = ACTION_META[item.action] || ACTION_META.approved;
@@ -34,7 +50,10 @@ const HistoryDetailModal = ({ item, onClose }) => {
               <i className={`bi ${meta.icon}`}></i>
             </div>
             <div>
-              <div className="hmodal-entry-label">Audit Entry</div>
+              <div className="hmodal-entry-label" style={{ display:'flex', alignItems:'center', gap:'.5rem' }}>
+                Audit Entry
+                {item.service && <ServiceBadge service={item.service} />}
+              </div>
               <div className="hmodal-txn-id">{item.transactionId}</div>
             </div>
           </div>
@@ -54,7 +73,7 @@ const HistoryDetailModal = ({ item, onClose }) => {
         <div className="hmodal-body">
           <div className="hmodal-grid">
             <div className="hmodal-kv">
-              <div className="hmodal-kv-label"><i className="bi bi-cash-stack"></i> Amount</div>
+              <div className="hmodal-kv-label"><i className="bi bi-cash-stack"></i> {item.service === 'nusabill' ? 'Bill Amount' : 'Amount'}</div>
               <div className="hmodal-kv-value mono highlight">{fmt(item.amount)}</div>
             </div>
             <div className="hmodal-kv">
@@ -65,6 +84,16 @@ const HistoryDetailModal = ({ item, onClose }) => {
                 {item.riskScore}<span style={{ color: '#94a3b8', fontWeight: 400 }}>/100</span>
               </div>
             </div>
+            {/* Account / Customer ID */}
+            {item.accountId && (
+              <div className="hmodal-kv">
+                <div className="hmodal-kv-label">
+                  <i className="bi bi-person-circle"></i>
+                  {item.service === 'agenusa' ? 'Account Number' : 'Customer ID'}
+                </div>
+                <div className="hmodal-kv-value mono">{item.accountId}</div>
+              </div>
+            )}
             <div className="hmodal-kv">
               <div className="hmodal-kv-label"><i className="bi bi-person-badge"></i> Reviewed By</div>
               <div className="hmodal-kv-value">

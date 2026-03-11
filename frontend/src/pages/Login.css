@@ -1,38 +1,38 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap");
 
-/* ─── Variables ──────────────────────────────────────────── */
+/* ── Variables ── */
 :root {
-  --login-bg:        #0a0a0a;
-  --login-surface:   #111111;
-  --login-border:    #1e1e1e;
-  --login-border-2:  #2a2a2a;
-  --login-red:       #dc2626;
-  --login-red-dim:   #991b1b;
-  --login-red-glow:  rgba(220, 38, 38, 0.15);
-  --login-text:      #f5f5f5;
-  --login-muted:     #737373;
-  --login-muted-2:   #525252;
-  --login-input-bg:  #161616;
+  --login-bg: #0a0a0a;
+  --login-surface: #111111;
+  --login-border: #1e1e1e;
+  --login-border-2: #2a2a2a;
+  --login-red: #dc2626;
+  --login-red-dim: #991b1b;
+  --login-red-glow: rgba(220, 38, 38, 0.15);
+  --login-text: #f5f5f5;
+  --login-muted: #737373;
+  --login-muted-2: #525252;
+  --login-input-bg: #161616;
 }
 
-/* ─── Reset for login page ───────────────────────────────── */
+/* ── Reset for login page ── */
 .login-page * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-/* ─── Page Layout ────────────────────────────────────────── */
+/* ── Page Layout ── */
 .login-page {
   min-height: 100vh;
   display: flex;
   background: var(--login-bg);
-  font-family: 'DM Sans', sans-serif;
+  font-family: "DM Sans", sans-serif;
   overflow: hidden;
   position: relative;
 }
 
-/* ─── Animated Background ────────────────────────────────── */
+/* ── Animated Background ── */
 .login-bg {
   position: fixed;
   inset: 0;
@@ -52,8 +52,12 @@
 }
 
 @keyframes gridDrift {
-  0%   { transform: translate(0, 0); }
-  100% { transform: translate(48px, 48px); }
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(48px, 48px);
+  }
 }
 
 .login-bg-glow {
@@ -83,8 +87,15 @@
 }
 
 @keyframes glowPulse {
-  0%, 100% { opacity: 0.08; transform: scale(1); }
-  50%       { opacity: 0.18; transform: scale(1.1); }
+  0%,
+  100% {
+    opacity: 0.08;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.18;
+    transform: scale(1.1);
+  }
 }
 
 /* Floating particles */
@@ -99,13 +110,23 @@
 }
 
 @keyframes particleFloat {
-  0%   { transform: translateY(100vh) translateX(0); opacity: 0; }
-  10%  { opacity: 0.6; }
-  90%  { opacity: 0.3; }
-  100% { transform: translateY(-100px) translateX(60px); opacity: 0; }
+  0% {
+    transform: translateY(100vh) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(-100px) translateX(60px);
+    opacity: 0;
+  }
 }
 
-/* ─── Left Panel — Branding ──────────────────────────────── */
+/* ── Left Panel — Branding ── */
 .login-brand-panel {
   flex: 1;
   display: flex;
@@ -140,7 +161,7 @@
 }
 
 .brand-logo-name {
-  font-family: 'Syne', sans-serif;
+  font-family: "Syne", sans-serif;
   font-size: 17px;
   font-weight: 700;
   color: var(--login-text);
@@ -163,7 +184,7 @@
 }
 
 .login-brand-headline h1 {
-  font-family: 'Syne', sans-serif;
+  font-family: "Syne", sans-serif;
   font-size: clamp(2.4rem, 4vw, 3.4rem);
   font-weight: 800;
   color: var(--login-text);
@@ -199,7 +220,7 @@
 }
 
 .brand-stat-value {
-  font-family: 'Syne', sans-serif;
+  font-family: "Syne", sans-serif;
   font-size: 1.6rem;
   font-weight: 800;
   color: var(--login-text);
@@ -249,13 +270,19 @@
 /* Vertical divider */
 .login-divider {
   width: 1px;
-  background: linear-gradient(to bottom, transparent, var(--login-border-2) 20%, var(--login-border-2) 80%, transparent);
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--login-border-2) 20%,
+    var(--login-border-2) 80%,
+    transparent
+  );
   flex-shrink: 0;
   position: relative;
   z-index: 1;
 }
 
-/* ─── Right Panel — Form ─────────────────────────────────── */
+/* ── Right Panel — Form ── */
 .login-form-panel {
   flex: 1;
   display: flex;
@@ -278,7 +305,7 @@
 }
 
 .login-form-header h2 {
-  font-family: 'Syne', sans-serif;
+  font-family: "Syne", sans-serif;
   font-size: 1.75rem;
   font-weight: 700;
   color: var(--login-text);
@@ -313,14 +340,25 @@
 }
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20%       { transform: translateX(-6px); }
-  40%       { transform: translateX(6px); }
-  60%       { transform: translateX(-4px); }
-  80%       { transform: translateX(4px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
 }
 
-/* ─── Form Fields ────────────────────────────────────────── */
+/* ── Form Fields ── */
 .login-field {
   margin-bottom: 1.1rem;
 }
@@ -357,7 +395,7 @@
   border-radius: 8px;
   padding: 12px 14px 12px 40px;
   font-size: 0.9rem;
-  font-family: 'DM Sans', sans-serif;
+  font-family: "DM Sans", sans-serif;
   color: var(--login-text);
   outline: none;
   transition: all 0.2s;
@@ -440,7 +478,7 @@
   background: none;
   border: none;
   font-size: 0.82rem;
-  font-family: 'DM Sans', sans-serif;
+  font-family: "DM Sans", sans-serif;
   color: var(--login-red);
   cursor: pointer;
   padding: 0;
@@ -452,7 +490,7 @@
   text-decoration: underline;
 }
 
-/* ─── Submit Button ──────────────────────────────────────── */
+/* ── Submit Button ── */
 .login-submit {
   width: 100%;
   padding: 13px;
@@ -462,7 +500,7 @@
   border-radius: 8px;
   font-size: 0.95rem;
   font-weight: 600;
-  font-family: 'DM Sans', sans-serif;
+  font-family: "DM Sans", sans-serif;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -475,10 +513,14 @@
 }
 
 .login-submit::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 60%);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    transparent 60%
+  );
   pointer-events: none;
 }
 
@@ -502,17 +544,19 @@
 .login-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255,255,255,0.3);
+  border: 2px solid rgba(255, 255, 255, 0.3);
   border-top-color: white;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-/* ─── Divider ────────────────────────────────────────────── */
+/* ── Divider ── */
 .login-form-divider {
   display: flex;
   align-items: center;
@@ -522,7 +566,7 @@
 
 .login-form-divider::before,
 .login-form-divider::after {
-  content: '';
+  content: "";
   flex: 1;
   height: 1px;
   background: var(--login-border-2);
@@ -536,7 +580,7 @@
   white-space: nowrap;
 }
 
-/* ─── Demo credentials hint ──────────────────────────────── */
+/* ── Demo credentials hint ── */
 .login-demo-hint {
   background: rgba(220, 38, 38, 0.05);
   border: 1px solid var(--login-border-2);
@@ -565,7 +609,7 @@
   font-weight: 600;
 }
 
-/* ─── Footer ─────────────────────────────────────────────── */
+/* ── Footer ── */
 .login-form-footer {
   margin-top: 1.75rem;
   text-align: center;
@@ -601,7 +645,7 @@
   font-size: 0.75rem;
 }
 
-/* ─── Animation ──────────────────────────────────────────── */
+/* ── Animation ── */
 @keyframes fadeSlideUp {
   from {
     opacity: 0;
@@ -613,7 +657,7 @@
   }
 }
 
-/* ─── Responsive ─────────────────────────────────────────── */
+/* ── Responsive ── */
 @media (max-width: 992px) {
   .login-brand-panel {
     display: none;

@@ -9,10 +9,11 @@ const Navbar = ({ onToggleSidebar }) => {
     <nav className="navbar-simple">
       <div className="navbar-container">
         <div className="navbar-left">
-          <button className="hamburger-btn" onClick={onToggleSidebar}>
+          {/* Hamburger — hanya di mobile/tablet */}
+          <button className="hamburger-btn" onClick={onToggleSidebar} title="Toggle Sidebar">
             <i className="bi bi-list"></i>
           </button>
-          
+
           <div className="navbar-brand">
             <div className="brand-logo">
               <i className="bi bi-shield-check"></i>

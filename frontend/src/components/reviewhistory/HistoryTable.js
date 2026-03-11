@@ -24,6 +24,23 @@ const ACTION_META = {
   escalated: { icon: 'bi-arrow-up-circle-fill', label: 'Escalated', cls: 'escalated' },
 };
 
+/* ── Service badge ── */
+const ServiceBadge = ({ service }) => (
+  <span style={{
+    display: 'inline-block',
+    padding: '2px 7px',
+    borderRadius: '4px',
+    fontSize: '.65rem',
+    fontWeight: 700,
+    letterSpacing: '.04em',
+    background: service === 'agenusa' ? '#eff6ff' : '#fdf4ff',
+    color:      service === 'agenusa' ? '#1d4ed8' : '#7c3aed',
+    border: `1px solid ${service === 'agenusa' ? '#bfdbfe' : '#e9d5ff'}`,
+  }}>
+    {service === 'agenusa' ? 'AGENUSA' : 'NUSABILL'}
+  </span>
+);
+
 const ROWS_PER_PAGE = 10;
 
 /* ── Pagination ── */
@@ -121,9 +138,11 @@ const HistoryTable = ({ data, onViewDetail }) => {
                   Timestamp <SortIcon col="timestamp" />
                 </th>
                 <th>Action</th>
+                <th>Layanan</th>
                 <th className="sortable" onClick={() => handleSort('transactionId')}>
                   Txn ID <SortIcon col="transactionId" />
                 </th>
+                <th className="hide-md">Account / Customer</th>
                 <th className="sortable" onClick={() => handleSort('amount')}>
                   Amount <SortIcon col="amount" />
                 </th>
@@ -133,7 +152,6 @@ const HistoryTable = ({ data, onViewDetail }) => {
                 <th className="hide-md">Reviewer</th>
                 <th className="hide-lg">Duration</th>
                 <th>Notes</th>
-                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -155,8 +173,22 @@ const HistoryTable = ({ data, onViewDetail }) => {
                         </span>
                       </div>
                     </td>
+                    {/* Layanan badge */}
+                    <td>
+                      {item.service
+                        ? <ServiceBadge service={item.service} />
+                        : <span style={{ color:'#94a3b8', fontSize:'.8rem' }}>—</span>
+                      }
+                    </td>
+                    {/* Txn ID */}
                     <td>
                       <span className="hcell-txnid">{item.transactionId}</span>
+                    </td>
+                    {/* Account / Customer ID */}
+                    <td className="hide-md">
+                      <span style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:'.75rem', color:'#334155', fontWeight:600 }}>
+                        {item.accountId || '—'}
+                      </span>
                     </td>
                     <td>
                       <span className="hcell-amount">{fmt(item.amount)}</span>
@@ -180,15 +212,14 @@ const HistoryTable = ({ data, onViewDetail }) => {
                     <td className="hide-lg">
                       <span className="hcell-duration">{item.duration}</span>
                     </td>
-                    <td>
-                      {item.notes
-                        ? <span className="hcell-notes" title={item.notes}>{item.notes}</span>
-                        : <span className="hcell-empty">—</span>}
-                    </td>
                     <td onClick={e => e.stopPropagation()}>
-                      <button className="hbtn-view" onClick={() => onViewDetail(item)}>
-                        <i className="bi bi-eye"></i>View
-                      </button>
+                      {item.notes
+                        ? (
+                          <button className="hbtn-view" onClick={() => onViewDetail(item)}>
+                            <i className="bi bi-chat-left-text"></i>View Notes
+                          </button>
+                        )
+                        : <span className="hcell-empty">—</span>}
                     </td>
                   </tr>
                 );

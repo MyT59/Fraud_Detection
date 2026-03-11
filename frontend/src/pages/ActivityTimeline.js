@@ -1,20 +1,20 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ALL_ACTIVITIES }  from '../components/activity/activityData';
-import ActivityStatsBar    from '../components/activity/ActivityStatsBar';
-import ActivityToolbar     from '../components/activity/ActivityToolbar';
-import ActivityFeed        from '../components/activity/ActivityFeed';
-import ActivitySidePanel   from '../components/activity/ActivitySidePanel';
-import PageLoader          from '../components/common/PageLoader';
-import './ActivityTimeline.css';
+import React, { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { ALL_ACTIVITIES } from "../components/activity/activityData";
+import ActivityStatsBar from "../components/activity/ActivityStatsBar";
+import ActivityToolbar from "../components/activity/ActivityToolbar";
+import ActivityFeed from "../components/activity/ActivityFeed";
+import ActivitySidePanel from "../components/activity/ActivitySidePanel";
+import PageLoader from "../components/common/PageLoader";
+import "./ActivityTimeline.css";
 
 const PAGE_SIZE = 8;
 
 const ActivityTimeline = () => {
   const navigate = useNavigate();
-  const [loading,      setLoading]      = useState(true);
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [searchQuery,  setSearchQuery]  = useState('');
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
@@ -23,16 +23,18 @@ const ActivityTimeline = () => {
   }, []);
 
   const filtered = useMemo(() => {
-    let result = activeFilter === 'all'
-      ? ALL_ACTIVITIES
-      : ALL_ACTIVITIES.filter(a => a.type === activeFilter);
+    let result =
+      activeFilter === "all"
+        ? ALL_ACTIVITIES
+        : ALL_ACTIVITIES.filter((a) => a.type === activeFilter);
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(a =>
-        a.title.toLowerCase().includes(q) ||
-        a.description.toLowerCase().includes(q) ||
-        a.user.toLowerCase().includes(q)
+      result = result.filter(
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          a.description.toLowerCase().includes(q) ||
+          a.user.toLowerCase().includes(q),
       );
     }
 
@@ -53,7 +55,7 @@ const ActivityTimeline = () => {
   };
 
   const handleLoadMore = () => {
-    setVisibleCount(prev => prev + PAGE_SIZE);
+    setVisibleCount((prev) => prev + PAGE_SIZE);
   };
 
   if (loading) return <PageLoader message="Memuat activity timeline..." />;
@@ -72,7 +74,7 @@ const ActivityTimeline = () => {
           </p>
         </div>
         <div className="activity-page-actions">
-          <button className="btn-ghost" onClick={() => navigate('/dashboard')}>
+          <button className="btn-ghost" onClick={() => navigate("/dashboard")}>
             <i className="bi bi-arrow-left"></i>
             Back to Dashboard
           </button>

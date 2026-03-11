@@ -115,7 +115,7 @@ const BulkActions = ({ selectedTransactions, onBulkAction, onClearSelection }) =
                       {selectedTransactions.slice(0, 5).map((txn) => (
                         <div key={txn.id} className="preview-item">
                           <span className="preview-id">{txn.id}</span>
-                          <span className="preview-user">{txn.userName}</span>
+                          <span className="preview-user">{txn.accountId}</span>
                           <span className="preview-amount">
                             {new Intl.NumberFormat('id-ID', {
                               style: 'currency',

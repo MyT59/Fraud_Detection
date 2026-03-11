@@ -53,29 +53,6 @@ const SystemSettings = ({ data, onSave }) => {
             </div>
           </div>
 
-          {/* Timezone */}
-          <div className="col-md-6 mb-4">
-            <div className="system-setting-item">
-              <label className="form-label">
-                <i className="bi bi-clock me-2 text-success"></i>
-                Timezone
-              </label>
-              <select
-                className="form-select"
-                name="timezone"
-                value={formData.timezone}
-                onChange={handleSelectChange}
-              >
-                <option value="Asia/Jakarta">Asia/Jakarta (WIB)</option>
-                <option value="Asia/Makassar">Asia/Makassar (WITA)</option>
-                <option value="Asia/Jayapura">Asia/Jayapura (WIT)</option>
-                <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
-                <option value="UTC">UTC</option>
-              </select>
-              <small className="text-muted">Zona waktu untuk timestamp</small>
-            </div>
-          </div>
-
           {/* Date Format */}
           <div className="col-md-6 mb-4">
             <div className="system-setting-item">
@@ -95,29 +72,6 @@ const SystemSettings = ({ data, onSave }) => {
                 <option value="DD-MMM-YYYY">DD-MMM-YYYY</option>
               </select>
               <small className="text-muted">Format tampilan tanggal</small>
-            </div>
-          </div>
-
-          {/* Currency */}
-          <div className="col-md-6 mb-4">
-            <div className="system-setting-item">
-              <label className="form-label">
-                <i className="bi bi-currency-dollar me-2 text-warning"></i>
-                Currency
-              </label>
-              <select
-                className="form-select"
-                name="currency"
-                value={formData.currency}
-                onChange={handleSelectChange}
-              >
-                <option value="IDR">IDR - Indonesian Rupiah</option>
-                <option value="USD">USD - US Dollar</option>
-                <option value="EUR">EUR - Euro</option>
-                <option value="SGD">SGD - Singapore Dollar</option>
-                <option value="MYR">MYR - Malaysian Ringgit</option>
-              </select>
-              <small className="text-muted">Mata uang untuk transaksi</small>
             </div>
           </div>
 
