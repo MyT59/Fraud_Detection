@@ -5,8 +5,6 @@ const ACTION_FILTERS = [
   { value: 'all',       label: 'All Actions',  icon: 'bi-list-ul' },
   { value: 'approved',  label: 'Approved',     icon: 'bi-check-circle' },
   { value: 'rejected',  label: 'Rejected',     icon: 'bi-x-circle' },
-  { value: 'escalated', label: 'Escalated',    icon: 'bi-arrow-up-circle' },
-  { value: 'flagged',   label: 'Flagged',      icon: 'bi-flag' },
 ];
 
 const DATE_RANGES = [
@@ -58,7 +56,7 @@ const HistoryFilter = ({
           <i className="bi bi-search"></i>
           <input
             type="text"
-            placeholder="Search by transaction ID, reviewer name..."
+            placeholder="Search by txn ID, account number, customer ID, reviewer..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />

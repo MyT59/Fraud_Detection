@@ -47,8 +47,6 @@
 .hfilter-tab.all.active       { color: #7c3aed; border-color: #7c3aed; background: #f5f3ff; }
 .hfilter-tab.approved.active  { color: #059669; border-color: #059669; background: #ecfdf5; }
 .hfilter-tab.rejected.active  { color: #dc2626; border-color: #dc2626; background: #fef2f2; }
-.hfilter-tab.escalated.active { color: #2563eb; border-color: #2563eb; background: #eff6ff; }
-.hfilter-tab.flagged.active   { color: #d97706; border-color: #d97706; background: #fffbeb; }
 
 /* Date range */
 .hfilter-daterange {

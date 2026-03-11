@@ -514,7 +514,7 @@
 
 .api-key-display .form-control {
   flex: 1;
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
 }
 
 .api-endpoints {
@@ -655,7 +655,7 @@
     width: 100%;
   }
 }
-/* ─── Logout Button in Sidebar ───────────────────────────── */
+/* ── Logout Button in Sidebar ── */
 .settings-tab-divider {
   height: 1px;
   background: #f0f0f0;
@@ -688,7 +688,7 @@
   color: white !important;
 }
 
-/* ─── Logout Confirm Modal ───────────────────────────────── */
+/* ── Logout Confirm Modal ── */
 .logout-modal {
   max-width: 420px;
 }

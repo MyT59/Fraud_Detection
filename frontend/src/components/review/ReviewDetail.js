@@ -117,58 +117,93 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
 
         {/* Transaction Info */}
         <div className="info-section">
-          <h3 className="section-title">Transaction Information</h3>
+          <h3 className="section-title">
+            {transaction.service === 'agenusa' ? 'Transaction Information' : 'Billing Information'}
+          </h3>
           <div className="info-grid">
-            <div className="info-item">
-              <span className="info-label">Transaction ID</span>
-              <span className="info-value">{transaction.id}</span>
-            </div>
-            <div className="info-item">
-              <span className="info-label">Type</span>
-              <span className="info-value">{transaction.transactionType}</span>
-            </div>
-            <div className="info-item">
-              <span className="info-label">Amount</span>
-              <span className="info-value highlight">{formatAmount(transaction.amount)}</span>
-            </div>
-            <div className="info-item">
-              <span className="info-label">Date & Time</span>
-              <span className="info-value">{formatDate(transaction.date)}</span>
-            </div>
+            {transaction.service === 'agenusa' ? (
+              <>
+                <div className="info-item">
+                  <span className="info-label">Transaction ID</span>
+                  <span className="info-value">{transaction.id}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Processing Code</span>
+                  <span className="info-value">{transaction.typeOrChannel} ({transaction.PROCESSING_CODE})</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Amount</span>
+                  <span className="info-value highlight">{formatAmount(transaction.AMOUNT)}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Date &amp; Time (TIMESTAMP_DB)</span>
+                  <span className="info-value">{formatDate(transaction.TIMESTAMP_DB)}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Dest. Account Number</span>
+                  <span className="info-value" style={{ fontFamily:'monospace' }}>{transaction.DEST_ACCOUNT_NUMBER}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Response Code</span>
+                  <span className="info-value">{transaction.RESPONSE_CODE}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="info-item">
+                  <span className="info-label">Transaction ID</span>
+                  <span className="info-value">{transaction.id}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Channel</span>
+                  <span className="info-value">{transaction.CHANNEL}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Bill Amount</span>
+                  <span className="info-value highlight">{formatAmount(transaction.BILL_AMOUNT)}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Payment Amount</span>
+                  <span className="info-value" style={{ color: transaction.BILL_AMOUNT !== transaction.PAYMENT_AMOUNT ? '#ea580c' : 'inherit' }}>
+                    {formatAmount(transaction.PAYMENT_AMOUNT)}
+                    {transaction.BILL_AMOUNT !== transaction.PAYMENT_AMOUNT && ' ⚠️'}
+                  </span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Bill ID</span>
+                  <span className="info-value" style={{ fontFamily:'monospace' }}>{transaction.BILL_ID}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Refund Flag</span>
+                  <span className="info-value">{transaction.REFUND_FLAG ? '✅ Yes' : 'No'}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* User Info */}
+        {/* Account / Customer Info */}
         <div className="info-section">
-          <h3 className="section-title">User Information</h3>
+          <h3 className="section-title">
+            {transaction.service === 'agenusa' ? 'Account Information' : 'Customer Information'}
+          </h3>
           <div className="info-grid">
             <div className="info-item">
-              <span className="info-label">User ID</span>
-              <span className="info-value">{transaction.userId}</span>
+              <span className="info-label">{transaction.service === 'agenusa' ? 'Account Number' : 'Customer ID'}</span>
+              <span className="info-value" style={{ fontFamily:'monospace' }}>{transaction.accountId}</span>
             </div>
-            <div className="info-item">
-              <span className="info-label">Name</span>
-              <span className="info-value">{transaction.userName}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Device & Location Info */}
-        <div className="info-section">
-          <h3 className="section-title">Device & Location</h3>
-          <div className="info-grid">
-            <div className="info-item">
-              <span className="info-label">Device</span>
-              <span className="info-value">{transaction.device}</span>
-            </div>
-            <div className="info-item">
-              <span className="info-label">IP Address</span>
-              <span className="info-value">{transaction.ipAddress}</span>
-            </div>
-            <div className="info-item full-width">
-              <span className="info-label">Location</span>
-              <span className="info-value">{transaction.location}</span>
-            </div>
+            {transaction.service === 'agenusa' && (
+              <div className="info-item">
+                <span className="info-label">Layanan</span>
+                <span className="info-value">Agenusa (ATM / Transfer)</span>
+              </div>
+            )}
+            {transaction.service === 'nusabill' && (
+              <div className="info-item">
+                <span className="info-label">Layanan</span>
+                <span className="info-value">Nusabill (Bill Payment)</span>
+              </div>
+            )}
           </div>
         </div>
 

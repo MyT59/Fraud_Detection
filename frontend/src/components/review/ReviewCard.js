@@ -1,6 +1,23 @@
 import React from 'react';
 import './ReviewCard.css';
 
+/* ── Service badge ── */
+const ServiceBadge = ({ service }) => (
+  <span style={{
+    display: 'inline-block',
+    padding: '1px 7px',
+    borderRadius: '4px',
+    fontSize: '.66rem',
+    fontWeight: 700,
+    letterSpacing: '.04em',
+    background: service === 'agenusa' ? '#eff6ff' : '#fdf4ff',
+    color:      service === 'agenusa' ? '#1d4ed8' : '#7c3aed',
+    border: `1px solid ${service === 'agenusa' ? '#bfdbfe' : '#e9d5ff'}`,
+  }}>
+    {service === 'agenusa' ? 'AGENUSA' : 'NUSABILL'}
+  </span>
+);
+
 const ReviewCard = ({ transaction, onClick, isSelected, onSelect, isMultiSelected }) => {
   const getRiskColor = (riskLevel) => {
     const colors = {
@@ -77,15 +94,16 @@ const ReviewCard = ({ transaction, onClick, isSelected, onSelect, isMultiSelecte
         <div className="transaction-info">
           <div className="transaction-id-row">
             <span className="transaction-id">{transaction.id}</span>
+            <ServiceBadge service={transaction.service} />
             <span className={`status-badge ${statusBadge.class}`}>
               <i className={`bi ${statusBadge.icon}`}></i>
               {statusBadge.text}
             </span>
           </div>
+          {/* Account Number (agenusa) atau Customer ID (nusabill) */}
           <div className="user-info">
             <i className="bi bi-person-circle"></i>
-            <span className="user-name">{transaction.userName}</span>
-            <span className="user-id">({transaction.userId})</span>
+            <span className="user-name">{transaction.accountId}</span>
           </div>
         </div>
         
@@ -111,35 +129,46 @@ const ReviewCard = ({ transaction, onClick, isSelected, onSelect, isMultiSelecte
 
       <div className="card-body">
         <div className="transaction-details">
+          {/* Amount — AMOUNT (agenusa) / BILL_AMOUNT (nusabill) */}
           <div className="detail-item">
             <i className="bi bi-cash-stack"></i>
             <div>
-              <span className="detail-label">Amount</span>
+              <span className="detail-label">{transaction.service === 'agenusa' ? 'Amount' : 'Bill Amount'}</span>
               <span className="detail-value amount">{formatAmount(transaction.amount)}</span>
+              {transaction.amountNote && (
+                <span style={{ fontSize:'.72rem', color:'#ea580c', display:'block' }}>{transaction.amountNote}</span>
+              )}
             </div>
           </div>
-          
+
+          {/* Type / Channel — PROCESSING_CODE (agenusa) / CHANNEL (nusabill) */}
           <div className="detail-item">
             <i className="bi bi-arrow-left-right"></i>
             <div>
-              <span className="detail-label">Type</span>
-              <span className="detail-value">{transaction.transactionType}</span>
+              <span className="detail-label">{transaction.service === 'agenusa' ? 'Type' : 'Channel'}</span>
+              <span className="detail-value">{transaction.typeOrChannel}</span>
             </div>
           </div>
-          
+
+          {/* Dest Account / Bill ID */}
+          <div className="detail-item">
+            <i className="bi bi-send"></i>
+            <div>
+              <span className="detail-label">{transaction.service === 'agenusa' ? 'Dest. Account' : 'Bill ID'}</span>
+              <span className="detail-value" style={{ fontFamily:'monospace', fontSize:'.82rem' }}>
+                {transaction.destOrBill}
+              </span>
+            </div>
+          </div>
+
+          {/* Date & Time — TIMESTAMP_DB (agenusa) / "—" (nusabill: no date column) */}
           <div className="detail-item">
             <i className="bi bi-calendar-event"></i>
             <div>
               <span className="detail-label">Date & Time</span>
-              <span className="detail-value">{formatDate(transaction.date)}</span>
-            </div>
-          </div>
-          
-          <div className="detail-item">
-            <i className="bi bi-geo-alt"></i>
-            <div>
-              <span className="detail-label">Location</span>
-              <span className="detail-value">{transaction.location}</span>
+              <span className="detail-value">
+                {transaction.dateTime ? formatDate(transaction.dateTime) : <span style={{ color:'#94a3b8' }}>—</span>}
+              </span>
             </div>
           </div>
         </div>

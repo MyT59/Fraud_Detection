@@ -8,15 +8,10 @@ const FilterBar = ({ filters, onFilterChange, onResetFilters }) => {
     onFilterChange({ [name]: value });
   };
 
-  const toggleExpand = () => {
-    setIsExpanded(!isExpanded);
-  };
-
-  const hasActiveFilters = () => {
-    return filters.dateFrom || filters.dateTo || 
-           filters.amountMin || filters.amountMax || 
-           filters.status !== 'all';
-  };
+  const hasActiveFilters = () =>
+    filters.dateFrom || filters.dateTo ||
+    filters.amountMin || filters.amountMax ||
+    filters.status !== 'all' || filters.service !== 'all';
 
   return (
     <div className="card filter-card mb-4">
@@ -28,113 +23,84 @@ const FilterBar = ({ filters, onFilterChange, onResetFilters }) => {
             <span className="badge bg-primary ms-2">Active</span>
           )}
         </h5>
-        <button 
-          className="btn btn-sm btn-link" 
-          onClick={toggleExpand}
-        >
-          {isExpanded ? (
-            <><i className="bi bi-chevron-up"></i> Sembunyikan</>
-          ) : (
-            <><i className="bi bi-chevron-down"></i> Tampilkan</>
-          )}
+        <button className="btn btn-sm btn-link" onClick={() => setIsExpanded(!isExpanded)}>
+          {isExpanded
+            ? <><i className="bi bi-chevron-up"></i> Sembunyikan</>
+            : <><i className="bi bi-chevron-down"></i> Tampilkan</>
+          }
         </button>
       </div>
-      
+
       {isExpanded && (
         <div className="card-body">
           <div className="row g-3">
-            {/* Date Range Filter */}
-            <div className="col-md-6">
-              <label className="form-label">
-                <i className="bi bi-calendar-range me-1"></i>
-                Tanggal Mulai
-              </label>
-              <input
-                type="date"
-                className="form-control"
-                name="dateFrom"
-                value={filters.dateFrom}
-                onChange={handleInputChange}
-              />
-            </div>
-            <div className="col-md-6">
-              <label className="form-label">
-                <i className="bi bi-calendar-check me-1"></i>
-                Tanggal Akhir
-              </label>
-              <input
-                type="date"
-                className="form-control"
-                name="dateTo"
-                value={filters.dateTo}
-                onChange={handleInputChange}
-              />
-            </div>
 
-            {/* Amount Range Filter */}
+            {/* Service Filter */}
             <div className="col-md-6">
               <label className="form-label">
-                <i className="bi bi-currency-dollar me-1"></i>
-                Jumlah Minimal (IDR)
+                <i className="bi bi-grid-1x2 me-1"></i>Layanan
               </label>
-              <input
-                type="number"
-                className="form-control"
-                name="amountMin"
-                placeholder="0"
-                value={filters.amountMin}
-                onChange={handleInputChange}
-              />
-            </div>
-            <div className="col-md-6">
-              <label className="form-label">
-                <i className="bi bi-currency-dollar me-1"></i>
-                Jumlah Maksimal (IDR)
-              </label>
-              <input
-                type="number"
-                className="form-control"
-                name="amountMax"
-                placeholder="100000000"
-                value={filters.amountMax}
-                onChange={handleInputChange}
-              />
-            </div>
-
-            {/* Status Filter */}
-            <div className="col-md-12">
-              <label className="form-label">
-                <i className="bi bi-flag me-1"></i>
-                Status Transaksi
-              </label>
-              <select
-                className="form-select"
-                name="status"
-                value={filters.status}
-                onChange={handleInputChange}
-              >
-                <option value="all">Semua Status</option>
-                <option value="Legit">✓ Legit</option>
-                <option value="Fraud">⚠ Fraud</option>
+              <select className="form-select" name="service" value={filters.service} onChange={handleInputChange}>
+                <option value="all">Semua Layanan</option>
+                <option value="agenusa">AGENUSA</option>
+                <option value="nusabill">NUSABILL</option>
               </select>
             </div>
 
-            {/* Action Buttons */}
-            <div className="col-md-12">
-              <div className="d-flex gap-2">
-                <button 
-                  className="btn btn-outline-secondary"
-                  onClick={onResetFilters}
-                  disabled={!hasActiveFilters()}
-                >
-                  <i className="bi bi-arrow-counterclockwise me-1"></i>
-                  Reset Filter
+            {/* Status Filter */}
+            <div className="col-md-6">
+              <label className="form-label">
+                <i className="bi bi-flag me-1"></i>Status
+              </label>
+              <select className="form-select" name="status" value={filters.status} onChange={handleInputChange}>
+                <option value="all">Semua Status</option>
+                <option value="pending">⏳ Pending</option>
+                <option value="approved">✓ Approved</option>
+                <option value="rejected">✗ Rejected</option>
+              </select>
+            </div>
+
+            {/* Date Range */}
+            <div className="col-md-6">
+              <label className="form-label">
+                <i className="bi bi-calendar-range me-1"></i>Tanggal Mulai
+              </label>
+              <input type="date" className="form-control" name="dateFrom"
+                value={filters.dateFrom} onChange={handleInputChange} />
+            </div>
+            <div className="col-md-6">
+              <label className="form-label">
+                <i className="bi bi-calendar-check me-1"></i>Tanggal Akhir
+              </label>
+              <input type="date" className="form-control" name="dateTo"
+                value={filters.dateTo} onChange={handleInputChange} />
+            </div>
+
+            {/* Amount Range */}
+            <div className="col-md-6">
+              <label className="form-label">
+                <i className="bi bi-currency-dollar me-1"></i>Jumlah Minimal (IDR)
+              </label>
+              <input type="number" className="form-control" name="amountMin"
+                placeholder="0" value={filters.amountMin} onChange={handleInputChange} />
+            </div>
+            <div className="col-md-6">
+              <label className="form-label">
+                <i className="bi bi-currency-dollar me-1"></i>Jumlah Maksimal (IDR)
+              </label>
+              <input type="number" className="form-control" name="amountMax"
+                placeholder="1000000000" value={filters.amountMax} onChange={handleInputChange} />
+            </div>
+
+            {/* Actions */}
+            <div className="col-12">
+              <div className="d-flex gap-2 align-items-center">
+                <button className="btn btn-outline-secondary" onClick={onResetFilters} disabled={!hasActiveFilters()}>
+                  <i className="bi bi-arrow-counterclockwise me-1"></i>Reset Filter
                 </button>
-                <div className="ms-auto">
-                  <span className="text-muted small">
-                    Filter aktif: {hasActiveFilters() ? 'Ya' : 'Tidak'}
-                  </span>
-                </div>
+                <span className="text-muted small ms-auto">
+                  Filter aktif: {hasActiveFilters() ? 'Ya' : 'Tidak'}
+                </span>
               </div>
             </div>
           </div>
