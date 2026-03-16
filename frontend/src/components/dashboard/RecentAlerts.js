@@ -1,154 +1,180 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './RecentAlerts.css';
 
-const RecentAlerts = () => {
+// ── Fallback statis ────────────────────────────────────────────────────────
+const STATIC_ALERTS = [
+  {
+    id: 'static-1', type: 'high',
+    title: 'Fraud Terdeteksi — Blacklist Hit',
+    description: 'Rekening ACCT100114 terdeteksi pola brute force PIN di terminal T1023.',
+    time: '2 minutes ago', userId: 'AGN-001783', amount: null,
+    icon: 'bi-ban',
+  },
+  {
+    id: 'static-2', type: 'high',
+    title: 'Rule Engine — Transfer Besar',
+    description: 'Rule Transfer Besar terpicu pada akun ACCT100235. Jumlah Rp 113.137.',
+    time: '15 minutes ago', userId: 'AGN-003648', amount: null,
+    icon: 'bi-gear-fill',
+  },
+  {
+    id: 'static-3', type: 'high',
+    title: 'Fraud Terdeteksi — NusaBill',
+    description: 'Pembayaran mencurigakan oleh CUST10000 via Web. Bill ID: BILL280462.',
+    time: '1 hour ago', userId: 'NUS-004798', amount: null,
+    icon: 'bi-exclamation-triangle-fill',
+  },
+  {
+    id: 'static-4', type: 'medium',
+    title: 'Rule Engine — API Burst Payment',
+    description: 'Rule Burst Payment via API terpicu pada pelanggan CUST10318.',
+    time: '2 hours ago', userId: 'NUS-004818', amount: null,
+    icon: 'bi-gear-fill',
+  },
+  {
+    id: 'static-5', type: 'high',
+    title: 'Manual Review — Antrian Menumpuk',
+    description: 'Terdapat transaksi menunggu review lebih dari 2 jam.',
+    time: '3 hours ago', userId: '—', amount: null,
+    icon: 'bi-clipboard-check',
+  },
+];
+const STATIC_SUMMARY = { high: 3, medium: 1, low: 0 };
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+const getSeverityColor = t =>
+  t === 'high' ? 'severity-high' : t === 'medium' ? 'severity-medium' : 'severity-low';
+
+const getSeverityLabel = t =>
+  t === 'high' ? 'High Risk' : t === 'medium' ? 'Medium Risk' : 'Low Risk';
+
+// ── Component ──────────────────────────────────────────────────────────────
+const RecentAlerts = ({ alerts, summary }) => {
   const navigate = useNavigate();
-  // Dummy data for recent alerts
-  const alerts = [
-    {
-      id: 1,
-      type: 'high',
-      title: 'Suspicious Transaction Detected',
-      description: 'Multiple high-value transactions from Jakarta',
-      time: '2 minutes ago',
-      userId: 'USR12345',
-      amount: 'Rp 25.000.000',
-      icon: 'bi-exclamation-triangle-fill'
-    },
-    {
-      id: 2,
-      type: 'medium',
-      title: 'Unusual Login Location',
-      description: 'Login attempt from unknown device in Medan',
-      time: '15 minutes ago',
-      userId: 'USR67890',
-      icon: 'bi-geo-alt-fill'
-    },
-    {
-      id: 3,
-      type: 'high',
-      title: 'Card Verification Failed',
-      description: 'Multiple failed verification attempts',
-      time: '28 minutes ago',
-      userId: 'USR11223',
-      icon: 'bi-credit-card-fill'
-    },
-    {
-      id: 4,
-      type: 'low',
-      title: 'Velocity Check Triggered',
-      description: '5 transactions within 10 minutes',
-      time: '1 hour ago',
-      userId: 'USR44556',
-      amount: 'Rp 8.500.000',
-      icon: 'bi-speedometer2'
-    },
-    {
-      id: 5,
-      type: 'medium',
-      title: 'IP Address Mismatch',
-      description: 'Transaction from blacklisted IP range',
-      time: '2 hours ago',
-      userId: 'USR77889',
-      icon: 'bi-shield-exclamation'
-    }
-  ];
 
-  const getSeverityColor = (type) => {
-    switch(type) {
-      case 'high': return 'severity-high';
-      case 'medium': return 'severity-medium';
-      case 'low': return 'severity-low';
-      default: return 'severity-medium';
-    }
-  };
+  const displayAlerts  = (alerts && alerts.length > 0) ? alerts : STATIC_ALERTS;
+  const displaySummary = summary || STATIC_SUMMARY;
 
-  const getSeverityLabel = (type) => {
-    switch(type) {
-      case 'high': return 'High Risk';
-      case 'medium': return 'Medium Risk';
-      case 'low': return 'Low Risk';
-      default: return 'Unknown';
-    }
-  };
+  // Dismiss lokal
+  const [dismissed, setDismissed] = useState(new Set());
+  const visible = displayAlerts.filter(a => !dismissed.has(a.id));
 
   return (
     <div className="recent-alerts-card">
+
+      {/* Header */}
       <div className="alerts-header">
         <div className="header-left">
           <h3 className="alerts-title">
             <i className="bi bi-bell-fill"></i>
             Recent Alerts
           </h3>
-          <p className="alerts-subtitle">Real-time fraud detection alerts</p>
+          <p className="alerts-subtitle">
+            Fraud & rule engine alerts terbaru
+            {alerts && alerts.length > 0 && (
+              <span style={{
+                marginLeft: 8,
+                background: '#f0fdf4', border: '1px solid #bbf7d0',
+                color: '#059669', fontSize: '0.68rem', fontWeight: 700,
+                padding: '1px 8px', borderRadius: 10,
+              }}>
+                {alerts.length} live
+              </span>
+            )}
+          </p>
         </div>
         <button className="btn-view-all" onClick={() => navigate('/alerts')}>
-          View All
-          <i className="bi bi-arrow-right"></i>
+          View All <i className="bi bi-arrow-right"></i>
         </button>
       </div>
 
-      <div className="alerts-list">
-        {alerts.map((alert) => (
-          <div key={alert.id} className="alert-item">
-            <div className={`alert-indicator ${getSeverityColor(alert.type)}`}>
-              <i className={alert.icon}></i>
-            </div>
-            
-            <div className="alert-content">
-              <div className="alert-header-row">
-                <h4 className="alert-title">{alert.title}</h4>
-                <span className={`severity-badge ${getSeverityColor(alert.type)}`}>
-                  {getSeverityLabel(alert.type)}
-                </span>
-              </div>
-              
-              <p className="alert-description">{alert.description}</p>
-              
-              <div className="alert-meta">
-                <span className="meta-item">
-                  <i className="bi bi-person-fill"></i>
-                  {alert.userId}
-                </span>
-                {alert.amount && (
-                  <span className="meta-item">
-                    <i className="bi bi-currency-dollar"></i>
-                    {alert.amount}
-                  </span>
-                )}
-                <span className="meta-item time">
-                  <i className="bi bi-clock"></i>
-                  {alert.time}
-                </span>
-              </div>
-            </div>
-
-            <div className="alert-actions">
-              <button className="btn-action btn-investigate" title="Investigate">
-                <i className="bi bi-search"></i>
-              </button>
-              <button className="btn-action btn-dismiss" title="Dismiss">
-                <i className="bi bi-x-lg"></i>
-              </button>
-            </div>
+      {/* List — height terkunci 380px */}
+      <div className="alerts-list" style={{ maxHeight: 380, overflowY: 'auto' }}>
+        {visible.length === 0 ? (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', padding: '40px 24px', color: '#9ca3af', gap: 8,
+          }}>
+            <i className="bi bi-bell-slash" style={{ fontSize: '2rem', opacity: 0.4 }}></i>
+            <p style={{ margin: 0, fontSize: '0.875rem' }}>No alerts</p>
           </div>
-        ))}
+        ) : (
+          visible.map(alert => (
+            <div key={alert.id} className="alert-item">
+
+              {/* Icon */}
+              <div className={`alert-indicator ${getSeverityColor(alert.type)}`}>
+                <i className={alert.icon || 'bi-exclamation-triangle-fill'}></i>
+              </div>
+
+              {/* Content */}
+              <div className="alert-content">
+                <div className="alert-header-row">
+                  <h4 className="alert-title">{alert.title}</h4>
+                  <span className={`severity-badge ${getSeverityColor(alert.type)}`}>
+                    {getSeverityLabel(alert.type)}
+                  </span>
+                </div>
+
+                <p className="alert-description">{alert.description}</p>
+
+                <div className="alert-meta">
+                  {alert.userId && alert.userId !== '—' && (
+                    <span className="meta-item">
+                      <i className="bi bi-hash"></i>
+                      {alert.userId}
+                    </span>
+                  )}
+                  {alert.amount && (
+                    <span className="meta-item">
+                      <i className="bi bi-currency-dollar"></i>
+                      {alert.amount}
+                    </span>
+                  )}
+                  <span className="meta-item time">
+                    <i className="bi bi-clock"></i>
+                    {alert.time}
+                  </span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="alert-actions">
+                <button
+                  className="btn-action btn-investigate"
+                  title="Lihat detail"
+                  onClick={() => navigate('/alerts')}
+                >
+                  <i className="bi bi-search"></i>
+                </button>
+                <button
+                  className="btn-action btn-dismiss"
+                  title="Dismiss"
+                  onClick={() => setDismissed(prev => new Set([...prev, alert.id]))}
+                >
+                  <i className="bi bi-x-lg"></i>
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
+      {/* Footer */}
       <div className="alerts-footer">
         <div className="alert-summary">
           <span className="summary-item">
             <span className="dot severity-high"></span>
-            3 High Risk
+            {displaySummary.high} High Risk
           </span>
           <span className="summary-item">
             <span className="dot severity-medium"></span>
-            2 Medium Risk
+            {displaySummary.medium} Medium Risk
           </span>
           <span className="summary-item">
             <span className="dot severity-low"></span>
-            1 Low Risk
+            {displaySummary.low} Low Risk
           </span>
         </div>
       </div>

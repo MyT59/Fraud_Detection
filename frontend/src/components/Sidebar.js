@@ -6,7 +6,7 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
   const menuItems = [
     { path: "/dashboard",         icon: "bi-speedometer2",            label: "Dashboard" },
     { path: "/risk-management",   icon: "bi-shield-fill-exclamation", label: "Risk Management" },
-    { path: "/manual-review",     icon: "bi-clipboard-check",         label: "Manual Review", badge: "3" },
+    { path: "/manual-review",     icon: "bi-clipboard-check",         label: "Manual Review", },
     { path: "/review-history",    icon: "bi-clock-history",           label: "Review History" },
     { path: "/transactions",      icon: "bi-arrow-left-right",        label: "Transactions" },
     { path: "/analytics",         icon: "bi-bar-chart",               label: "Analytics" },
@@ -18,7 +18,7 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
     { path: "/super-admin",       icon: "bi-shield-lock-fill", label: "Super Admin" },
     { path: "/audit-log",         icon: "bi-clock-history",    label: "Audit Log" },
     { path: "/fraud-patterns",    icon: "bi-bug-fill",         label: "Fraud Patterns" },
-    { path: "/retrain-schedule",  icon: "bi-cpu",              label: "Retrain Schedule" }, // ← BARU
+    { path: "/retrain-schedule",  icon: "bi-cpu",              label: "Retrain Schedule" },
   ];
 
   const handleLinkClick = () => {

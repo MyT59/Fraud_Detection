@@ -1,10 +1,11 @@
 import React from 'react';
-import { ALL_ACTIVITIES, STATS_BAR } from './activityData';
+import { STATS_BAR } from './activityData';
 
-const ActivityStatsBar = () => {
+/* Terima `activities` sebagai prop supaya bisa hitung data real + static */
+const ActivityStatsBar = ({ activities = [] }) => {
   const counts = STATS_BAR.map(stat => ({
     ...stat,
-    count: ALL_ACTIVITIES.filter(a => a.type === stat.key).length,
+    count: activities.filter(a => a.type === stat.key).length,
   }));
 
   return (

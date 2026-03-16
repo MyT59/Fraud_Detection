@@ -140,7 +140,7 @@ const SystemHealth = () => {
       </div>
 
       {/* Services List */}
-      <div className="services-list">
+      <div className="services-list" style={{ maxHeight: 380, overflowY: 'auto', flex: 'none' }}>
         {services.map((service) => (
           <div key={service.id} className="service-item">
             <div className={`service-status ${getStatusColor(service.status)}`}>

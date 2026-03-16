@@ -1,15 +1,16 @@
 import React from 'react';
-import { ALL_ACTIVITIES, FILTER_CONFIG } from './activityData';
+import { FILTER_CONFIG } from './activityData';
 
-const ActivitySidePanel = ({ activeFilter, onFilterChange }) => {
-  // Count per type
+/* Terima `activities` sebagai prop supaya count sidebar sesuai data real */
+const ActivitySidePanel = ({ activities = [], activeFilter, onFilterChange }) => {
+  // Count per type dari data yang masuk (real + static)
   const typeCounts = {};
-  ALL_ACTIVITIES.forEach(a => {
+  activities.forEach(a => {
     typeCounts[a.type] = (typeCounts[a.type] || 0) + 1;
   });
 
-  // Recent 5 activities
-  const recent = ALL_ACTIVITIES.slice(0, 5);
+  // Recent 5 (sudah diurutkan di parent — terbaru dulu)
+  const recent = activities.slice(0, 5);
 
   const dotColorMap = {
     red:    'dot-red',
@@ -22,6 +23,7 @@ const ActivitySidePanel = ({ activeFilter, onFilterChange }) => {
 
   return (
     <div className="activity-sidebar-panel">
+
       {/* Quick Filter by Type */}
       <div className="side-card">
         <div className="side-card-header">
@@ -37,12 +39,17 @@ const ActivitySidePanel = ({ activeFilter, onFilterChange }) => {
                 onClick={() => onFilterChange(f.value)}
               >
                 <div className="type-filter-left">
-                  {f.dot && <span className={`type-dot ${dotColorMap[f.dot]}`}></span>}
-                  {!f.dot && <span className="type-dot" style={{ background: '#c7d2fe' }}></span>}
+                  {f.dot
+                    ? <span className={`type-dot ${dotColorMap[f.dot]}`}></span>
+                    : <span className="type-dot" style={{ background: '#c7d2fe' }}></span>
+                  }
                   <span className="type-filter-label">{f.label}</span>
                 </div>
                 <span className="type-filter-count">
-                  {f.value === 'all' ? ALL_ACTIVITIES.length : (typeCounts[f.value] || 0)}
+                  {f.value === 'all'
+                    ? activities.length
+                    : (typeCounts[f.value] || 0)
+                  }
                 </span>
               </div>
             ))}
@@ -58,8 +65,8 @@ const ActivitySidePanel = ({ activeFilter, onFilterChange }) => {
         </div>
         <div className="side-card-body">
           <div className="summary-list">
-            {recent.map(activity => (
-              <div className="summary-list-item" key={activity.id}>
+            {recent.map((activity, idx) => (
+              <div className="summary-list-item" key={activity.id ?? idx}>
                 <div className={`summary-icon activity-${activity.color}`}>
                   <i className={`bi ${activity.icon}`}></i>
                 </div>
@@ -72,6 +79,7 @@ const ActivitySidePanel = ({ activeFilter, onFilterChange }) => {
           </div>
         </div>
       </div>
+
     </div>
   );
 };

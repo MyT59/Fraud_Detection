@@ -1,178 +1,80 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import ActivityStats from "../components/auditlog/ActivityStats";
 import ActivityFilters from "../components/auditlog/ActivityFilters";
 import ActivityFeed from "../components/auditlog/ActivityFeed";
 import "./AuditLog.css";
 import PageLoader from "../components/common/PageLoader";
 
-/* ── Seed data (bisa diganti fetch dari API) ── */
+/* ── Seed awal (historical, sebelum ada API) ── */
 const SEED_LOGS = [
-  {
-    type: "create",
-    desc: (
-      <>
-        <strong>Super Admin</strong> membuat akun untuk{" "}
-        <strong>Hani Puspita</strong> (Fraud Analyst)
-      </>
-    ),
-    time: "10 Feb 2024",
-  },
-  {
-    type: "edit",
-    desc: (
-      <>
-        <strong>Super Admin</strong> mengubah role{" "}
-        <strong>Rizky Pratama</strong> menjadi <strong>Admin</strong>
-      </>
-    ),
-    time: "08 Feb 2024",
-  },
-  {
-    type: "suspend",
-    desc: (
-      <>
-        <strong>Super Admin</strong> men-suspend akun{" "}
-        <strong>Lina Kusuma</strong>
-      </>
-    ),
-    time: "05 Feb 2024",
-  },
-  {
-    type: "create",
-    desc: (
-      <>
-        <strong>Super Admin</strong> membuat akun untuk{" "}
-        <strong>Dian Permata</strong> (CS / Investigator)
-      </>
-    ),
-    time: "01 Feb 2024",
-  },
-  {
-    type: "edit",
-    desc: (
-      <>
-        <strong>Super Admin</strong> memperbarui departemen{" "}
-        <strong>Fajar Nugroho</strong> ke Compliance
-      </>
-    ),
-    time: "30 Jan 2024",
-  },
-  {
-    type: "delete",
-    desc: (
-      <>
-        <strong>Super Admin</strong> menghapus akun{" "}
-        <strong>Toni Hidayat</strong>
-      </>
-    ),
-    time: "28 Jan 2024",
-  },
-  {
-    type: "create",
-    desc: (
-      <>
-        <strong>Super Admin</strong> membuat akun untuk{" "}
-        <strong>Fajar Nugroho</strong> (Fraud Analyst)
-      </>
-    ),
-    time: "05 Feb 2024",
-  },
-  {
-    type: "edit",
-    desc: (
-      <>
-        <strong>Super Admin</strong> mereset password{" "}
-        <strong>Budi Santoso</strong>
-      </>
-    ),
-    time: "25 Jan 2024",
-  },
-  {
-    type: "suspend",
-    desc: (
-      <>
-        <strong>Super Admin</strong> men-suspend akun{" "}
-        <strong>Maya Indah</strong> sementara
-      </>
-    ),
-    time: "22 Jan 2024",
-  },
-  {
-    type: "create",
-    desc: (
-      <>
-        <strong>Super Admin</strong> membuat akun untuk{" "}
-        <strong>Irwan Setiawan</strong> (IT Security Admin)
-      </>
-    ),
-    time: "15 Feb 2024",
-  },
-  {
-    type: "edit",
-    desc: (
-      <>
-        <strong>Super Admin</strong> mengaktifkan kembali akun{" "}
-        <strong>Maya Indah</strong>
-      </>
-    ),
-    time: "20 Jan 2024",
-  },
-  {
-    type: "delete",
-    desc: (
-      <>
-        <strong>Super Admin</strong> menghapus akun{" "}
-        <strong>Ahmad Kurniawan</strong>
-      </>
-    ),
-    time: "18 Jan 2024",
-  },
+  { id:"seed-01", type:"create",  actor_name:"Super Admin", target_name:"Hani Puspita",    target_role:"analyst",    detail:"Membuat akun baru untuk Hani Puspita (Fraud Analyst) — Departemen: Risk Management", time_label:"10 Feb 2024" },
+  { id:"seed-02", type:"edit",    actor_name:"Super Admin", target_name:"Rizky Pratama",   target_role:"admin",      detail:"Memperbarui akun Rizky Pratama: role: Fraud Analyst → Admin",                          time_label:"08 Feb 2024" },
+  { id:"seed-03", type:"suspend", actor_name:"Super Admin", target_name:"Lina Kusuma",     target_role:"analyst",    detail:"Men-suspend akun Lina Kusuma (Fraud Analyst)",                                         time_label:"05 Feb 2024" },
+  { id:"seed-04", type:"create",  actor_name:"Super Admin", target_name:"Dian Permata",    target_role:"analyst",    detail:"Membuat akun baru untuk Dian Permata (Fraud Analyst) — Departemen: Risk Management",   time_label:"01 Feb 2024" },
+  { id:"seed-05", type:"edit",    actor_name:"Super Admin", target_name:"Fajar Nugroho",   target_role:"analyst",    detail:"Memperbarui akun Fajar Nugroho: departemen: Risk Management → Fraud Prevention",        time_label:"30 Jan 2024" },
+  { id:"seed-06", type:"delete",  actor_name:"Super Admin", target_name:"Toni Hidayat",    target_role:"analyst",    detail:"Menghapus akun Toni Hidayat (Fraud Analyst) — Risk Management",                        time_label:"28 Jan 2024" },
+  { id:"seed-07", type:"create",  actor_name:"Super Admin", target_name:"Fajar Nugroho",   target_role:"analyst",    detail:"Membuat akun baru untuk Fajar Nugroho (Fraud Analyst) — Departemen: Fraud Prevention",  time_label:"05 Feb 2024" },
+  { id:"seed-08", type:"edit",    actor_name:"Super Admin", target_name:"Budi Santoso",    target_role:"analyst",    detail:"Memperbarui akun Budi Santoso: email diperbarui",                                      time_label:"25 Jan 2024" },
+  { id:"seed-09", type:"suspend", actor_name:"Super Admin", target_name:"Maya Indah",      target_role:"analyst",    detail:"Men-suspend akun Maya Indah (Fraud Analyst) sementara",                               time_label:"22 Jan 2024" },
+  { id:"seed-10", type:"create",  actor_name:"Super Admin", target_name:"Irwan Setiawan",  target_role:"superadmin", detail:"Membuat akun baru untuk Irwan Setiawan (Super Admin) — Departemen: Risk Management",   time_label:"15 Feb 2024" },
+  { id:"seed-11", type:"suspend", actor_name:"Super Admin", target_name:"Maya Indah",      target_role:"analyst",    detail:"Mengaktifkan kembali akun Maya Indah (Fraud Analyst)",                                time_label:"20 Jan 2024" },
+  { id:"seed-12", type:"delete",  actor_name:"Super Admin", target_name:"Ahmad Kurniawan", target_role:"analyst",    detail:"Menghapus akun Ahmad Kurniawan (Fraud Analyst) — Compliance",                          time_label:"18 Jan 2024" },
 ];
 
-/* Helper: stringify JSX desc untuk search */
-const descToText = (desc) => {
-  if (typeof desc === "string") return desc.toLowerCase();
-  if (!desc?.props?.children) return "";
-  const flatten = (children) => {
-    if (!children) return "";
-    if (typeof children === "string") return children;
-    if (Array.isArray(children)) return children.map(flatten).join("");
-    if (children?.props?.children) return flatten(children.props.children);
-    return "";
-  };
-  return flatten(desc.props.children).toLowerCase();
-};
+/* Konversi log dari API/seed ke format yg dipakai ActivityFeed */
+const toFeedItem = (log) => ({
+  id:        log.id,
+  type:      log.type,
+  desc:      log.detail,       // string biasa, bukan JSX
+  time:      log.time_label || log.timestamp?.slice(0, 10) || "—",
+  timestamp: log.timestamp || "",
+  actor:     log.actor_name,
+});
 
-const AuditLog = ({ externalLogs }) => {
-  const [loading, setLoading] = useState(true);
-
-  const [search, setSearch] = useState("");
+const AuditLog = () => {
+  const [loading, setLoading]       = useState(true);
+  const [apiLogs, setApiLogs]       = useState([]);
+  const [apiError, setApiError]     = useState(false);
+  const [search, setSearch]         = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
 
-  /* gabungkan seed + log dari luar (e.g. dari SuperAdmin via props/context) */
+  /* ── Fetch dari API ── */
+  const fetchLogs = useCallback(async () => {
+    try {
+      const res  = await fetch("/audit-logs?page_size=100");
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setApiLogs(data.logs || []);
+      setApiError(false);
+    } catch {
+      setApiError(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLogs().finally(() => setLoading(false));
+  }, [fetchLogs]);
+
+  /* ── Gabung API log (terbaru) + seed (historical) ── */
   const allLogs = useMemo(() => {
-    const base = externalLogs ? [...externalLogs, ...SEED_LOGS] : SEED_LOGS;
-    return base;
-  }, [externalLogs]);
+    // Jika API sukses: tampilkan log API + seed di bawahnya (hapus duplikat by id)
+    const apiItems  = apiLogs.map(toFeedItem);
+    const seedItems = SEED_LOGS.map(toFeedItem);
+    const apiIds    = new Set(apiItems.map(l => l.id));
+    const merged    = [...apiItems, ...seedItems.filter(l => !apiIds.has(l.id))];
+    return merged;
+  }, [apiLogs]);
 
   const filtered = useMemo(() => {
-    return allLogs.filter((log) => {
-      const matchType = typeFilter === "all" || log.type === typeFilter;
-      const matchSearch =
-        !search || descToText(log.desc).includes(search.toLowerCase());
+    return allLogs.filter(log => {
+      const matchType   = typeFilter === "all" || log.type === typeFilter;
+      const matchSearch = !search || log.desc.toLowerCase().includes(search.toLowerCase())
+                          || (log.actor || "").toLowerCase().includes(search.toLowerCase());
       return matchType && matchSearch;
     });
   }, [allLogs, search, typeFilter]);
 
-  const handleReset = () => {
-    setSearch("");
-    setTypeFilter("all");
-  };
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(timer);
-  }, []);
+  const handleReset = () => { setSearch(""); setTypeFilter("all"); };
 
   if (loading) return <PageLoader message="Memuat Audit Log..." />;
 
@@ -186,12 +88,37 @@ const AuditLog = ({ externalLogs }) => {
           </div>
           <div>
             <h1 className="al-title">Audit Log</h1>
-            <p className="al-subtitle">
-              Riwayat seluruh aktivitas dan perubahan sistem
-            </p>
+            <p className="al-subtitle">Riwayat seluruh aktivitas dan perubahan sistem</p>
           </div>
         </div>
+
+        {/* Tombol refresh */}
+        <button
+          onClick={() => { setLoading(true); fetchLogs().finally(() => setLoading(false)); }}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "9px 16px", border: "1.5px solid #e5e7eb",
+            borderRadius: 8, background: "#fff", cursor: "pointer",
+            fontSize: ".85rem", fontWeight: 600, color: "#6b7280",
+            fontFamily: "inherit",
+          }}
+        >
+          <i className="bi bi-arrow-clockwise"></i>
+          Refresh
+        </button>
       </div>
+
+      {/* Banner API error */}
+      {apiError && (
+        <div style={{
+          marginBottom: 16, padding: "10px 16px", borderRadius: 8,
+          background: "#fffbeb", border: "1px solid #fde68a",
+          color: "#92400e", fontSize: ".82rem", display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <i className="bi bi-exclamation-triangle-fill"></i>
+          API tidak tersedia — menampilkan data historis sementara.
+        </div>
+      )}
 
       {/* Stats */}
       <ActivityStats logs={allLogs} />

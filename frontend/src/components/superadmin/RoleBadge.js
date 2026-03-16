@@ -2,21 +2,9 @@ import React from 'react';
 import './RoleBadge.css';
 
 const ROLE_CONFIG = {
-  superadmin: {
-    label: 'Super Admin',
-    icon: 'bi-shield-fill',
-    className: 'role-superadmin',
-  },
-  admin: {
-    label: 'Admin',
-    icon: 'bi-person-badge-fill',
-    className: 'role-admin',
-  },
-  analyst: {
-    label: 'Fraud Analyst',
-    icon: 'bi-search',
-    className: 'role-analyst',
-  },
+  superadmin: { label: 'Super Admin',  icon: 'bi-shield-fill',       className: 'role-superadmin' },
+  admin:      { label: 'Admin',        icon: 'bi-person-badge-fill', className: 'role-admin'      },
+  analyst:    { label: 'Fraud Analyst',icon: 'bi-search',            className: 'role-analyst'    },
 };
 
 const STATUS_CONFIG = {

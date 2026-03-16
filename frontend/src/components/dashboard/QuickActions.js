@@ -18,7 +18,6 @@ const QuickActions = () => {
       title: 'Manual Review',
       icon: 'bi-clipboard-check',
       color: 'warning',
-      count: 3,
       route: '/manual-review'
     },
     {

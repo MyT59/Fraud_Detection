@@ -2,10 +2,10 @@ import React from 'react';
 import './ActivityFeed.css';
 
 const TYPE_CONFIG = {
-  create:  { icon: 'bi-person-plus-fill',   cls: 'af-type-create',  label: 'Dibuat'    },
-  edit:    { icon: 'bi-pencil-fill',         cls: 'af-type-edit',    label: 'Diedit'    },
-  suspend: { icon: 'bi-pause-circle-fill',   cls: 'af-type-suspend', label: 'Disuspend' },
-  delete:  { icon: 'bi-trash-fill',          cls: 'af-type-delete',  label: 'Dihapus'   },
+  create:  { icon: 'bi-person-plus-fill',  cls: 'afd-type-create',  label: 'Dibuat'    },
+  edit:    { icon: 'bi-pencil-fill',        cls: 'afd-type-edit',    label: 'Diedit'    },
+  suspend: { icon: 'bi-pause-circle-fill',  cls: 'afd-type-suspend', label: 'Disuspend' },
+  delete:  { icon: 'bi-trash-fill',         cls: 'afd-type-delete',  label: 'Dihapus'   },
 };
 
 const PAGE_SIZE = 10;

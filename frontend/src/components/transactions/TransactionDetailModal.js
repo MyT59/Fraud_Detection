@@ -111,9 +111,9 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                     </label>
                     <div className="detail-value txn-user-row">
                       <div className="user-avatar-large">
-                        {transaction.user.charAt(0).toUpperCase()}
+                        {(transaction.user || transaction.accountId || "?").charAt(0).toUpperCase()}
                       </div>
-                      {transaction.user}
+                      {transaction.user || transaction.accountId || "—"}
                     </div>
                   </div>
                 </div>
@@ -146,7 +146,7 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                     <label className="detail-label">
                       <i className="bi bi-geo-alt me-2"></i>Location
                     </label>
-                    <div className="detail-value">{transaction.location}</div>
+                    <div className="detail-value">{transaction.location || transaction.channel || "—"}</div>
                   </div>
                 </div>
 

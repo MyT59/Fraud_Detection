@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import './TopFraudPatterns.css';
 
+// ── Config maps ────────────────────────────────────────────────────────────
 const ICON_MAP = {
   high:   { icon: 'bi-shield-exclamation', severity: 'severity-high'   },
   medium: { icon: 'bi-exclamation-triangle', severity: 'severity-medium' },
@@ -14,77 +15,76 @@ const TREND_MAP = {
   stable: { class: 'trend-stable', icon: 'bi-dash',        label: '0%'   },
 };
 
+// ── Fallback statis ────────────────────────────────────────────────────────
 const DEFAULT_PATTERNS = [
   {
-    id: 1,
-    pattern: 'Multiple Failed Logins',
+    id: 1, pattern: 'Multiple Failed Logins',
     description: 'Brute force credential attempts detected',
     examples: ['5+ attempts', 'Same IP', 'Short interval'],
-    occurrences: 156,
-    riskLevel: 'high',
-    trend: 'up',
+    occurrences: 156, riskLevel: 'high', trend: 'up',
   },
   {
-    id: 2,
-    pattern: 'Unusual Transaction Amount',
+    id: 2, pattern: 'Unusual Transaction Amount',
     description: 'Transaction significantly above user average',
     examples: ['>3x avg', 'New merchant', 'Single session'],
-    occurrences: 98,
-    riskLevel: 'high',
-    trend: 'up',
+    occurrences: 98, riskLevel: 'high', trend: 'up',
   },
   {
-    id: 3,
-    pattern: 'Location Mismatch',
-    description: 'Different from users registered profile location',
+    id: 3, pattern: 'Location Mismatch',
+    description: 'Different from user\'s registered profile location',
     examples: ['New city', 'Foreign IP', 'VPN detected'],
-    occurrences: 87,
-    riskLevel: 'medium',
-    trend: 'stable',
+    occurrences: 87, riskLevel: 'medium', trend: 'stable',
   },
   {
-    id: 4,
-    pattern: 'Rapid Successive Transactions',
+    id: 4, pattern: 'Rapid Successive Transactions',
     description: 'Multiple transactions within a short time window',
     examples: ['<2 min gap', 'Same merchant', 'Velocity breach'],
-    occurrences: 65,
-    riskLevel: 'medium',
-    trend: 'down',
+    occurrences: 65, riskLevel: 'medium', trend: 'down',
   },
   {
-    id: 5,
-    pattern: 'New Device Detected',
+    id: 5, pattern: 'New Device Detected',
     description: 'Transaction from a previously unseen device',
     examples: ['Unknown UA', 'New fingerprint', 'No history'],
-    occurrences: 54,
-    riskLevel: 'low',
-    trend: 'stable',
+    occurrences: 54, riskLevel: 'low', trend: 'stable',
   },
   {
-    id: 6,
-    pattern: 'Unusual Time of Day',
+    id: 6, pattern: 'Unusual Time of Day',
     description: 'Activity during abnormal hours for this user',
     examples: ['2AM–4AM', 'Outside pattern', 'Dormant account'],
-    occurrences: 43,
-    riskLevel: 'low',
-    trend: 'down',
+    occurrences: 43, riskLevel: 'low', trend: 'down',
   },
 ];
 
+// ── Component ──────────────────────────────────────────────────────────────
 const TopFraudPatterns = ({ patterns }) => {
-  const navigate  = useNavigate();
-  const fraudPatterns = patterns || DEFAULT_PATTERNS;
+  const navigate = useNavigate();
+
+  // Gunakan data API; fallback ke statis kalau kosong
+  const fraudPatterns = (patterns && patterns.length > 0) ? patterns : DEFAULT_PATTERNS;
 
   return (
     <div className="fraud-patterns-card">
-      {/* ── Header ── */}
+
+      {/* Header */}
       <div className="patterns-header">
         <div className="header-left">
           <h3 className="patterns-title">
             <i className="bi bi-bug-fill"></i>
             Top Fraud Patterns
           </h3>
-          <p className="patterns-subtitle">Most frequent detection triggers</p>
+          <p className="patterns-subtitle">
+            Most frequent detection triggers
+            {patterns && patterns.length > 0 && (
+              <span style={{
+                marginLeft: 8,
+                background: '#fef2f2', border: '1px solid #fecaca',
+                color: '#dc2626', fontSize: '0.68rem', fontWeight: 700,
+                padding: '1px 8px', borderRadius: 10,
+              }}>
+                Live
+              </span>
+            )}
+          </p>
         </div>
         <button className="btn-details" onClick={() => navigate('/fraud-patterns')}>
           <i className="bi bi-arrow-right"></i>
@@ -92,14 +92,18 @@ const TopFraudPatterns = ({ patterns }) => {
         </button>
       </div>
 
-      {/* ── List ── */}
-      <div className="patterns-list">
+      {/* List — height terkunci 420px, overflow scroll */}
+      <div
+        className="patterns-list"
+        style={{ maxHeight: 420, overflowY: 'auto', flex: 'none' }}
+      >
         {fraudPatterns.map((p, i) => {
           const iconCfg  = ICON_MAP[p.riskLevel]  || ICON_MAP.low;
           const trendCfg = TREND_MAP[p.trend]      || TREND_MAP.stable;
 
           return (
             <div key={p.id} className="pattern-item">
+
               {/* Rank */}
               <div className="pattern-rank">
                 <span className={`rank-number ${i < 3 ? 'top-three' : ''}`}>
@@ -146,7 +150,7 @@ const TopFraudPatterns = ({ patterns }) => {
         })}
       </div>
 
-      {/* ── Footer ── */}
+      {/* Footer */}
       <div className="patterns-footer">
         <div className="legend">
           <span className="legend-item">

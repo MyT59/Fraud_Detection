@@ -1,0 +1,12 @@
+[
+  {
+    "id": "ALT-MR-9D74B954",
+    "type": "fraud",
+    "severity": "critical",
+    "status": "unread",
+    "title": "Fraud Dikonfirmasi — NUS-004447",
+    "message": "Transaksi NUS-004447 (NUSABILL) ditolak setelah manual review. Fraud score: 100/100. Jumlah: Rp 369.239. Pattern: Burst Payment Pattern. Catatan: Fraud",
+    "txnId": "NUS-004447",
+    "time": "2026-03-13T11:34:53.008671"
+  }
+]

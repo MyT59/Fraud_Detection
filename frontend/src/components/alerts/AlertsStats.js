@@ -1,21 +1,26 @@
 import React from 'react';
 
-const AlertsStats = ({ alerts }) => {
-  const total    = alerts.length;
-  const critical = alerts.filter(a => a.severity === 'critical').length;
-  const unread   = alerts.filter(a => a.status === 'unread').length;
-  const resolved = alerts.filter(a => a.status === 'resolved').length;
+// Menerima dua bentuk props:
+//   <AlertsStats stats={apiStats} />           ← dari API langsung
+//   <AlertsStats alerts={localAlertsArray} />  ← hitung sendiri (fallback)
+const AlertsStats = ({ alerts, stats }) => {
+  const data = stats || {
+    total:    (alerts || []).length,
+    critical: (alerts || []).filter(a => a.severity === 'critical').length,
+    unread:   (alerts || []).filter(a => a.status   === 'unread').length,
+    resolved: (alerts || []).filter(a => a.status   === 'resolved').length,
+  };
 
-  const stats = [
-    { label: 'Total Alerts',  value: total,    icon: 'bi-bell',                colorClass: 'stat-primary' },
-    { label: 'Critical',      value: critical, icon: 'bi-exclamation-octagon', colorClass: 'stat-danger'  },
-    { label: 'Belum Dibaca',  value: unread,   icon: 'bi-envelope',            colorClass: 'stat-warning' },
-    { label: 'Resolved',      value: resolved, icon: 'bi-check-circle',        colorClass: 'stat-success' },
+  const statList = [
+    { label: 'Total Alerts',  value: data.total,    icon: 'bi-bell',                colorClass: 'stat-primary' },
+    { label: 'Critical',      value: data.critical, icon: 'bi-exclamation-octagon', colorClass: 'stat-danger'  },
+    { label: 'Belum Dibaca',  value: data.unread,   icon: 'bi-envelope',            colorClass: 'stat-warning' },
+    { label: 'Resolved',      value: data.resolved, icon: 'bi-check-circle',        colorClass: 'stat-success' },
   ];
 
   return (
     <div className="alerts-stats-grid">
-      {stats.map((s) => (
+      {statList.map(s => (
         <div key={s.label} className={`alerts-stat-card ${s.colorClass}`}>
           <div className="alerts-stat-icon">
             <i className={`bi ${s.icon}`}></i>

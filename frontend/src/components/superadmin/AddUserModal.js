@@ -1,36 +1,53 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './AddUserModal.css';
 
 const ROLES = [
-  { value: 'admin',   label: 'Admin',            desc: 'Akses penuh sistem',   icon: 'bi-person-badge-fill', colorClass: 'c-admin'   },
-  { value: 'analyst', label: 'Fraud Analyst',     desc: 'Review & investigasi', icon: 'bi-search',            colorClass: 'c-analyst' },
-  
+  { value: 'superadmin', label: 'Super Admin',  desc: 'Kontrol penuh sistem', icon: 'bi-shield-fill',       colorClass: 'c-superadmin' },
+  { value: 'admin',      label: 'Admin',         desc: 'Akses penuh sistem',   icon: 'bi-person-badge-fill', colorClass: 'c-admin'      },
+  { value: 'analyst',    label: 'Fraud Analyst', desc: 'Review & investigasi', icon: 'bi-search',            colorClass: 'c-analyst'    },
 ];
 
 const DEPARTMENTS = [
-  'Risk Management', 'Fraud Prevention'
+  'Risk Management', 'Fraud Prevention',
 ];
 
-const EMPTY = {
-  name: '', email: '', phone: '', department: '',
-  role: '', password: '', confirmPassword: '', notes: '',
-};
+const EMPTY = { name: '', email: '', phone: '', department: '', role: '', password: '', confirmPassword: '', notes: '' };
 
-const AddUserModal = ({ isOpen, onClose, onSubmit, editData }) => {
-  const [form, setForm]         = useState(EMPTY);
-  const [errors, setErrors]     = useState({});
-  const [showPw, setShowPw]     = useState(false);
-  const [showCpw, setShowCpw]   = useState(false);
-  const [loading, setLoading]   = useState(false);
+const F = ({ label, req, opt, err, children }) => (
+  <div className="aum-field">
+    <label className="aum-label">
+      {label}
+      {req && <span className="aum-req"> *</span>}
+      {opt && <span className="aum-opt"> (opsional)</span>}
+    </label>
+    {children}
+    {err && <span className="aum-field-error"><i className="bi bi-exclamation-circle-fill" /> {err}</span>}
+  </div>
+);
 
-  const isEdit = Boolean(editData);
+const AddUserModal = ({ isOpen, onClose, onSubmit, editData, currentUser, superadminCount }) => {
+  const [form, setForm]       = useState(EMPTY);
+  const [errors, setErrors]   = useState({});
+  const [showPw, setShowPw]   = useState(false);
+  const [showCpw, setShowCpw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
+  const nameRef = useRef(null);
+
+  const isEdit   = Boolean(editData);
+  const isSelf   = isEdit && editData?.id === currentUser?.id;
+  // Lock role hanya jika: edit diri sendiri, role-nya superadmin, dan dia satu-satunya
+  const lockRole = isSelf && editData?.role === 'superadmin' && (superadminCount <= 1);
 
   useEffect(() => {
     if (isOpen) {
       setForm(isEdit ? { ...EMPTY, ...editData, password: '', confirmPassword: '' } : EMPTY);
       setErrors({});
+      setApiError('');
       setShowPw(false);
       setShowCpw(false);
+      // Fokus sekali saat modal buka, bukan setiap render
+      setTimeout(() => nameRef.current?.focus(), 50);
     }
   }, [isOpen, isEdit, editData]);
 
@@ -39,17 +56,17 @@ const AddUserModal = ({ isOpen, onClose, onSubmit, editData }) => {
   const set = (field, value) => {
     setForm(p => ({ ...p, [field]: value }));
     if (errors[field]) setErrors(p => ({ ...p, [field]: undefined }));
+    setApiError('');
   };
 
   const validate = () => {
     const e = {};
     if (!form.name.trim())  e.name  = 'Nama wajib diisi.';
     if (!form.email.trim()) e.email = 'Email wajib diisi.';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      e.email = 'Format email tidak valid.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Format email tidak valid.';
     if (!form.role) e.role = 'Pilih salah satu role.';
     if (!isEdit) {
-      if (!form.password)                e.password = 'Password wajib diisi.';
+      if (!form.password)               e.password = 'Password wajib diisi.';
       else if (form.password.length < 8) e.password = 'Minimal 8 karakter.';
     }
     if ((form.password || !isEdit) && form.password !== form.confirmPassword)
@@ -61,30 +78,45 @@ const AddUserModal = ({ isOpen, onClose, onSubmit, editData }) => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 500));
-    onSubmit({ ...form, id: editData?.id });
-    setLoading(false);
-    onClose();
-  };
+    setApiError('');
 
-  /* reusable field wrapper */
-  const F = ({ label, req, opt, err, children }) => (
-    <div className="aum-field">
-      <label className="aum-label">
-        {label}
-        {req && <span className="aum-req"> *</span>}
-        {opt && <span className="aum-opt"> (opsional)</span>}
-      </label>
-      {children}
-      {err && <span className="aum-field-error"><i className="bi bi-exclamation-circle-fill" /> {err}</span>}
-    </div>
-  );
+    try {
+      const url    = isEdit ? `/users/${editData.id}` : '/users';
+      const method = isEdit ? 'PUT' : 'POST';
+      const body   = { ...form };
+      delete body.confirmPassword;
+      if (isEdit && !body.password) delete body.password;
+
+      const res  = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Actor-Role':  currentUser?.role || 'superadmin',
+          'X-Actor-Id':    currentUser?.id   || '',
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setApiError(data.detail || 'Terjadi kesalahan pada server.');
+        setLoading(false);
+        return;
+      }
+      onSubmit(data.user);
+      onClose();
+    } catch {
+      // Fallback jika API offline
+      onSubmit({ ...form, id: editData?.id || `usr-${Date.now()}`, status: 'active', createdAt: 'Baru saja', lastActive: 'Baru saja' });
+      onClose();
+    }
+    setLoading(false);
+  };
 
   return (
     <div className="aum-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="aum-box">
 
-        {/* HEADER */}
         <div className="aum-header">
           <div className="aum-header-left">
             <div className="aum-icon">
@@ -97,56 +129,39 @@ const AddUserModal = ({ isOpen, onClose, onSubmit, editData }) => {
               </p>
             </div>
           </div>
-          <button className="aum-close" onClick={onClose}>
-            <i className="bi bi-x-lg" />
-          </button>
+          <button className="aum-close" onClick={onClose}><i className="bi bi-x-lg" /></button>
         </div>
 
-        {/* BODY */}
         <div className="aum-body">
 
-          {/* — Informasi Dasar — */}
-          <div className="aum-section"><span>Informasi Dasar</span></div>
+          {apiError && (
+            <div className="aum-api-error">
+              <i className="bi bi-exclamation-triangle-fill" /> {apiError}
+            </div>
+          )}
 
+          <div className="aum-section"><span>Informasi Dasar</span></div>
           <div className="aum-row">
             <F label="Nama Lengkap" req err={errors.name}>
-              <input
-                className={`aum-input ${errors.name ? 'is-error' : ''}`}
-                type="text"
-                placeholder="cth: Budi Santoso"
-                value={form.name}
-                onChange={e => set('name', e.target.value)}
-                autoFocus
-              />
+              <input className={`aum-input ${errors.name ? 'is-error' : ''}`} type="text"
+                placeholder="cth: Budi Santoso" value={form.name}
+                ref={nameRef}
+                onChange={e => set('name', e.target.value)} />
             </F>
             <F label="Email" req err={errors.email}>
-              <input
-                className={`aum-input ${errors.email ? 'is-error' : ''}`}
-                type="email"
-                placeholder="cth: budi@company.com"
-                value={form.email}
-                onChange={e => set('email', e.target.value)}
-              />
+              <input className={`aum-input ${errors.email ? 'is-error' : ''}`} type="email"
+                placeholder="cth: budi@company.com" value={form.email}
+                onChange={e => set('email', e.target.value)} />
             </F>
           </div>
-
           <div className="aum-row">
             <F label="No. Telepon" opt>
-              <input
-                className="aum-input"
-                type="text"
-                placeholder="cth: 08123456789"
-                value={form.phone}
-                onChange={e => set('phone', e.target.value)}
-              />
+              <input className="aum-input" type="text" placeholder="cth: 08123456789"
+                value={form.phone} onChange={e => set('phone', e.target.value)} />
             </F>
             <F label="Departemen">
               <div className="aum-select-wrap">
-                <select
-                  className="aum-select"
-                  value={form.department}
-                  onChange={e => set('department', e.target.value)}
-                >
+                <select className="aum-select" value={form.department} onChange={e => set('department', e.target.value)}>
                   <option value="">— Pilih Departemen —</option>
                   {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
@@ -154,46 +169,46 @@ const AddUserModal = ({ isOpen, onClose, onSubmit, editData }) => {
             </F>
           </div>
 
-          {/* — Hak Akses — */}
           <div className="aum-section"><span>Hak Akses</span></div>
-
           <div className="aum-field">
             <label className="aum-label">Role <span className="aum-req">*</span></label>
             <div className="aum-roles">
-              {ROLES.map(r => (
-                <div
-                  key={r.value}
-                  className={`aum-role-card ${form.role === r.value ? 'is-selected' : ''}`}
-                  onClick={() => set('role', r.value)}
-                >
-                  <div className={`aum-role-icon ${r.colorClass}`}>
-                    <i className={`bi ${r.icon}`} />
+              {ROLES.map(r => {
+                const locked = lockRole && r.value !== 'superadmin';
+                return (
+                  <div
+                    key={r.value}
+                    className={`aum-role-card ${form.role === r.value ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}`}
+                    onClick={() => !locked && set('role', r.value)}
+                    title={locked ? 'Tidak bisa dipilih — kamu satu-satunya Super Admin' : ''}
+                  >
+                    {locked && <div className="aum-role-lock"><i className="bi bi-lock-fill" /></div>}
+                    <div className={`aum-role-icon ${r.colorClass}`}>
+                      <i className={`bi ${r.icon}`} />
+                    </div>
+                    <div className="aum-role-name">{r.label}</div>
+                    <div className="aum-role-desc">{r.desc}</div>
                   </div>
-                  <div className="aum-role-name">{r.label}</div>
-                  <div className="aum-role-desc">{r.desc}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-            {errors.role && (
-              <span className="aum-role-error">
-                <i className="bi bi-exclamation-circle-fill" /> {errors.role}
-              </span>
+            {lockRole && (
+              <div className="aum-role-lock-msg">
+                <i className="bi bi-info-circle-fill" />
+                &nbsp;Kamu satu-satunya Super Admin. Tambah Super Admin lain untuk bisa mengubah role-mu sendiri.
+              </div>
             )}
+            {errors.role && <span className="aum-role-error"><i className="bi bi-exclamation-circle-fill" /> {errors.role}</span>}
           </div>
 
-          {/* — Keamanan Akun — */}
           <div className="aum-section"><span>{isEdit ? 'Ubah Password' : 'Keamanan Akun'}</span></div>
-
           <div className="aum-row">
             <F label="Password" req={!isEdit} opt={isEdit} err={errors.password}>
               <div className="aum-pw-wrap">
-                <input
-                  className={`aum-input ${errors.password ? 'is-error' : ''}`}
+                <input className={`aum-input ${errors.password ? 'is-error' : ''}`}
                   type={showPw ? 'text' : 'password'}
                   placeholder={isEdit ? 'Kosongkan jika tidak diubah' : 'Min. 8 karakter'}
-                  value={form.password}
-                  onChange={e => set('password', e.target.value)}
-                />
+                  value={form.password} onChange={e => set('password', e.target.value)} />
                 <button className="aum-pw-toggle" type="button" tabIndex={-1} onClick={() => setShowPw(v => !v)}>
                   <i className={`bi ${showPw ? 'bi-eye-slash' : 'bi-eye'}`} />
                 </button>
@@ -201,13 +216,9 @@ const AddUserModal = ({ isOpen, onClose, onSubmit, editData }) => {
             </F>
             <F label="Konfirmasi Password" req={!isEdit} err={errors.confirmPassword}>
               <div className="aum-pw-wrap">
-                <input
-                  className={`aum-input ${errors.confirmPassword ? 'is-error' : ''}`}
-                  type={showCpw ? 'text' : 'password'}
-                  placeholder="Ulangi password"
-                  value={form.confirmPassword}
-                  onChange={e => set('confirmPassword', e.target.value)}
-                />
+                <input className={`aum-input ${errors.confirmPassword ? 'is-error' : ''}`}
+                  type={showCpw ? 'text' : 'password'} placeholder="Ulangi password"
+                  value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} />
                 <button className="aum-pw-toggle" type="button" tabIndex={-1} onClick={() => setShowCpw(v => !v)}>
                   <i className={`bi ${showCpw ? 'bi-eye-slash' : 'bi-eye'}`} />
                 </button>
@@ -216,21 +227,14 @@ const AddUserModal = ({ isOpen, onClose, onSubmit, editData }) => {
           </div>
 
           <F label="Catatan" opt>
-            <textarea
-              className="aum-textarea"
-              placeholder="Catatan tambahan mengenai pengguna ini..."
-              value={form.notes}
-              onChange={e => set('notes', e.target.value)}
-            />
+            <textarea className="aum-textarea" placeholder="Catatan tambahan mengenai pengguna ini..."
+              value={form.notes} onChange={e => set('notes', e.target.value)} />
           </F>
 
-        </div>{/* end aum-body */}
+        </div>
 
-        {/* FOOTER */}
         <div className="aum-footer">
-          <button className="aum-btn-cancel" onClick={onClose} disabled={loading}>
-            Batal
-          </button>
+          <button className="aum-btn-cancel" onClick={onClose} disabled={loading}>Batal</button>
           <button className="aum-btn-submit" onClick={handleSubmit} disabled={loading}>
             {loading
               ? <><span className="aum-spinner" />Menyimpan...</>

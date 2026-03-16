@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import PageLoader from "../components/common/PageLoader";
 import ReviewFilter from "../components/review/ReviewFilter";
 import { labelHistory } from "../services/mlService"; // ← BARU
-import { submitReview } from "../services/reviewService"; // ← BARU
+import { submitReview, postFraudAlert } from "../services/reviewService";
+
 import "./ManualReview.css";
 
 /* ── Format helpers ── */
@@ -320,11 +321,12 @@ const SAMPLE_TRANSACTIONS = [
 ];
 
 /* ── Mapping hasil API → format seragam frontend ── */
-const mapApiResult = (result, domain, index) => {
+const mapApiResult = (result, domain, index, originalId) => {
   const rec = result.record;
   const rawScore = result.ml_fraud_score;
   const prefix = domain === "agenusa" ? "AGN" : "NUS";
-  const id = `${prefix}-${String(index + 1).padStart(6, "0")}`;
+  // Gunakan ID asli dari backend agar cocok dengan review_feedback.csv
+  const id = originalId || `${prefix}-${String(index + 1).padStart(6, "0")}`;
 
   if (domain === "agenusa") {
     return {
@@ -836,13 +838,15 @@ const ManualReview = () => {
           process.env.REACT_APP_ML_API_URL || "http://localhost:8000";
 
         // ── Step 1: Ambil transaksi flagged langsung dari dataset CSV via backend ──
-        const txnRes = await fetch(
-          `${BASE_URL}/transactions/flagged?limit=50`,
-        );
+        const txnRes = await fetch(`${BASE_URL}/transactions/flagged`);
         if (!txnRes.ok)
           throw new Error(`Gagal fetch dataset: ${txnRes.status}`);
         const { agenusa: agenusaRaw, nusabill: nusabillRaw } =
           await txnRes.json();
+
+        // Simpan ID asli dari backend sebelum field-stripping untuk ML
+        const agenusaIds = agenusaRaw.map((r) => r.id);
+        const nusabillIds = nusabillRaw.map((r) => r.id);
 
         // ── Step 2: Siapkan field lengkap sesuai kebutuhan fds_engine.py ──
         const agenusaRecords = agenusaRaw.map((r) => ({
@@ -870,20 +874,29 @@ const ManualReview = () => {
           REFUND_FLAG: Number(r.REFUND_FLAG) || 0,
         }));
 
-        // ── Step 3: Kirim ke ML untuk scoring (paralel) ──
-        const [agenusaRes, nusabillRes] = await Promise.all([
+        // ── Step 3: Kirim ke ML untuk scoring + ambil feedback paralel ──
+        const [agenusaRes, nusabillRes, feedbackRes] = await Promise.all([
           labelHistory("agenusa", agenusaRecords, THRESHOLDS.agenusa),
           labelHistory("nusabill", nusabillRecords, THRESHOLDS.nusabill),
+          fetch(`${BASE_URL}/review/feedback`).catch(() => null),
         ]);
 
-        // ── Step 4: Map hasil ML → format frontend, sort by fraudScore ──
+        // Bangun set ID yang sudah di-review (approved/rejected)
+        const reviewedIds = new Set();
+        if (feedbackRes && feedbackRes.ok) {
+          const fb = await feedbackRes.json();
+          (fb.records || []).forEach((r) => reviewedIds.add(r.transaction_id));
+        }
+
+        // ── Step 4: Map hasil ML → format frontend, filter yg sudah di-review ──
         const allTxns = [
-          ...agenusaRes.results.map((r, i) => mapApiResult(r, "agenusa", i)),
+          ...agenusaRes.results.map((r, i) => mapApiResult(r, "agenusa", i, agenusaIds[i])),
           ...nusabillRes.results.map((r, i) =>
-            mapApiResult(r, "nusabill", i),
+            mapApiResult(r, "nusabill", i, nusabillIds[i]),
           ),
         ]
           .map(normalise)
+          .filter((t) => !reviewedIds.has(t.id))
           .sort((a, b) => b.fraudScore - a.fraudScore);
 
         setTransactions(allTxns);
@@ -901,14 +914,14 @@ const ManualReview = () => {
   }, []);
 
   /* ── Handle review: update state + kirim feedback ke backend ── */
-  const handleReview = useCallback(async (txn, decision, notes) => {
-    // 1. Update state lokal langsung (optimistic update)
+const handleReview = useCallback(async (txn, decision, notes) => {
+    // 1. Optimistic update — update UI langsung tanpa tunggu API
     setTransactions((prev) =>
       prev.map((t) =>
         t.id === txn.id
           ? {
               ...t,
-              status: decision,
+              status:     decision,
               reviewNotes: notes,
               reviewedAt: new Date().toISOString(),
             }
@@ -916,13 +929,20 @@ const ManualReview = () => {
       ),
     );
     setSelectedTxn(null);
-
-    // 2. Kirim feedback ke backend untuk feedback loop retrain
-    //    (fire-and-forget — tidak blokir UI jika gagal)
+ 
+    // 2. Kirim feedback ke backend (feedback loop retrain) — fire-and-forget
     try {
       await submitReview(txn, decision, notes);
     } catch (err) {
-      console.warn("Feedback review tidak terkirim ke backend:", err.message);
+      console.warn("submitReview gagal:", err.message);
+    }
+ 
+    // 3. Catat event ke Alerts Log — fire-and-forget
+    //    Alert muncul di halaman Alerts Log setelah reviewer membuat keputusan.
+    try {
+      await postFraudAlert(txn, decision, notes);
+    } catch (err) {
+      console.warn("postFraudAlert gagal:", err.message);
     }
   }, []);
 

@@ -11,6 +11,7 @@ import "./FraudPatterns.css";
 const ALL_PATTERNS = [
   {
     id: 1,
+    mlKey: "bruteforce_pin_pattern",
     name: "Multiple Failed Logins",
     description:
       "Repeated failed authentication attempts on a single account within a short time window, indicating brute-force or credential stuffing attacks.",
@@ -38,6 +39,7 @@ const ALL_PATTERNS = [
   },
   {
     id: 2,
+    mlKey: "high_amount_spike",
     name: "Unusual Transaction Amount",
     description:
       "Transaction amount significantly deviates (≥3× standard deviation) from the user's historical average, suggesting account takeover or unauthorized use.",
@@ -65,6 +67,7 @@ const ALL_PATTERNS = [
   },
   {
     id: 3,
+    mlKey: "impossible_travel_terminal_switch",
     name: "Location Mismatch",
     description:
       "Transaction originates from a geographic location inconsistent with the user's registered address or recent login history, especially across international borders.",
@@ -92,6 +95,7 @@ const ALL_PATTERNS = [
   },
   {
     id: 4,
+    mlKey: "rapid_retry_declined",
     name: "Rapid Successive Transactions",
     description:
       "Multiple transactions executed in quick succession within a very short time window, characteristic of automated fraud scripts or compromised account exploitation.",
@@ -119,6 +123,7 @@ const ALL_PATTERNS = [
   },
   {
     id: 5,
+    mlKey: null,
     name: "New Device Detected",
     description:
       "Account accessed from a device fingerprint that has never been associated with the user, particularly concerning when combined with high-value transactions.",
@@ -146,6 +151,7 @@ const ALL_PATTERNS = [
   },
   {
     id: 6,
+    mlKey: "midnight_unusual_amount",
     name: "Abnormal Transaction Time",
     description:
       "Transactions occurring at unusual hours inconsistent with the user's established behavioral patterns (e.g., 2–5 AM local time for dormant accounts).",
@@ -173,6 +179,7 @@ const ALL_PATTERNS = [
   },
   {
     id: 7,
+    mlKey: null,
     name: "Blacklisted IP Address",
     description:
       "Transaction or login originating from an IP address that appears on known fraud databases, Tor exit nodes, or previously flagged sources.",
@@ -200,6 +207,7 @@ const ALL_PATTERNS = [
   },
   {
     id: 8,
+    mlKey: "money_mule_destination",
     name: "Account Age Anomaly",
     description:
       "High-value transactions initiated by accounts less than 7 days old — a classic indicator of synthetic identity fraud or money mule accounts.",
@@ -227,6 +235,7 @@ const ALL_PATTERNS = [
   },
   {
     id: 9,
+    mlKey: "refund_abuse_pattern",
     name: "Suspicious Recipient Pattern",
     description:
       "Funds being transferred to accounts with characteristics matching money mule profiles: newly created, infrequently used, or linked to previous fraud reports.",
@@ -283,6 +292,8 @@ const ALL_PATTERNS = [
 
 const FraudPatterns = () => {
   const [loading, setLoading] = useState(true);
+  const [patterns, setPatterns] = useState(ALL_PATTERNS); // ← real data dari ML
+  const [apiError, setApiError] = useState(false);
   const [riskFilter, setRiskFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -290,14 +301,66 @@ const FraudPatterns = () => {
   const [selectedPattern, setSelectedPattern] = useState(null);
   const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'chart'
 
-  /* ── Simulate page load ── */
+  /* ── Fetch pattern stats dari ML backend ── */
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 800);
-    return () => clearTimeout(timer);
+    const fetchPatternStats = async () => {
+      try {
+        setLoading(true);
+        const BASE_URL =
+          process.env.REACT_APP_ML_API_URL || "http://localhost:8000";
+        const res = await fetch(`${BASE_URL}/patterns/stats`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        // Merge occurrences real dari ML ke metadata ALL_PATTERNS
+        const merged = ALL_PATTERNS.map((p) => {
+          const mlPattern = data.patterns.find((mp) => mp.key === p.mlKey);
+          if (!mlPattern) return p;
+          return {
+            ...p,
+            occurrences: mlPattern.occurrences,
+            avgLossIDR: mlPattern.avg_loss_idr,
+            lastUpdated: mlPattern.last_updated,
+          };
+        });
+
+        // Pattern ML yang belum ada di ALL_PATTERNS (pattern baru dari model)
+        const extraPatterns = data.patterns
+          .filter((mp) => !ALL_PATTERNS.some((p) => p.mlKey === mp.key))
+          .map((mp, i) => ({
+            id: 100 + i,
+            mlKey: mp.key,
+            name: mp.name,
+            description: mp.description,
+            category: mp.category,
+            riskLevel: mp.riskLevel,
+            status: "active",
+            occurrences: mp.occurrences,
+            accuracy: mp.accuracy,
+            falsePositiveRate: mp.falsePositiveRate,
+            avgLossIDR: mp.avg_loss_idr,
+            trend: mp.trend,
+            lastUpdated: mp.last_updated,
+            indicators: mp.indicators || [],
+            recommendedActions: mp.recommendedActions || [],
+          }));
+
+        setPatterns([...merged, ...extraPatterns]);
+        setApiError(false);
+      } catch (err) {
+        console.warn("Pattern stats API offline, pakai data statis:", err.message);
+        setApiError(true);
+        setPatterns(ALL_PATTERNS);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPatternStats();
   }, []);
 
   const filtered = useMemo(() => {
-    let result = ALL_PATTERNS.filter((p) => {
+    let result = patterns.filter((p) => {
       if (riskFilter !== "all" && p.riskLevel !== riskFilter) return false;
       if (statusFilter !== "all" && p.status !== statusFilter) return false;
       const q = searchTerm.toLowerCase();
@@ -327,7 +390,7 @@ const FraudPatterns = () => {
     });
 
     return result;
-  }, [riskFilter, statusFilter, searchTerm, sortBy]);
+  }, [riskFilter, statusFilter, searchTerm, sortBy, patterns]);
 
   if (loading) return <PageLoader message="Memuat Fraud Patterns..." />;
 
@@ -371,8 +434,30 @@ const FraudPatterns = () => {
         </div>
       </div>
 
+      {/* API offline banner */}
+      {apiError && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: ".5rem",
+            padding: ".5rem 1rem",
+            marginBottom: "1rem",
+            background: "#fef3c7",
+            border: "1px solid #fde68a",
+            borderRadius: "8px",
+            fontSize: ".8rem",
+            color: "#92400e",
+            fontWeight: 600,
+          }}
+        >
+          <i className="bi bi-exclamation-triangle-fill"></i>
+          ML API offline — menampilkan data statis
+        </div>
+      )}
+
       {/* Stats */}
-      <PatternStats patterns={ALL_PATTERNS} />
+      <PatternStats patterns={patterns} />
 
       {/* Filter */}
       <PatternFilter
@@ -390,7 +475,7 @@ const FraudPatterns = () => {
       {/* Content */}
       {viewMode === "chart" ? (
         <PatternTrendChart
-          patterns={filtered.length > 0 ? filtered : ALL_PATTERNS}
+          patterns={filtered.length > 0 ? filtered : patterns}
         />
       ) : (
         <>

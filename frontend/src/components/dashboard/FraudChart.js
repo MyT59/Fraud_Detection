@@ -1,20 +1,13 @@
 import React from 'react';
 import { Doughnut } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend
-} from 'chart.js';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import './ChartCard.css';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-const FraudChart = () => {
-  const total = 1290;
-  const fraudCount = 56;
-  const legitimateCount = total - fraudCount;
-  const fraudPercentage = ((fraudCount / total) * 100).toFixed(1);
+const FraudChart = ({ total = 1290, fraudCount = 56 }) => {
+  const legitimateCount  = total - fraudCount;
+  const fraudPercentage  = total > 0 ? ((fraudCount / total) * 100).toFixed(1) : "0.0";
 
   const data = {
     labels: ['Legitimate', 'Fraudulent'],
@@ -37,10 +30,7 @@ const FraudChart = () => {
         position: 'bottom',
         labels: {
           padding: 20,
-          font: {
-            size: 13,
-            weight: '600'
-          },
+          font: { size: 13, weight: '600' },
           color: '#525252',
           usePointStyle: true,
           pointStyle: 'circle',
@@ -49,22 +39,15 @@ const FraudChart = () => {
       tooltip: {
         backgroundColor: '#262626',
         padding: 12,
-        titleFont: {
-          size: 13,
-          weight: '600'
-        },
-        bodyFont: {
-          size: 14,
-          weight: '700'
-        },
+        titleFont: { size: 13, weight: '600' },
+        bodyFont:  { size: 14, weight: '700' },
         displayColors: true,
         cornerRadius: 6,
         callbacks: {
-          label: function(context) {
-            const label = context.label || '';
-            const value = context.parsed || 0;
-            const percentage = ((value / total) * 100).toFixed(1);
-            return `${label}: ${value} (${percentage}%)`;
+          label: (ctx) => {
+            const val = ctx.parsed || 0;
+            const pct = ((val / total) * 100).toFixed(1);
+            return `${ctx.label}: ${val.toLocaleString()} (${pct}%)`;
           }
         }
       }
@@ -85,7 +68,7 @@ const FraudChart = () => {
       </div>
       <div className="chart-container doughnut-chart">
         <div className="doughnut-center-text">
-          <div className="center-value">{total}</div>
+          <div className="center-value">{total.toLocaleString()}</div>
           <div className="center-label">Total</div>
         </div>
         <Doughnut data={data} options={options} />
