@@ -1,11 +1,11 @@
 {
-  "generated_at_utc": "2026-02-25T09:52:16.531365+00:00",
+  "generated_at_utc": "2026-03-11T06:55:11.251176+00:00",
   "notes": "Evaluasi isolation memakai dataset berlabel untuk benchmarking offline.",
   "domains": {
     "agenusa": {
       "dataset": "backend\\agenusa_pattern_dataset.csv",
       "rows": 5000,
-      "fraud_rate": 0.0846,
+      "fraud_rate": 0.0934,
       "isolation_meta": {
         "contamination": 0.08,
         "fit_anomaly_rate": 0.08,
@@ -16,44 +16,44 @@
       },
       "evaluation": {
         "default_model_boundary": {
-          "accuracy": 0.955,
-          "precision_fraud": 0.7475,
-          "recall_fraud": 0.706856,
-          "f1_fraud": 0.72661,
-          "roc_auc": 0.939654,
+          "accuracy": 0.9602,
+          "precision_fraud": 0.826829,
+          "recall_fraud": 0.72591,
+          "f1_fraud": 0.77309,
+          "roc_auc": 0.946098,
           "confusion_matrix": {
-            "tn": 4476,
-            "fp": 101,
-            "fn": 124,
-            "tp": 299
+            "tn": 4462,
+            "fp": 71,
+            "fn": 128,
+            "tp": 339
           }
         },
         "review_threshold_boundary": {
-          "accuracy": 0.947,
-          "precision_fraud": 0.658,
-          "recall_fraud": 0.777778,
-          "f1_fraud": 0.712893,
-          "roc_auc": 0.939654,
+          "accuracy": 0.9562,
+          "precision_fraud": 0.756198,
+          "recall_fraud": 0.783726,
+          "f1_fraud": 0.769716,
+          "roc_auc": 0.946098,
           "confusion_matrix": {
-            "tn": 4406,
-            "fp": 171,
-            "fn": 94,
-            "tp": 329
+            "tn": 4415,
+            "fp": 118,
+            "fn": 101,
+            "tp": 366
           }
         },
         "tuned_threshold_on_eval_data": {
-          "threshold": -0.003933,
+          "threshold": -0.00322,
           "metrics": {
-            "accuracy": 0.9104,
-            "precision_fraud": 0.483221,
-            "recall_fraud": 0.851064,
-            "f1_fraud": 0.616438,
-            "roc_auc": 0.939654,
+            "accuracy": 0.9362,
+            "precision_fraud": 0.614551,
+            "recall_fraud": 0.850107,
+            "f1_fraud": 0.713387,
+            "roc_auc": 0.946098,
             "confusion_matrix": {
-              "tn": 4192,
-              "fp": 385,
-              "fn": 63,
-              "tp": 360
+              "tn": 4284,
+              "fp": 249,
+              "fn": 70,
+              "tp": 397
             }
           },
           "selection_notes": "max F1 with recall >= 0.85 if available"
@@ -63,61 +63,61 @@
         "false_positive_top5": [
           {
             "keys": {
-              "ACCOUNT_NUMBER": "ACCT100100",
-              "TIMESTAMP_DB": "2026-01-12 04:13:00",
-              "AMOUNT": 69918,
-              "DEST_ACCOUNT_NUMBER": "DST300123"
+              "ACCOUNT_NUMBER": "ACCT100295",
+              "TIMESTAMP_DB": "2026-01-19 04:41:00",
+              "AMOUNT": 94290,
+              "DEST_ACCOUNT_NUMBER": "DST300030"
             },
-            "decision_score": -0.011584,
-            "anomaly_score": 0.011584,
+            "decision_score": -0.009871,
+            "anomaly_score": 0.009871,
             "actual_is_fraud": 0,
             "predicted_is_fraud_review_th": 1
           },
           {
             "keys": {
-              "ACCOUNT_NUMBER": "ACCT100265",
-              "TIMESTAMP_DB": "2026-01-06 18:10:00",
-              "AMOUNT": 183207,
-              "DEST_ACCOUNT_NUMBER": "DST300084"
+              "ACCOUNT_NUMBER": "ACCT100056",
+              "TIMESTAMP_DB": "2026-01-05 02:50:00",
+              "AMOUNT": 151720,
+              "DEST_ACCOUNT_NUMBER": "DST300111"
             },
-            "decision_score": -0.007556,
-            "anomaly_score": 0.007556,
+            "decision_score": -0.009397,
+            "anomaly_score": 0.009397,
             "actual_is_fraud": 0,
             "predicted_is_fraud_review_th": 1
           },
           {
             "keys": {
-              "ACCOUNT_NUMBER": "ACCT100243",
-              "TIMESTAMP_DB": "2026-01-11 00:59:00",
-              "AMOUNT": 62290,
-              "DEST_ACCOUNT_NUMBER": "DST300006"
-            },
-            "decision_score": -0.007376,
-            "anomaly_score": 0.007376,
-            "actual_is_fraud": 0,
-            "predicted_is_fraud_review_th": 1
-          },
-          {
-            "keys": {
-              "ACCOUNT_NUMBER": "ACCT100079",
-              "TIMESTAMP_DB": "2026-01-17 03:46:00",
-              "AMOUNT": 204615,
-              "DEST_ACCOUNT_NUMBER": "DST300010"
-            },
-            "decision_score": -0.006955,
-            "anomaly_score": 0.006955,
-            "actual_is_fraud": 0,
-            "predicted_is_fraud_review_th": 1
-          },
-          {
-            "keys": {
-              "ACCOUNT_NUMBER": "ACCT100210",
-              "TIMESTAMP_DB": "2026-01-11 01:04:00",
-              "AMOUNT": 236687,
+              "ACCOUNT_NUMBER": "ACCT100141",
+              "TIMESTAMP_DB": "2026-01-18 04:56:00",
+              "AMOUNT": 87786,
               "DEST_ACCOUNT_NUMBER": "DST300034"
             },
-            "decision_score": -0.006571,
-            "anomaly_score": 0.006571,
+            "decision_score": -0.006949,
+            "anomaly_score": 0.006949,
+            "actual_is_fraud": 0,
+            "predicted_is_fraud_review_th": 1
+          },
+          {
+            "keys": {
+              "ACCOUNT_NUMBER": "ACCT100085",
+              "TIMESTAMP_DB": "2026-01-19 03:59:00",
+              "AMOUNT": 190142,
+              "DEST_ACCOUNT_NUMBER": "DST300010"
+            },
+            "decision_score": -0.00688,
+            "anomaly_score": 0.00688,
+            "actual_is_fraud": 0,
+            "predicted_is_fraud_review_th": 1
+          },
+          {
+            "keys": {
+              "ACCOUNT_NUMBER": "ACCT100068",
+              "TIMESTAMP_DB": "2026-01-19 09:33:00",
+              "AMOUNT": 155560,
+              "DEST_ACCOUNT_NUMBER": "DST300010"
+            },
+            "decision_score": -0.006708,
+            "anomaly_score": 0.006708,
             "actual_is_fraud": 0,
             "predicted_is_fraud_review_th": 1
           }
@@ -125,61 +125,61 @@
         "false_negative_top5": [
           {
             "keys": {
-              "ACCOUNT_NUMBER": "ACCT100278",
-              "TIMESTAMP_DB": "2026-01-07 04:29:00",
-              "AMOUNT": 529217,
-              "DEST_ACCOUNT_NUMBER": "DST300058"
+              "ACCOUNT_NUMBER": "ACCT100012",
+              "TIMESTAMP_DB": "2026-01-10 02:50:00",
+              "AMOUNT": 233922,
+              "DEST_ACCOUNT_NUMBER": "DST300047"
             },
-            "decision_score": 0.016195,
-            "anomaly_score": -0.016195,
+            "decision_score": 0.016953,
+            "anomaly_score": -0.016953,
             "actual_is_fraud": 1,
             "predicted_is_fraud_review_th": 0
           },
           {
             "keys": {
-              "ACCOUNT_NUMBER": "ACCT100278",
-              "TIMESTAMP_DB": "2026-01-07 02:26:00",
-              "AMOUNT": 373048,
-              "DEST_ACCOUNT_NUMBER": "DST300069"
+              "ACCOUNT_NUMBER": "ACCT100039",
+              "TIMESTAMP_DB": "2026-01-18 11:14:00",
+              "AMOUNT": 212117,
+              "DEST_ACCOUNT_NUMBER": "DST300126"
             },
-            "decision_score": 0.016104,
-            "anomaly_score": -0.016104,
+            "decision_score": 0.016368,
+            "anomaly_score": -0.016368,
             "actual_is_fraud": 1,
             "predicted_is_fraud_review_th": 0
           },
           {
             "keys": {
-              "ACCOUNT_NUMBER": "ACCT100236",
-              "TIMESTAMP_DB": "2026-01-13 01:18:00",
-              "AMOUNT": 340712,
-              "DEST_ACCOUNT_NUMBER": "DST300071"
+              "ACCOUNT_NUMBER": "ACCT100269",
+              "TIMESTAMP_DB": "2026-01-09 04:50:00",
+              "AMOUNT": 92767,
+              "DEST_ACCOUNT_NUMBER": "DST300186"
             },
-            "decision_score": 0.015578,
-            "anomaly_score": -0.015578,
+            "decision_score": 0.016128,
+            "anomaly_score": -0.016128,
             "actual_is_fraud": 1,
             "predicted_is_fraud_review_th": 0
           },
           {
             "keys": {
-              "ACCOUNT_NUMBER": "ACCT100155",
-              "TIMESTAMP_DB": "2026-01-09 03:58:00",
-              "AMOUNT": 273756,
-              "DEST_ACCOUNT_NUMBER": "DST300045"
+              "ACCOUNT_NUMBER": "ACCT100207",
+              "TIMESTAMP_DB": "2026-01-19 01:14:00",
+              "AMOUNT": 411189,
+              "DEST_ACCOUNT_NUMBER": "DST300160"
             },
-            "decision_score": 0.014659,
-            "anomaly_score": -0.014659,
+            "decision_score": 0.014473,
+            "anomaly_score": -0.014473,
             "actual_is_fraud": 1,
             "predicted_is_fraud_review_th": 0
           },
           {
             "keys": {
-              "ACCOUNT_NUMBER": "ACCT100074",
-              "TIMESTAMP_DB": "2026-01-05 21:52:00",
-              "AMOUNT": 171879,
-              "DEST_ACCOUNT_NUMBER": "DST300065"
+              "ACCOUNT_NUMBER": "ACCT100166",
+              "TIMESTAMP_DB": "2026-01-20 04:11:00",
+              "AMOUNT": 184311,
+              "DEST_ACCOUNT_NUMBER": "DST300135"
             },
-            "decision_score": 0.013727,
-            "anomaly_score": -0.013727,
+            "decision_score": 0.014378,
+            "anomaly_score": -0.014378,
             "actual_is_fraud": 1,
             "predicted_is_fraud_review_th": 0
           }
@@ -189,7 +189,7 @@
     "nusabill": {
       "dataset": "backend\\nusabill_pattern_dataset.csv",
       "rows": 5000,
-      "fraud_rate": 0.081,
+      "fraud_rate": 0.078,
       "isolation_meta": {
         "contamination": 0.1,
         "fit_anomaly_rate": 0.1,
@@ -200,44 +200,44 @@
       },
       "evaluation": {
         "default_model_boundary": {
-          "accuracy": 0.927,
-          "precision_fraud": 0.54,
-          "recall_fraud": 0.666667,
-          "f1_fraud": 0.596685,
-          "roc_auc": 0.964025,
+          "accuracy": 0.9216,
+          "precision_fraud": 0.498047,
+          "recall_fraud": 0.653846,
+          "f1_fraud": 0.56541,
+          "roc_auc": 0.958917,
           "confusion_matrix": {
-            "tn": 4365,
-            "fp": 230,
+            "tn": 4353,
+            "fp": 257,
             "fn": 135,
-            "tp": 270
+            "tp": 255
           }
         },
         "review_threshold_boundary": {
-          "accuracy": 0.927,
-          "precision_fraud": 0.54,
-          "recall_fraud": 0.666667,
-          "f1_fraud": 0.596685,
-          "roc_auc": 0.964025,
+          "accuracy": 0.9216,
+          "precision_fraud": 0.498047,
+          "recall_fraud": 0.653846,
+          "f1_fraud": 0.56541,
+          "roc_auc": 0.958917,
           "confusion_matrix": {
-            "tn": 4365,
-            "fp": 230,
+            "tn": 4353,
+            "fp": 257,
             "fn": 135,
-            "tp": 270
+            "tp": 255
           }
         },
         "tuned_threshold_on_eval_data": {
-          "threshold": -0.014794,
+          "threshold": -0.01808,
           "metrics": {
-            "accuracy": 0.9144,
-            "precision_fraud": 0.484138,
-            "recall_fraud": 0.866667,
-            "f1_fraud": 0.621239,
-            "roc_auc": 0.964025,
+            "accuracy": 0.909,
+            "precision_fraud": 0.456376,
+            "recall_fraud": 0.871795,
+            "f1_fraud": 0.599119,
+            "roc_auc": 0.958917,
             "confusion_matrix": {
-              "tn": 4221,
-              "fp": 374,
-              "fn": 54,
-              "tp": 351
+              "tn": 4205,
+              "fp": 405,
+              "fn": 50,
+              "tp": 340
             }
           },
           "selection_notes": "max F1 with recall >= 0.85 if available"
@@ -247,23 +247,36 @@
         "false_positive_top5": [
           {
             "keys": {
-              "CUSTOMER_ID": "CUST10025",
-              "BILL_ID": "BILL463624",
-              "BILL_AMOUNT": 333506,
-              "PAYMENT_AMOUNT": 333506,
+              "CUSTOMER_ID": "CUST10125",
+              "BILL_ID": "BILL586509",
+              "BILL_AMOUNT": 257003,
+              "PAYMENT_AMOUNT": 257003,
               "CHANNEL": "Web"
             },
-            "decision_score": -0.076041,
-            "anomaly_score": 0.076041,
+            "decision_score": -0.074981,
+            "anomaly_score": 0.074981,
             "actual_is_fraud": 0,
             "predicted_is_fraud_review_th": 1
           },
           {
             "keys": {
-              "CUSTOMER_ID": "CUST10607",
-              "BILL_ID": "BILL314370",
-              "BILL_AMOUNT": 195355,
-              "PAYMENT_AMOUNT": 195355,
+              "CUSTOMER_ID": "CUST10154",
+              "BILL_ID": "BILL918352",
+              "BILL_AMOUNT": 146924,
+              "PAYMENT_AMOUNT": 146924,
+              "CHANNEL": "Web"
+            },
+            "decision_score": -0.071522,
+            "anomaly_score": 0.071522,
+            "actual_is_fraud": 0,
+            "predicted_is_fraud_review_th": 1
+          },
+          {
+            "keys": {
+              "CUSTOMER_ID": "CUST10300",
+              "BILL_ID": "BILL651073",
+              "BILL_AMOUNT": 207505,
+              "PAYMENT_AMOUNT": 207505,
               "CHANNEL": "Web"
             },
             "decision_score": -0.069967,
@@ -273,40 +286,27 @@
           },
           {
             "keys": {
-              "CUSTOMER_ID": "CUST10062",
-              "BILL_ID": "BILL832355",
-              "BILL_AMOUNT": 312378,
-              "PAYMENT_AMOUNT": 312378,
-              "CHANNEL": "Mobile"
+              "CUSTOMER_ID": "CUST10363",
+              "BILL_ID": "BILL529178",
+              "BILL_AMOUNT": 376658,
+              "PAYMENT_AMOUNT": 376658,
+              "CHANNEL": "Web"
             },
-            "decision_score": -0.066906,
-            "anomaly_score": 0.066906,
+            "decision_score": -0.069967,
+            "anomaly_score": 0.069967,
             "actual_is_fraud": 0,
             "predicted_is_fraud_review_th": 1
           },
           {
             "keys": {
-              "CUSTOMER_ID": "CUST10119",
-              "BILL_ID": "BILL547271",
-              "BILL_AMOUNT": 278581,
-              "PAYMENT_AMOUNT": 278581,
+              "CUSTOMER_ID": "CUST10270",
+              "BILL_ID": "BILL644953",
+              "BILL_AMOUNT": 256786,
+              "PAYMENT_AMOUNT": 256786,
               "CHANNEL": "Mobile"
             },
-            "decision_score": -0.066213,
-            "anomaly_score": 0.066213,
-            "actual_is_fraud": 0,
-            "predicted_is_fraud_review_th": 1
-          },
-          {
-            "keys": {
-              "CUSTOMER_ID": "CUST10106",
-              "BILL_ID": "BILL929369",
-              "BILL_AMOUNT": 231535,
-              "PAYMENT_AMOUNT": 231535,
-              "CHANNEL": "API"
-            },
-            "decision_score": -0.06578,
-            "anomaly_score": 0.06578,
+            "decision_score": -0.069025,
+            "anomaly_score": 0.069025,
             "actual_is_fraud": 0,
             "predicted_is_fraud_review_th": 1
           }
@@ -314,66 +314,66 @@
         "false_negative_top5": [
           {
             "keys": {
-              "CUSTOMER_ID": "CUST10473",
-              "BILL_ID": "BILL558983",
-              "BILL_AMOUNT": 142062,
-              "PAYMENT_AMOUNT": 142062,
-              "CHANNEL": "Mobile"
-            },
-            "decision_score": 0.086448,
-            "anomaly_score": -0.086448,
-            "actual_is_fraud": 1,
-            "predicted_is_fraud_review_th": 0
-          },
-          {
-            "keys": {
-              "CUSTOMER_ID": "CUST10537",
-              "BILL_ID": "BILL214216",
-              "BILL_AMOUNT": 313828,
-              "PAYMENT_AMOUNT": 313828,
-              "CHANNEL": "API"
-            },
-            "decision_score": 0.083695,
-            "anomaly_score": -0.083695,
-            "actual_is_fraud": 1,
-            "predicted_is_fraud_review_th": 0
-          },
-          {
-            "keys": {
-              "CUSTOMER_ID": "CUST10410",
-              "BILL_ID": "BILL746695",
-              "BILL_AMOUNT": 224918,
-              "PAYMENT_AMOUNT": 224918,
-              "CHANNEL": "Mobile"
-            },
-            "decision_score": 0.076316,
-            "anomaly_score": -0.076316,
-            "actual_is_fraud": 1,
-            "predicted_is_fraud_review_th": 0
-          },
-          {
-            "keys": {
-              "CUSTOMER_ID": "CUST10577",
-              "BILL_ID": "BILL552035",
-              "BILL_AMOUNT": 390170,
-              "PAYMENT_AMOUNT": 390170,
+              "CUSTOMER_ID": "CUST10315",
+              "BILL_ID": "BILL926444",
+              "BILL_AMOUNT": 102741,
+              "PAYMENT_AMOUNT": 102741,
               "CHANNEL": "Web"
             },
-            "decision_score": 0.070779,
-            "anomaly_score": -0.070779,
+            "decision_score": 0.086163,
+            "anomaly_score": -0.086163,
             "actual_is_fraud": 1,
             "predicted_is_fraud_review_th": 0
           },
           {
             "keys": {
-              "CUSTOMER_ID": "CUST10178",
-              "BILL_ID": "BILL531860",
-              "BILL_AMOUNT": 102909,
-              "PAYMENT_AMOUNT": 102909,
+              "CUSTOMER_ID": "CUST10409",
+              "BILL_ID": "BILL686324",
+              "BILL_AMOUNT": 373675,
+              "PAYMENT_AMOUNT": 373675,
+              "CHANNEL": "API"
+            },
+            "decision_score": 0.085145,
+            "anomaly_score": -0.085145,
+            "actual_is_fraud": 1,
+            "predicted_is_fraud_review_th": 0
+          },
+          {
+            "keys": {
+              "CUSTOMER_ID": "CUST10484",
+              "BILL_ID": "BILL460277",
+              "BILL_AMOUNT": 392556,
+              "PAYMENT_AMOUNT": 392556,
               "CHANNEL": "Mobile"
             },
-            "decision_score": 0.068652,
-            "anomaly_score": -0.068652,
+            "decision_score": 0.083563,
+            "anomaly_score": -0.083563,
+            "actual_is_fraud": 1,
+            "predicted_is_fraud_review_th": 0
+          },
+          {
+            "keys": {
+              "CUSTOMER_ID": "CUST10231",
+              "BILL_ID": "BILL759369",
+              "BILL_AMOUNT": 109317,
+              "PAYMENT_AMOUNT": 109317,
+              "CHANNEL": "Mobile"
+            },
+            "decision_score": 0.081634,
+            "anomaly_score": -0.081634,
+            "actual_is_fraud": 1,
+            "predicted_is_fraud_review_th": 0
+          },
+          {
+            "keys": {
+              "CUSTOMER_ID": "CUST10169",
+              "BILL_ID": "BILL714129",
+              "BILL_AMOUNT": 282389,
+              "PAYMENT_AMOUNT": 124259,
+              "CHANNEL": "Web"
+            },
+            "decision_score": 0.079751,
+            "anomaly_score": -0.079751,
             "actual_is_fraud": 1,
             "predicted_is_fraud_review_th": 0
           }
