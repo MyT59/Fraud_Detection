@@ -1,14 +1,12 @@
-/* ─── Review Stats Container ─────────────────────────────── */
 .review-stats-container {
   background: white;
   border-radius: 14px;
   padding: 1.5rem;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
   margin-bottom: 1.5rem;
   border: 1px solid #f0f0f0;
 }
 
-/* ─── Header ─────────────────────────────────────────────── */
 .stats-header {
   display: flex;
   justify-content: space-between;
@@ -17,7 +15,9 @@
   gap: 1rem;
 }
 
-.header-content { flex: 1; }
+.header-content {
+  flex: 1;
+}
 
 .stats-title {
   font-size: 1rem;
@@ -29,7 +29,10 @@
   gap: 0.45rem;
 }
 
-.stats-title i { color: #6366f1; font-size: 1.05rem; }
+.stats-title i {
+  color: #6366f1;
+  font-size: 1.05rem;
+}
 
 .stats-subtitle {
   font-size: 0.8rem;
@@ -37,7 +40,6 @@
   margin: 0;
 }
 
-/* ─── Time Filter ────────────────────────────────────────── */
 .time-filter {
   display: flex;
   gap: 2px;
@@ -59,15 +61,16 @@
   letter-spacing: 0.01em;
 }
 
-.time-btn:hover { color: #374151; }
+.time-btn:hover {
+  color: #374151;
+}
 
 .time-btn.active {
   background: white;
   color: #6366f1;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-/* ─── Stats Grid ─────────────────────────────────────────── */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -75,22 +78,22 @@
   margin-bottom: 1.25rem;
 }
 
-/* ─── Stat Card ──────────────────────────────────────────── */
 .stat-box {
   border-radius: 12px;
   padding: 1.1rem 1.1rem 1rem;
   border: 1.5px solid transparent;
   position: relative;
   overflow: hidden;
-  transition: transform 0.18s, box-shadow 0.18s;
+  transition:
+    transform 0.18s,
+    box-shadow 0.18s;
 }
 
 .stat-box:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
 }
 
-/* Color Variants */
 .stat-box.stat-warning {
   background: linear-gradient(145deg, #fffbeb, #fef3c7);
   border-color: #fde68a;
@@ -106,7 +109,6 @@
   border-color: #fecaca;
 }
 
-/* Top row: icon + trend badge */
 .stat-top-row {
   display: flex;
   justify-content: space-between;
@@ -114,7 +116,6 @@
   margin-bottom: 0.875rem;
 }
 
-/* Icon */
 .stat-icon {
   width: 40px;
   height: 40px;
@@ -127,11 +128,16 @@
   flex-shrink: 0;
 }
 
-.stat-icon.bg-warning  { background: linear-gradient(135deg, #f59e0b, #d97706); }
-.stat-icon.bg-success  { background: linear-gradient(135deg, #10b981, #059669); }
-.stat-icon.bg-danger   { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.stat-icon.bg-warning {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+.stat-icon.bg-success {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+.stat-icon.bg-danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
 
-/* Trend Badge */
 .stat-trend {
   display: inline-flex;
   align-items: center;
@@ -144,7 +150,9 @@
   white-space: nowrap;
 }
 
-.stat-trend i { font-size: 0.65rem; }
+.stat-trend i {
+  font-size: 0.65rem;
+}
 
 .stat-trend.trend-up {
   background: #fee2e2;
@@ -161,7 +169,6 @@
   color: #9ca3af;
 }
 
-/* Value + Label */
 .stat-content {
   display: flex;
   flex-direction: column;
@@ -192,9 +199,8 @@
   font-weight: 500;
 }
 
-/* Decorative corner accent */
 .stat-box::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: -16px;
   right: -16px;
@@ -204,11 +210,16 @@
   opacity: 0.1;
 }
 
-.stat-box.stat-warning::after { background: #f59e0b; }
-.stat-box.stat-success::after { background: #10b981; }
-.stat-box.stat-danger::after  { background: #ef4444; }
+.stat-box.stat-warning::after {
+  background: #f59e0b;
+}
+.stat-box.stat-success::after {
+  background: #10b981;
+}
+.stat-box.stat-danger::after {
+  background: #ef4444;
+}
 
-/* ─── Progress Section ───────────────────────────────────── */
 .progress-section {
   background: #f9fafb;
   border-radius: 10px;
@@ -235,7 +246,6 @@
   color: #9ca3af;
 }
 
-/* Track */
 .progress-bar {
   height: 8px;
   background: #e5e7eb;
@@ -250,10 +260,13 @@
   transition: width 0.5s ease;
 }
 
-.progress-fill.approved { background: #10b981; }
-.progress-fill.rejected { background: #ef4444; }
+.progress-fill.approved {
+  background: #10b981;
+}
+.progress-fill.rejected {
+  background: #ef4444;
+}
 
-/* Legend */
 .progress-legend {
   display: flex;
   gap: 1.25rem;
@@ -276,31 +289,53 @@
   flex-shrink: 0;
 }
 
-.legend-dot.approved { background: #10b981; }
-.legend-dot.rejected { background: #ef4444; }
-.legend-dot.pending  { background: #f59e0b; }
+.legend-dot.approved {
+  background: #10b981;
+}
+.legend-dot.rejected {
+  background: #ef4444;
+}
+.legend-dot.pending {
+  background: #f59e0b;
+}
 
-/* ─── Responsive ─────────────────────────────────────────── */
 @media (max-width: 1024px) {
-  .stats-grid { grid-template-columns: repeat(3, 1fr); }
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 @media (max-width: 768px) {
-  .stats-grid { grid-template-columns: 1fr; }
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
 
   .stats-header {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .time-filter { justify-content: stretch; }
-  .time-btn    { flex: 1; text-align: center; }
+  .time-filter {
+    justify-content: stretch;
+  }
+  .time-btn {
+    flex: 1;
+    text-align: center;
+  }
 
-  .stat-value { font-size: 1.75rem; }
+  .stat-value {
+    font-size: 1.75rem;
+  }
 }
 
 @media (max-width: 576px) {
-  .stats-grid  { grid-template-columns: 1fr; }
-  .stat-box    { padding: 1rem; }
-  .stat-value  { font-size: 1.5rem; }
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .stat-box {
+    padding: 1rem;
+  }
+  .stat-value {
+    font-size: 1.5rem;
+  }
 }

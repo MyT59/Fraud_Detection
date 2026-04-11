@@ -40,13 +40,11 @@
 .manual-review-page {
   font-family: "IBM Plex Sans", sans-serif;
   padding: 2rem;
-  max-width: 1440px;
-  margin: 0 auto;
+  width: 100%;
   background: var(--page-bg);
   min-height: 100vh;
 }
 
-/* ── Header ── */
 .review-header {
   margin-bottom: 1.75rem;
 }
@@ -62,7 +60,6 @@
   font-size: 0.9rem;
 }
 
-/* ── Section wrapper ── */
 .review-section {
   background: var(--surface);
   border-radius: var(--radius);
@@ -71,7 +68,7 @@
   overflow: visible;
   margin-bottom: 1.5rem;
 }
-/* Restore rounded corners on first/last children */
+
 .review-section > .section-header:first-child {
   border-radius: var(--radius) var(--radius) 0 0;
 }
@@ -109,7 +106,93 @@
   color: var(--text-muted);
 }
 
-/* TRANSACTION TABLE */
+.section-count-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.section-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 280px;
+}
+
+.section-search-icon {
+  position: absolute;
+  left: 0.75rem;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  pointer-events: none;
+  z-index: 1;
+  transition: color 0.2s;
+}
+
+.section-search-box:focus-within .section-search-icon {
+  color: #2563eb;
+}
+
+.section-search-input {
+  width: 100%;
+  padding: 0.5rem 2.2rem 0.5rem 2.2rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 0.82rem;
+  color: #1e293b;
+  background: #f8fafc;
+  outline: none;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
+}
+
+.section-search-input::placeholder {
+  color: #b0b7c3;
+  font-size: 0.8rem;
+}
+
+.section-search-input:focus {
+  border-color: #2563eb;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.section-search-clear {
+  position: absolute;
+  right: 0.5rem;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 0.8rem;
+  padding: 0;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.section-search-clear:hover {
+  background: #2563eb;
+  color: #fff;
+}
+
 .txn-table-wrapper {
   overflow-x: auto;
 }
@@ -182,7 +265,6 @@
   text-align: center;
 }
 
-/* Checkbox cell */
 .txn-table td.col-check,
 .txn-table th.col-check {
   padding-left: 0.75rem;
@@ -195,7 +277,6 @@
   cursor: pointer;
 }
 
-/* ID cell */
 .cell-id {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.8rem;
@@ -204,7 +285,6 @@
   letter-spacing: 0.03em;
 }
 
-/* User cell */
 .cell-user-name {
   font-weight: 600;
   color: var(--text-primary);
@@ -217,7 +297,6 @@
   margin-top: 0.1rem;
 }
 
-/* Amount cell */
 .cell-amount {
   font-family: "IBM Plex Mono", monospace;
   font-weight: 600;
@@ -225,7 +304,6 @@
   color: var(--text-primary);
 }
 
-/* Date cell */
 .cell-date {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.775rem;
@@ -233,7 +311,6 @@
   white-space: nowrap;
 }
 
-/* Anomaly count pill */
 .anomaly-pill {
   display: inline-flex;
   align-items: center;
@@ -251,7 +328,6 @@
   font-size: 0.7rem;
 }
 
-/* Risk badge */
 .risk-badge {
   display: inline-flex;
   flex-direction: column;
@@ -289,7 +365,6 @@
   color: var(--risk-low);
 }
 
-/* Status badge */
 .status-tag {
   display: inline-flex;
   align-items: center;
@@ -321,7 +396,6 @@
   font-size: 0.7rem;
 }
 
-/* Detail button */
 .btn-detail {
   display: inline-flex;
   align-items: center;
@@ -348,7 +422,6 @@
   font-size: 0.8rem;
 }
 
-/* Empty state */
 .txn-empty {
   padding: 4rem 2rem;
   text-align: center;
@@ -364,7 +437,6 @@
   margin: 0;
 }
 
-/* REVIEW HISTORY — AUDIT LOG TABLE */
 .audit-table {
   width: 100%;
   border-collapse: collapse;
@@ -405,7 +477,6 @@
   vertical-align: middle;
 }
 
-/* Audit log: timestamp */
 .audit-ts {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.7rem;
@@ -413,7 +484,6 @@
   white-space: nowrap;
 }
 
-/* Audit log: dot + action */
 .audit-action-cell {
   display: flex;
   align-items: center;
@@ -457,7 +527,6 @@
   color: #3b82f6;
 }
 
-/* Audit txn id */
 .audit-txn-id {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.775rem;
@@ -465,14 +534,12 @@
   color: #2563eb;
 }
 
-/* Audit amount */
 .audit-amount {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.775rem;
   color: var(--text-secondary);
 }
 
-/* Audit reviewer */
 .audit-reviewer {
   display: flex;
   align-items: center;
@@ -497,7 +564,6 @@
   color: var(--text-secondary);
 }
 
-/* Audit notes truncated */
 .audit-notes {
   max-width: 200px;
   overflow: hidden;
@@ -508,7 +574,6 @@
   font-size: 0.775rem;
 }
 
-/* View detail button */
 .btn-audit-detail {
   background: transparent;
   border: 1px solid var(--border-2);
@@ -530,7 +595,6 @@
   background: var(--row-hover);
 }
 
-/* Audit footer */
 .audit-footer {
   display: flex;
   align-items: center;
@@ -564,7 +628,6 @@
   color: #3b82f6;
 }
 
-/* MODAL — TRANSACTION DETAIL */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -666,7 +729,6 @@
   border-radius: 3px;
 }
 
-/* Modal layout: 2 cols on desktop */
 .modal-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -737,7 +799,6 @@
   color: var(--text-primary);
 }
 
-/* Risk score block */
 .modal-risk-block {
   background: linear-gradient(135deg, #fff7ed 0%, #fef2f2 100%);
   border: 1px solid #fde68a;
@@ -783,7 +844,6 @@
   text-transform: uppercase;
 }
 
-/* Anomalies block */
 .modal-anomaly-list {
   list-style: none;
   margin: 0;
@@ -810,7 +870,6 @@
   flex-shrink: 0;
 }
 
-/* Decision section */
 .modal-decision {
   border-top: 2px solid var(--border);
   padding-top: 1.25rem;
@@ -861,7 +920,6 @@
   background: #fee2e2;
 }
 
-/* Confirm section inside modal */
 .modal-confirm-section {
   display: flex;
   flex-direction: column;
@@ -944,7 +1002,6 @@
   background: #b91c1c;
 }
 
-/* Already reviewed state */
 .modal-reviewed-state {
   text-align: center;
   padding: 2rem 1rem;
@@ -965,7 +1022,6 @@
   margin: 0;
 }
 
-/* ── Audit Detail Modal (history) ── */
 .audit-modal {
   max-width: 540px;
 }
@@ -1066,7 +1122,6 @@
   line-height: 1.5;
 }
 
-/* ── FraudInsights in modal — compact ── */
 .modal-insights-section {
   border-top: 1px solid var(--border);
   margin-top: 1.25rem;
@@ -1087,7 +1142,6 @@
   color: #a855f7;
 }
 
-/* ── Responsive ── */
 @media (max-width: 900px) {
   .modal-grid {
     grid-template-columns: 1fr;
@@ -1129,7 +1183,7 @@
     display: none;
   }
 }
-/* PAGINATION */
+
 .pagination-bar {
   display: flex;
   align-items: center;
@@ -1215,7 +1269,7 @@
     padding: 0.75rem 1rem;
   }
 }
-/* COLUMN SORT / FILTER HEADERS */
+
 .mr-th-sortable {
   user-select: none;
   white-space: nowrap;
@@ -1262,7 +1316,6 @@
   font-size: 0.75rem;
 }
 
-/* Filter funnel button */
 .mr-th-filter-wrap {
   position: relative;
   flex-shrink: 0;
@@ -1295,7 +1348,6 @@
   color: #fff;
 }
 
-/* Dropdown */
 .mr-col-dropdown {
   position: absolute;
   top: calc(100% + 6px);
@@ -1358,7 +1410,6 @@
   font-size: 0.8rem !important;
 }
 
-/* Clear all filters button in section header */
 .mr-clear-all-btn {
   display: inline-flex;
   align-items: center;
@@ -1382,7 +1433,6 @@
   font-size: 0.8rem;
 }
 
-/* Date picker modal */
 .mr-datepicker-overlay {
   position: fixed;
   inset: 0;
@@ -1506,9 +1556,6 @@
   background: #be123c;
 }
 
-/* FIXED TABLE HEIGHT — GHOST ROWS */
-
-/* Ghost rows: same height as real rows, no content */
 .txn-row-ghost {
   border-bottom: 1px solid var(--border);
   pointer-events: none;
@@ -1521,7 +1568,6 @@
   border-bottom: none;
 }
 
-/* ── Action / Detail column ── */
 .txn-table th.col-action,
 .txn-table td.col-action {
   width: 90px;
@@ -1532,13 +1578,35 @@
   overflow: visible;
 }
 
-/* Detail button */
-.btn-detail {
+.btn-aksi {
   display: inline-flex !important;
   align-items: center;
   gap: 0.4rem;
   padding: 0.4rem 0.9rem;
-  background: var(--text-primary);
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 0.775rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    transform 0.1s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn-aksi:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+.btn-aksi i {
+  font-size: 0.8rem;
+}
+
+.btn-detail {
+  display: inline-flex !important;
   color: white;
   border: none;
   border-radius: var(--radius-sm);

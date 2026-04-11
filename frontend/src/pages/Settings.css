@@ -1,11 +1,8 @@
-/* Settings Page Styling */
-
 .settings-page {
   background: #fafafa;
   min-height: calc(100vh - 64px);
 }
 
-/* Page Header */
 .page-header {
   margin-bottom: 2rem;
 }
@@ -27,7 +24,6 @@
   margin: 0;
 }
 
-/* Settings Tabs Card */
 .settings-tabs-card {
   border-radius: 12px;
   border: 1px solid #e5e5e5;
@@ -115,7 +111,6 @@
   font-size: 1rem;
 }
 
-/* Settings Card */
 .settings-card {
   border-radius: 12px;
   border: 1px solid #e5e5e5;
@@ -144,7 +139,6 @@
   padding: 1.5rem;
 }
 
-/* Profile Avatar Section */
 .profile-avatar-section {
   display: flex;
   align-items: center;
@@ -212,7 +206,6 @@
   margin: 0;
 }
 
-/* Form Controls */
 .settings-card .form-label {
   font-weight: 500;
   color: #525252;
@@ -238,7 +231,6 @@
   cursor: not-allowed;
 }
 
-/* Setting Item */
 .setting-item {
   display: flex;
   justify-content: space-between;
@@ -314,7 +306,6 @@
   border-color: #dc2626;
 }
 
-/* Sessions */
 .session-item {
   display: flex;
   justify-content: space-between;
@@ -347,7 +338,6 @@
   margin-bottom: 0.25rem;
 }
 
-/* Modal */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -396,7 +386,6 @@
   gap: 0.5rem;
 }
 
-/* Notification Channels */
 .notification-channels {
   padding: 1rem 0;
 }
@@ -427,7 +416,6 @@
   color: #525252;
 }
 
-/* System Settings */
 .system-setting-item {
   margin-bottom: 1rem;
 }
@@ -506,7 +494,6 @@
   color: #262626;
 }
 
-/* API Settings */
 .api-key-display {
   display: flex;
   gap: 0.5rem;
@@ -570,7 +557,6 @@
   color: #737373;
 }
 
-/* Responsive */
 @media (max-width: 992px) {
   .settings-tabs-card {
     position: relative;
@@ -655,7 +641,7 @@
     width: 100%;
   }
 }
-/* ── Logout Button in Sidebar ── */
+
 .settings-tab-divider {
   height: 1px;
   background: #f0f0f0;
@@ -688,7 +674,6 @@
   color: white !important;
 }
 
-/* ── Logout Confirm Modal ── */
 .logout-modal {
   max-width: 420px;
 }

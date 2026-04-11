@@ -1,7 +1,3 @@
-/* ═══════════════════════════════════════════
-   RETRAIN SCHEDULE — Constants & Helpers
-═══════════════════════════════════════════ */
-
 export const MODELS = [
   "FraudNet v3.2",
   "AnomalyDetector v1.8",
@@ -12,16 +8,23 @@ export const MODELS = [
 ];
 
 export const DAYS_OF_WEEK = [
-  "Monday", "Tuesday", "Wednesday",
-  "Thursday", "Friday", "Saturday", "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
 ];
 
-export const DAYS_OF_MONTH = Array.from({ length: 28 }, (_, i) => String(i + 1));
+export const DAYS_OF_MONTH = Array.from({ length: 28 }, (_, i) =>
+  String(i + 1),
+);
 
 export const FREQUENCIES = [
-  { value: "daily",   label: "Harian",   icon: "bi-arrow-clockwise" },
-  { value: "weekly",  label: "Mingguan", icon: "bi-calendar-week" },
-  { value: "monthly", label: "Bulanan",  icon: "bi-calendar-month" },
+  { value: "daily", label: "Harian", icon: "bi-arrow-clockwise" },
+  { value: "weekly", label: "Mingguan", icon: "bi-calendar-week" },
+  { value: "monthly", label: "Bulanan", icon: "bi-calendar-month" },
 ];
 
 export const INITIAL_SCHEDULES = [
@@ -78,7 +81,8 @@ export const INITIAL_SCHEDULES = [
     status: "active",
     lastRun: "2025-06-14 01:00",
     nextRun: "2025-06-21 01:00",
-    description: "Refresh pattern classifier setiap Jumat untuk deteksi pola baru.",
+    description:
+      "Refresh pattern classifier setiap Jumat untuk deteksi pola baru.",
     createdAt: "2025-05-20",
   },
 ];
@@ -94,8 +98,6 @@ export const EMPTY_FORM = {
   description: "",
 };
 
-/* ── Pure helper functions ── */
-
 export const getFrequencyLabel = (f) =>
   FREQUENCIES.find((x) => x.value === f)?.label ?? f;
 
@@ -105,13 +107,13 @@ export const getFrequencyIcon = (f) =>
 export const getStatusClass = (s) =>
   s === "active" ? "badge--active" : "badge--paused";
 
-export const getStatusLabel = (s) =>
-  s === "active" ? "Aktif" : "Paused";
+export const getStatusLabel = (s) => (s === "active" ? "Aktif" : "Paused");
 
 export const formatScheduleTime = (s) => {
-  if (s.frequency === "daily")   return `Setiap hari, ${s.time}`;
-  if (s.frequency === "weekly")  return `Setiap ${s.dayOfWeek}, ${s.time}`;
-  if (s.frequency === "monthly") return `Tgl ${s.dayOfMonth} setiap bulan, ${s.time}`;
+  if (s.frequency === "daily") return `Setiap hari, ${s.time}`;
+  if (s.frequency === "weekly") return `Setiap ${s.dayOfWeek}, ${s.time}`;
+  if (s.frequency === "monthly")
+    return `Tgl ${s.dayOfMonth} setiap bulan, ${s.time}`;
   return s.time;
 };
 

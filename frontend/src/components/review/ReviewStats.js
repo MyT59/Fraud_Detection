@@ -1,68 +1,68 @@
-import React from 'react';
-import './ReviewStats.css';
+import React from "react";
+import "./ReviewStats.css";
 
 const ReviewStats = ({ stats }) => {
   const calculatePercentage = (value, total) => {
     return total > 0 ? ((value / total) * 100).toFixed(1) : 0;
   };
 
-  const reviewedTotal  = stats.approved + stats.rejected;
-  const approvalRate   = calculatePercentage(stats.approved, reviewedTotal);
-  const rejectionRate  = calculatePercentage(stats.rejected, reviewedTotal);
+  const reviewedTotal = stats.approved + stats.rejected;
+  const approvalRate = calculatePercentage(stats.approved, reviewedTotal);
+  const rejectionRate = calculatePercentage(stats.rejected, reviewedTotal);
 
   const statsData = [
     {
       id: 1,
-      label: 'Total Pending',
+      label: "Total Pending",
       value: stats.pending,
-      icon: 'bi-clock-history',
-      color: 'warning',
+      icon: "bi-clock-history",
+      color: "warning",
       trend: stats.pendingTrend || 0,
-      subtitle: 'Awaiting review',
+      subtitle: "Awaiting review",
     },
     {
       id: 2,
-      label: 'Approved Today',
+      label: "Approved Today",
       value: stats.approvedToday || 0,
-      icon: 'bi-check-circle-fill',
-      color: 'success',
+      icon: "bi-check-circle-fill",
+      color: "success",
       trend: stats.approvedTrend || 0,
       subtitle: `${approvalRate}% approval rate`,
     },
     {
       id: 3,
-      label: 'Rejected Today',
+      label: "Rejected Today",
       value: stats.rejectedToday || 0,
-      icon: 'bi-x-circle-fill',
-      color: 'danger',
+      icon: "bi-x-circle-fill",
+      color: "danger",
       trend: stats.rejectedTrend || 0,
       subtitle: `${rejectionRate}% rejection rate`,
     },
   ];
 
   const getTrendClass = (trend) => {
-    if (trend > 0) return 'trend-up';
-    if (trend < 0) return 'trend-down';
-    return 'trend-neutral';
+    if (trend > 0) return "trend-up";
+    if (trend < 0) return "trend-down";
+    return "trend-neutral";
   };
 
   const getTrendIcon = (trend) => {
-    if (trend > 0) return 'bi-arrow-up';
-    if (trend < 0) return 'bi-arrow-down';
-    return 'bi-dash';
+    if (trend > 0) return "bi-arrow-up";
+    if (trend < 0) return "bi-arrow-down";
+    return "bi-dash";
   };
 
   return (
     <div className="review-stats-container">
-
-      {/* Header */}
       <div className="stats-header">
         <div className="header-content">
           <h3 className="stats-title">
             <i className="bi bi-graph-up"></i>
             Review Performance
           </h3>
-          <p className="stats-subtitle">Today's review metrics and statistics</p>
+          <p className="stats-subtitle">
+            Today's review metrics and statistics
+          </p>
         </div>
         <div className="time-filter">
           <button className="time-btn active">Today</button>
@@ -71,31 +71,24 @@ const ReviewStats = ({ stats }) => {
         </div>
       </div>
 
-      {/* Stat Cards */}
       <div className="stats-grid">
         {statsData.map((stat) => (
           <div key={stat.id} className={`stat-box stat-${stat.color}`}>
-
-            {/* Icon + Trend */}
             <div className="stat-top-row">
               <div className={`stat-icon bg-${stat.color}`}>
                 <i className={`bi ${stat.icon}`}></i>
               </div>
-
             </div>
 
-            {/* Value + Label */}
             <div className="stat-content">
               <span className="stat-value">{stat.value}</span>
               <span className="stat-label">{stat.label}</span>
               <span className="stat-subtitle">{stat.subtitle}</span>
             </div>
-
           </div>
         ))}
       </div>
 
-      {/* Progress Bar */}
       <div className="progress-section">
         <div className="progress-header">
           <span className="progress-label">Review Progress</span>
@@ -106,11 +99,15 @@ const ReviewStats = ({ stats }) => {
         <div className="progress-bar">
           <div
             className="progress-fill approved"
-            style={{ width: `${calculatePercentage(stats.approved, stats.pending + reviewedTotal)}%` }}
+            style={{
+              width: `${calculatePercentage(stats.approved, stats.pending + reviewedTotal)}%`,
+            }}
           />
           <div
             className="progress-fill rejected"
-            style={{ width: `${calculatePercentage(stats.rejected, stats.pending + reviewedTotal)}%` }}
+            style={{
+              width: `${calculatePercentage(stats.rejected, stats.pending + reviewedTotal)}%`,
+            }}
           />
         </div>
         <div className="progress-legend">
@@ -128,7 +125,6 @@ const ReviewStats = ({ stats }) => {
           </span>
         </div>
       </div>
-
     </div>
   );
 };

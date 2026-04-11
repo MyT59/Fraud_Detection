@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 const FilterBar = ({ filters, onFilterChange, onResetFilters }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -9,9 +9,12 @@ const FilterBar = ({ filters, onFilterChange, onResetFilters }) => {
   };
 
   const hasActiveFilters = () =>
-    filters.dateFrom || filters.dateTo ||
-    filters.amountMin || filters.amountMax ||
-    filters.status !== 'all' || filters.service !== 'all';
+    filters.dateFrom ||
+    filters.dateTo ||
+    filters.amountMin ||
+    filters.amountMax ||
+    filters.status !== "all" ||
+    filters.service !== "all";
 
   return (
     <div className="card filter-card mb-4">
@@ -23,36 +26,51 @@ const FilterBar = ({ filters, onFilterChange, onResetFilters }) => {
             <span className="badge bg-primary ms-2">Active</span>
           )}
         </h5>
-        <button className="btn btn-sm btn-link" onClick={() => setIsExpanded(!isExpanded)}>
-          {isExpanded
-            ? <><i className="bi bi-chevron-up"></i> Sembunyikan</>
-            : <><i className="bi bi-chevron-down"></i> Tampilkan</>
-          }
+        <button
+          className="btn btn-sm btn-link"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          {isExpanded ? (
+            <>
+              <i className="bi bi-chevron-up"></i> Sembunyikan
+            </>
+          ) : (
+            <>
+              <i className="bi bi-chevron-down"></i> Tampilkan
+            </>
+          )}
         </button>
       </div>
 
       {isExpanded && (
         <div className="card-body">
           <div className="row g-3">
-
-            {/* Service Filter */}
             <div className="col-md-6">
               <label className="form-label">
                 <i className="bi bi-grid-1x2 me-1"></i>Layanan
               </label>
-              <select className="form-select" name="service" value={filters.service} onChange={handleInputChange}>
+              <select
+                className="form-select"
+                name="service"
+                value={filters.service}
+                onChange={handleInputChange}
+              >
                 <option value="all">Semua Layanan</option>
                 <option value="agenusa">AGENUSA</option>
                 <option value="nusabill">NUSABILL</option>
               </select>
             </div>
 
-            {/* Status Filter */}
             <div className="col-md-6">
               <label className="form-label">
                 <i className="bi bi-flag me-1"></i>Status
               </label>
-              <select className="form-select" name="status" value={filters.status} onChange={handleInputChange}>
+              <select
+                className="form-select"
+                name="status"
+                value={filters.status}
+                onChange={handleInputChange}
+              >
                 <option value="all">Semua Status</option>
                 <option value="pending">⏳ Pending</option>
                 <option value="approved">✓ Approved</option>
@@ -60,46 +78,72 @@ const FilterBar = ({ filters, onFilterChange, onResetFilters }) => {
               </select>
             </div>
 
-            {/* Date Range */}
             <div className="col-md-6">
               <label className="form-label">
                 <i className="bi bi-calendar-range me-1"></i>Tanggal Mulai
               </label>
-              <input type="date" className="form-control" name="dateFrom"
-                value={filters.dateFrom} onChange={handleInputChange} />
+              <input
+                type="date"
+                className="form-control"
+                name="dateFrom"
+                value={filters.dateFrom}
+                onChange={handleInputChange}
+              />
             </div>
             <div className="col-md-6">
               <label className="form-label">
                 <i className="bi bi-calendar-check me-1"></i>Tanggal Akhir
               </label>
-              <input type="date" className="form-control" name="dateTo"
-                value={filters.dateTo} onChange={handleInputChange} />
+              <input
+                type="date"
+                className="form-control"
+                name="dateTo"
+                value={filters.dateTo}
+                onChange={handleInputChange}
+              />
             </div>
 
-            {/* Amount Range */}
             <div className="col-md-6">
               <label className="form-label">
-                <i className="bi bi-currency-dollar me-1"></i>Jumlah Minimal (IDR)
+                <i className="bi bi-currency-dollar me-1"></i>Jumlah Minimal
+                (IDR)
               </label>
-              <input type="number" className="form-control" name="amountMin"
-                placeholder="0" value={filters.amountMin} onChange={handleInputChange} />
+              <input
+                type="number"
+                className="form-control"
+                name="amountMin"
+                placeholder="0"
+                value={filters.amountMin}
+                onChange={handleInputChange}
+              />
             </div>
             <div className="col-md-6">
               <label className="form-label">
-                <i className="bi bi-currency-dollar me-1"></i>Jumlah Maksimal (IDR)
+                <i className="bi bi-currency-dollar me-1"></i>Jumlah Maksimal
+                (IDR)
               </label>
-              <input type="number" className="form-control" name="amountMax"
-                placeholder="1000000000" value={filters.amountMax} onChange={handleInputChange} />
+              <input
+                type="number"
+                className="form-control"
+                name="amountMax"
+                placeholder="1000000000"
+                value={filters.amountMax}
+                onChange={handleInputChange}
+              />
             </div>
 
-            {/* Actions */}
             <div className="col-12">
               <div className="d-flex gap-2 align-items-center">
-                <button className="btn btn-outline-secondary" onClick={onResetFilters} disabled={!hasActiveFilters()}>
-                  <i className="bi bi-arrow-counterclockwise me-1"></i>Reset Filter
+                <button
+                  className="btn btn-outline-secondary"
+                  onClick={onResetFilters}
+                  disabled={!hasActiveFilters()}
+                >
+                  <i className="bi bi-arrow-counterclockwise me-1"></i>Reset
+                  Filter
                 </button>
                 <span className="text-muted small ms-auto">
-                  Filter aktif: {hasActiveFilters() ? 'Ya' : 'Tidak'}
+                  Filter aktif: {hasActiveFilters() ? "Ya" : "Tidak"}
                 </span>
               </div>
             </div>

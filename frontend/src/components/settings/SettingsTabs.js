@@ -1,22 +1,47 @@
-import React from 'react';
+import React from "react";
 
 const SettingsTabs = ({ activeTab, onTabChange, onLogout }) => {
   const tabs = [
-    { id: 'profile',       icon: 'person-circle', label: 'Profile',       description: 'Informasi personal'    },
-    { id: 'security',      icon: 'shield-lock',   label: 'Security',      description: 'Keamanan akun'         },
-    { id: 'notifications', icon: 'bell',          label: 'Notifications', description: 'Preferensi notifikasi' },
-    { id: 'system',        icon: 'sliders',       label: 'System',        description: 'Pengaturan sistem'     },
-    { id: 'api',           icon: 'code-slash',    label: 'API',           description: 'Konfigurasi API'       }
+    {
+      id: "profile",
+      icon: "person-circle",
+      label: "Profile",
+      description: "Informasi personal",
+    },
+    {
+      id: "security",
+      icon: "shield-lock",
+      label: "Security",
+      description: "Keamanan akun",
+    },
+    {
+      id: "notifications",
+      icon: "bell",
+      label: "Notifications",
+      description: "Preferensi notifikasi",
+    },
+    {
+      id: "system",
+      icon: "sliders",
+      label: "System",
+      description: "Pengaturan sistem",
+    },
+    {
+      id: "api",
+      icon: "code-slash",
+      label: "API",
+      description: "Konfigurasi API",
+    },
   ];
 
   return (
     <div className="card settings-tabs-card">
       <div className="card-body p-0">
         <div className="settings-tabs">
-          {tabs.map(tab => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
-              className={`settings-tab-item ${activeTab === tab.id ? 'active' : ''}`}
+              className={`settings-tab-item ${activeTab === tab.id ? "active" : ""}`}
               onClick={() => onTabChange(tab.id)}
             >
               <div className="tab-icon">
@@ -34,10 +59,8 @@ const SettingsTabs = ({ activeTab, onTabChange, onLogout }) => {
             </button>
           ))}
 
-          {/* Divider */}
           <div className="settings-tab-divider" />
 
-          {/* Logout Button */}
           <button
             className="settings-tab-item settings-tab-logout"
             onClick={onLogout}

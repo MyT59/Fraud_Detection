@@ -1,7 +1,6 @@
-import React from 'react';
+import React from "react";
 
 const PaginationComponent = ({ currentPage, totalPages, onPageChange }) => {
-  // Always render — show page 1 minimum even when no data
   const effectivePages = Math.max(1, totalPages);
   const isEmpty = totalPages === 0;
 
@@ -15,14 +14,14 @@ const PaginationComponent = ({ currentPage, totalPages, onPageChange }) => {
       pages.push(1);
 
       let startPage = Math.max(2, currentPage - 1);
-      let endPage   = Math.min(effectivePages - 1, currentPage + 1);
+      let endPage = Math.min(effectivePages - 1, currentPage + 1);
 
-      if (currentPage <= 3)                   endPage   = 4;
-      if (currentPage >= effectivePages - 2)  startPage = effectivePages - 3;
+      if (currentPage <= 3) endPage = 4;
+      if (currentPage >= effectivePages - 2) startPage = effectivePages - 3;
 
-      if (startPage > 2)                pages.push('...');
+      if (startPage > 2) pages.push("...");
       for (let i = startPage; i <= endPage; i++) pages.push(i);
-      if (endPage < effectivePages - 1) pages.push('...');
+      if (endPage < effectivePages - 1) pages.push("...");
 
       pages.push(effectivePages);
     }
@@ -39,14 +38,15 @@ const PaginationComponent = ({ currentPage, totalPages, onPageChange }) => {
   };
 
   const handlePageClick = (page) => {
-    if (page !== '...') onPageChange(page);
+    if (page !== "...") onPageChange(page);
   };
 
   return (
     <nav>
       <ul className="pagination mb-0">
-        {/* Previous Button */}
-        <li className={`page-item ${currentPage === 1 || isEmpty ? 'disabled' : ''}`}>
+        <li
+          className={`page-item ${currentPage === 1 || isEmpty ? "disabled" : ""}`}
+        >
           <button
             className="page-link"
             onClick={handlePrevious}
@@ -56,24 +56,24 @@ const PaginationComponent = ({ currentPage, totalPages, onPageChange }) => {
           </button>
         </li>
 
-        {/* Page Numbers */}
         {getPageNumbers().map((page, index) => (
           <li
             key={index}
-            className={`page-item ${page === currentPage ? 'active' : ''} ${page === '...' || isEmpty ? 'disabled' : ''}`}
+            className={`page-item ${page === currentPage ? "active" : ""} ${page === "..." || isEmpty ? "disabled" : ""}`}
           >
             <button
               className="page-link"
               onClick={() => handlePageClick(page)}
-              disabled={page === '...' || isEmpty}
+              disabled={page === "..." || isEmpty}
             >
               {page}
             </button>
           </li>
         ))}
 
-        {/* Next Button */}
-        <li className={`page-item ${currentPage === effectivePages || isEmpty ? 'disabled' : ''}`}>
+        <li
+          className={`page-item ${currentPage === effectivePages || isEmpty ? "disabled" : ""}`}
+        >
           <button
             className="page-link"
             onClick={handleNext}

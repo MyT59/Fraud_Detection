@@ -1,6 +1,6 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import './QuickActions.css';
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import "./QuickActions.css";
 
 const QuickActions = () => {
   const navigate = useNavigate();
@@ -8,94 +8,94 @@ const QuickActions = () => {
   const actions = [
     {
       id: 1,
-      title: 'Risk Management',
-      icon: 'bi-shield-fill-exclamation',
-      color: 'danger',
-      route: '/risk-management'
+      title: "Risk Management",
+      icon: "bi-shield-fill-exclamation",
+      color: "danger",
+      route: "/risk-management",
     },
     {
       id: 2,
-      title: 'Manual Review',
-      icon: 'bi-clipboard-check',
-      color: 'warning',
-      route: '/manual-review'
+      title: "Manual Review",
+      icon: "bi-clipboard-check",
+      color: "warning",
+      route: "/manual-review",
     },
     {
       id: 9,
-      title: 'Review History',
-      icon: 'bi-clock-history',
-      color: 'purple',
-      route: '/review-history'
+      title: "Review History",
+      icon: "bi-clock-history",
+      color: "purple",
+      route: "/review-history",
     },
     {
       id: 3,
-      title: 'Transactions',
-      icon: 'bi-list-ul',
-      color: 'primary',
-      route: '/transactions'
+      title: "Transactions",
+      icon: "bi-list-ul",
+      color: "primary",
+      route: "/transactions",
     },
     {
       id: 4,
-      title: 'Analytics',
-      icon: 'bi-graph-up',
-      color: 'info',
-      route: '/analytics'
+      title: "Analytics",
+      icon: "bi-graph-up",
+      color: "info",
+      route: "/analytics",
     },
     {
       id: 11,
-      title: 'Activity Timeline',
-      icon: 'bi-activity',
-      color: 'purple',
-      route: '/activity-timeline'
+      title: "Activity Timeline",
+      icon: "bi-activity",
+      color: "purple",
+      route: "/activity-timeline",
     },
     {
       id: 5,
-      title: 'Reports',
-      icon: 'bi-file-earmark-text',
-      color: 'success',
-      route: '/reports'
+      title: "Reports",
+      icon: "bi-file-earmark-text",
+      color: "success",
+      route: "/reports",
     },
     {
       id: 6,
-      title: 'Super Admin',
-      icon: 'bi-shield-lock-fill',
-      color: 'secondary',
-      route: '/super-admin'
+      title: "Super Admin",
+      icon: "bi-shield-lock-fill",
+      color: "secondary",
+      route: "/super-admin",
     },
     {
       id: 7,
-      title: 'Audit Log',
-      icon: 'bi-clock-history',
-      color: 'purple',
-      route: '/audit-log'
-    },
-    {
-      id: 8,
-      title: 'Alerts Log',
-      icon: 'bi-bell-fill',
-      color: 'warning',
-      route: '/alerts'
+      title: "Audit Log",
+      icon: "bi-clock-history",
+      color: "purple",
+      route: "/audit-log",
     },
     {
       id: 12,
-      title: 'Fraud Patterns',
-      icon: 'bi-bug-fill',
-      color: 'danger',
-      route: '/fraud-patterns'
+      title: "Fraud Patterns",
+      icon: "bi-bug-fill",
+      color: "danger",
+      route: "/fraud-patterns",
     },
     {
-      id: 13,                          // ← BARU
-      title: 'Retrain Schedule',
-      icon: 'bi-cpu',
-      color: 'info',
-      route: '/retrain-schedule'
+      id: 13,
+      title: "Retrain Schedule",
+      icon: "bi-cpu",
+      color: "info",
+      route: "/retrain-schedule",
+    },
+    {
+      id: 8,
+      title: "Alerts Log",
+      icon: "bi-bell-fill",
+      color: "warning",
+      route: "/alerts",
     },
     {
       id: 10,
-      title: 'Settings',
-      icon: 'bi-gear-fill',
-      color: 'secondary',
-      route: '/settings'
+      title: "Settings",
+      icon: "bi-gear-fill",
+      color: "secondary",
+      route: "/settings",
     },
   ];
 

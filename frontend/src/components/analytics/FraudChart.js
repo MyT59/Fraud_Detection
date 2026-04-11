@@ -1,6 +1,6 @@
-import React from 'react';
-import { Doughnut } from 'react-chartjs-2';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+import React from "react";
+import { Doughnut } from "react-chartjs-2";
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -10,39 +10,33 @@ const FraudChart = ({ data }) => {
   const legitPercentage = ((data.legit / total) * 100).toFixed(1);
 
   const chartData = {
-    labels: ['Fraud', 'Legit'],
+    labels: ["Fraud", "Legit"],
     datasets: [
       {
         data: [data.fraud, data.legit],
-        backgroundColor: [
-          'rgba(239, 68, 68, 0.8)',
-          'rgba(16, 185, 129, 0.8)'
-        ],
-        borderColor: [
-          '#ef4444',
-          '#10b981'
-        ],
+        backgroundColor: ["rgba(239, 68, 68, 0.8)", "rgba(16, 185, 129, 0.8)"],
+        borderColor: ["#ef4444", "#10b981"],
         borderWidth: 2,
-        hoverOffset: 8
-      }
-    ]
+        hoverOffset: 8,
+      },
+    ],
   };
 
   const options = {
     responsive: true,
     maintainAspectRatio: false,
-    cutout: '70%',
+    cutout: "70%",
     plugins: {
       legend: {
-        position: 'bottom',
+        position: "bottom",
         labels: {
           padding: 20,
           usePointStyle: true,
           font: {
             size: 13,
-            weight: '500'
+            weight: "500",
           },
-          generateLabels: function(chart) {
+          generateLabels: function (chart) {
             const data = chart.data;
             if (data.labels.length && data.datasets.length) {
               return data.labels.map((label, i) => {
@@ -54,39 +48,39 @@ const FraudChart = ({ data }) => {
                   strokeStyle: data.datasets[0].borderColor[i],
                   lineWidth: 2,
                   hidden: false,
-                  index: i
+                  index: i,
                 };
               });
             }
             return [];
-          }
-        }
+          },
+        },
       },
       tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        backgroundColor: "rgba(0, 0, 0, 0.8)",
         padding: 12,
         titleFont: {
           size: 14,
-          weight: '600'
+          weight: "600",
         },
         bodyFont: {
-          size: 13
+          size: 13,
         },
         callbacks: {
-          label: function(context) {
-            const label = context.label || '';
+          label: function (context) {
+            const label = context.label || "";
             const value = context.parsed;
             const percentage = ((value / total) * 100).toFixed(1);
             return `${label}: ${value.toLocaleString()} (${percentage}%)`;
-          }
-        }
-      }
-    }
+          },
+        },
+      },
+    },
   };
 
   return (
     <div className="fraud-chart-wrapper">
-      <div style={{ height: '250px', position: 'relative' }}>
+      <div style={{ height: "250px", position: "relative" }}>
         <Doughnut data={chartData} options={options} />
         <div className="chart-center-text">
           <div className="center-value">{total.toLocaleString()}</div>

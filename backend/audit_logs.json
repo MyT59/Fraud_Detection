@@ -1,5 +1,38 @@
 [
   {
+    "id": "alg-67354d5c",
+    "type": "suspend",
+    "actor_name": "Irwan Setiawan",
+    "actor_role": "superadmin",
+    "target_name": "Aji Staria",
+    "target_role": "superadmin",
+    "detail": "Mengaktifkan kembali akun Aji Staria (Super Admin)",
+    "timestamp": "2026-03-26T07:57:49.138340+00:00",
+    "time_label": "26 Mar 2026"
+  },
+  {
+    "id": "alg-2358fd01",
+    "type": "suspend",
+    "actor_name": "Irwan Setiawan",
+    "actor_role": "superadmin",
+    "target_name": "Aji Staria",
+    "target_role": "superadmin",
+    "detail": "Men-suspend akun Aji Staria (Super Admin)",
+    "timestamp": "2026-03-26T07:57:36.681470+00:00",
+    "time_label": "26 Mar 2026"
+  },
+  {
+    "id": "alg-ed32a4ff",
+    "type": "edit",
+    "actor_name": "Irwan Setiawan",
+    "actor_role": "superadmin",
+    "target_name": "Aji Staria",
+    "target_role": "superadmin",
+    "detail": "Memperbarui akun Aji Staria: email diperbarui",
+    "timestamp": "2026-03-26T02:29:00.686972+00:00",
+    "time_label": "26 Mar 2026"
+  },
+  {
     "id": "alg-177b22cd",
     "type": "edit",
     "actor_name": "Irwan Setiawan",

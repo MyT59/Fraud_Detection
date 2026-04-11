@@ -25,7 +25,6 @@
   min-height: 100vh;
 }
 
-/* ── Page Header ── */
 .fp-page-header {
   display: flex;
   align-items: center;
@@ -69,14 +68,12 @@
   margin: 0;
 }
 
-/* ── Header Actions ── */
 .fp-header-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
-/* View toggle */
 .fp-view-toggle {
   display: flex;
   background: #fff;
@@ -110,7 +107,6 @@
   border-left: 1px solid #e2e8f0;
 }
 
-/* Export button */
 .fp-export-btn {
   display: flex;
   align-items: center;
@@ -136,14 +132,12 @@
   font-size: 1rem;
 }
 
-/* ── Cards Grid ── */
 .fp-cards-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1.25rem;
 }
 
-/* ── Empty state ── */
 .fp-empty-state {
   display: flex;
   flex-direction: column;
@@ -170,7 +164,6 @@
   font-size: 0.875rem;
 }
 
-/* ── Responsive ── */
 @media (max-width: 1200px) {
   .fp-cards-grid {
     grid-template-columns: repeat(2, 1fr);

@@ -1,8 +1,5 @@
 import React from "react";
 
-/* ═══════════════════════════════════════════
-   ScheduleStats — Summary stat cards
-═══════════════════════════════════════════ */
 const ScheduleStats = ({ stats }) => {
   const cards = [
     {
@@ -16,13 +13,24 @@ const ScheduleStats = ({ stats }) => {
       value: stats.active,
       icon: "bi-play-circle-fill",
       colorClass: "stat-card--active",
-      sub: `${stats.daily} harian · ${stats.weekly} mingguan`,
     },
     {
       label: "Di-Pause",
       value: stats.paused,
       icon: "bi-pause-circle-fill",
       colorClass: "stat-card--paused",
+    },
+    {
+      label: "Harian",
+      value: stats.daily,
+      icon: "bi-arrow-clockwise",
+      colorClass: "stat-card--daily",
+    },
+    {
+      label: "Mingguan",
+      value: stats.weekly,
+      icon: "bi-calendar-week",
+      colorClass: "stat-card--weekly",
     },
     {
       label: "Bulanan",
@@ -42,7 +50,6 @@ const ScheduleStats = ({ stats }) => {
           <div className="rs-stat-card__body">
             <span className="rs-stat-card__val">{c.value}</span>
             <span className="rs-stat-card__lbl">{c.label}</span>
-            {c.sub && <span className="rs-stat-card__sub">{c.sub}</span>}
           </div>
         </div>
       ))}

@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import PageLoader from "../components/common/PageLoader";
 import ReviewFilter from "../components/review/ReviewFilter";
-import { labelHistory } from "../services/mlService"; // ← BARU
+import { labelHistory } from "../services/mlService";
 import { submitReview, postFraudAlert } from "../services/reviewService";
 
 import "./ManualReview.css";
 
-/* ── Format helpers ── */
 const fmt = (amount) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -26,9 +25,6 @@ const fmtDate = (ds) => {
   });
 };
 
-/* ── Threshold dari evaluation_report.json ──
-   agenusa  (without_unique_ids) → review: 0.4828  | high_risk: 0.5000
-   nusabill (without_unique_ids) → review: 0.4862  | high_risk: 0.9321 */
 const THRESHOLDS = {
   agenusa: { review: 0.4828, high_risk: 0.5 },
   nusabill: { review: 0.4862, high_risk: 0.9321 },
@@ -65,9 +61,7 @@ const RISK_COLOR = {
 const getRiskColor = (l) => RISK_COLOR[l] || "#475569";
 const TXN_PER_PAGE = 5;
 
-/* ── SAMPLE_TRANSACTIONS – dipakai sebagai FALLBACK jika API tidak tersedia ── */
 const SAMPLE_TRANSACTIONS = [
-  /* ── AGENUSA ── */
   {
     id: "AGN-000001",
     service: "agenusa",
@@ -188,7 +182,7 @@ const SAMPLE_TRANSACTIONS = [
     reviewNotes: "Multiple high-risk patterns confirmed. Account blocked.",
     reviewedAt: "2026-01-22T09:10:00.000Z",
   },
-  /* ── NUSABILL ── */
+
   {
     id: "NUS-000001",
     service: "nusabill",
@@ -320,12 +314,11 @@ const SAMPLE_TRANSACTIONS = [
   },
 ];
 
-/* ── Mapping hasil API → format seragam frontend ── */
 const mapApiResult = (result, domain, index, originalId) => {
   const rec = result.record;
   const rawScore = result.ml_fraud_score;
   const prefix = domain === "agenusa" ? "AGN" : "NUS";
-  // Gunakan ID asli dari backend agar cocok dengan review_feedback.csv
+
   const id = originalId || `${prefix}-${String(index + 1).padStart(6, "0")}`;
 
   if (domain === "agenusa") {
@@ -359,7 +352,6 @@ const mapApiResult = (result, domain, index, originalId) => {
   }
 };
 
-/* ── Normalisasi ke format seragam untuk tabel ── */
 const normalise = (raw) => {
   const score01 = raw.rawScore;
   const risk = scoreToRisk(score01, raw.service);
@@ -401,7 +393,6 @@ const normalise = (raw) => {
   }
 };
 
-/* ── Sub-components ── */
 const StatusTag = ({ status }) => {
   const map = {
     pending: { icon: "bi-clock-history", label: "Pending" },
@@ -503,12 +494,11 @@ const Pagination = ({
   );
 };
 
-/* ── Detail Modal ── */
 const TxnModal = ({ txn, onClose, onReview }) => {
   const [decision, setDecision] = useState("");
   const [notes, setNotes] = useState("");
   const [confirming, setConfirming] = useState(false);
-  const [submitting, setSubmitting] = useState(false); // ← BARU: loading state submit
+  const [submitting, setSubmitting] = useState(false);
 
   const rColor = getRiskColor(txn.riskLevel);
   const isPending = txn.status === "pending";
@@ -525,14 +515,13 @@ const TxnModal = ({ txn, onClose, onReview }) => {
   };
   const handleConfirm = async () => {
     setSubmitting(true);
-    await onReview(txn, decision, notes); // ← kirim objek txn lengkap
+    await onReview(txn, decision, notes);
     setSubmitting(false);
   };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="txn-modal" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
         <div className="modal-header">
           <div
             className="modal-header-left"
@@ -553,9 +542,7 @@ const TxnModal = ({ txn, onClose, onReview }) => {
         </div>
 
         <div className="modal-body">
-          {/* Risk + Amount row */}
           <div className="modal-grid" style={{ marginBottom: "1.25rem" }}>
-            {/* Risk score */}
             <div className="modal-risk-block">
               <div
                 className="modal-risk-circle"
@@ -583,7 +570,6 @@ const TxnModal = ({ txn, onClose, onReview }) => {
               </div>
             </div>
 
-            {/* Amount & type */}
             <div className="modal-info-block">
               <div className="modal-block-title">
                 <i className="bi bi-cash-stack"></i>
@@ -648,7 +634,6 @@ const TxnModal = ({ txn, onClose, onReview }) => {
             </div>
           </div>
 
-          {/* Account / Destination info */}
           <div className="modal-grid" style={{ marginBottom: "1.25rem" }}>
             <div className="modal-info-block">
               <div className="modal-block-title">
@@ -700,7 +685,6 @@ const TxnModal = ({ txn, onClose, onReview }) => {
             </div>
           </div>
 
-          {/* Matched Patterns */}
           <div className="modal-info-block" style={{ marginBottom: "1.25rem" }}>
             <div className="modal-block-title">
               <i className="bi bi-exclamation-triangle"></i>
@@ -728,7 +712,6 @@ const TxnModal = ({ txn, onClose, onReview }) => {
             )}
           </div>
 
-          {/* Already reviewed */}
           {!isPending && (
             <div className="modal-reviewed-state">
               <i
@@ -756,7 +739,6 @@ const TxnModal = ({ txn, onClose, onReview }) => {
             </div>
           )}
 
-          {/* Decision buttons */}
           {isPending && (
             <div className="modal-decision">
               <div className="modal-decision-title">Make Decision</div>
@@ -818,16 +800,12 @@ const TxnModal = ({ txn, onClose, onReview }) => {
   );
 };
 
-/* ════════════════════════════════════════════════
-   MAIN COMPONENT
-════════════════════════════════════════════════ */
 const ManualReview = () => {
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState([]);
   const [selectedTxn, setSelectedTxn] = useState(null);
-  const [apiError, setApiError] = useState(false); // ← BARU: indikator fallback
+  const [apiError, setApiError] = useState(false);
 
-  /* ── Fetch dari ML API, fallback ke sample data jika gagal ── */
   useEffect(() => {
     const fetchFromML = async () => {
       try {
@@ -837,18 +815,15 @@ const ManualReview = () => {
         const BASE_URL =
           process.env.REACT_APP_ML_API_URL || "http://localhost:8000";
 
-        // ── Step 1: Ambil transaksi flagged langsung dari dataset CSV via backend ──
         const txnRes = await fetch(`${BASE_URL}/transactions/flagged`);
         if (!txnRes.ok)
           throw new Error(`Gagal fetch dataset: ${txnRes.status}`);
         const { agenusa: agenusaRaw, nusabill: nusabillRaw } =
           await txnRes.json();
 
-        // Simpan ID asli dari backend sebelum field-stripping untuk ML
         const agenusaIds = agenusaRaw.map((r) => r.id);
         const nusabillIds = nusabillRaw.map((r) => r.id);
 
-        // ── Step 2: Siapkan field lengkap sesuai kebutuhan fds_engine.py ──
         const agenusaRecords = agenusaRaw.map((r) => ({
           TERMINAL_ID: r.TERMINAL_ID || "T1000",
           MERCHANT_ID: r.MERCHANT_ID || "M2000",
@@ -874,23 +849,22 @@ const ManualReview = () => {
           REFUND_FLAG: Number(r.REFUND_FLAG) || 0,
         }));
 
-        // ── Step 3: Kirim ke ML untuk scoring + ambil feedback paralel ──
         const [agenusaRes, nusabillRes, feedbackRes] = await Promise.all([
           labelHistory("agenusa", agenusaRecords, THRESHOLDS.agenusa),
           labelHistory("nusabill", nusabillRecords, THRESHOLDS.nusabill),
           fetch(`${BASE_URL}/review/feedback`).catch(() => null),
         ]);
 
-        // Bangun set ID yang sudah di-review (approved/rejected)
         const reviewedIds = new Set();
         if (feedbackRes && feedbackRes.ok) {
           const fb = await feedbackRes.json();
           (fb.records || []).forEach((r) => reviewedIds.add(r.transaction_id));
         }
 
-        // ── Step 4: Map hasil ML → format frontend, filter yg sudah di-review ──
         const allTxns = [
-          ...agenusaRes.results.map((r, i) => mapApiResult(r, "agenusa", i, agenusaIds[i])),
+          ...agenusaRes.results.map((r, i) =>
+            mapApiResult(r, "agenusa", i, agenusaIds[i]),
+          ),
           ...nusabillRes.results.map((r, i) =>
             mapApiResult(r, "nusabill", i, nusabillIds[i]),
           ),
@@ -903,7 +877,7 @@ const ManualReview = () => {
       } catch (err) {
         console.warn("ML API tidak tersedia, pakai sample data:", err.message);
         setApiError(true);
-        // Fallback: pakai SAMPLE_TRANSACTIONS statis jika backend mati
+
         setTransactions(SAMPLE_TRANSACTIONS.map(normalise));
       } finally {
         setLoading(false);
@@ -913,15 +887,13 @@ const ManualReview = () => {
     fetchFromML();
   }, []);
 
-  /* ── Handle review: update state + kirim feedback ke backend ── */
-const handleReview = useCallback(async (txn, decision, notes) => {
-    // 1. Optimistic update — update UI langsung tanpa tunggu API
+  const handleReview = useCallback(async (txn, decision, notes) => {
     setTransactions((prev) =>
       prev.map((t) =>
         t.id === txn.id
           ? {
               ...t,
-              status:     decision,
+              status: decision,
               reviewNotes: notes,
               reviewedAt: new Date().toISOString(),
             }
@@ -929,16 +901,13 @@ const handleReview = useCallback(async (txn, decision, notes) => {
       ),
     );
     setSelectedTxn(null);
- 
-    // 2. Kirim feedback ke backend (feedback loop retrain) — fire-and-forget
+
     try {
       await submitReview(txn, decision, notes);
     } catch (err) {
       console.warn("submitReview gagal:", err.message);
     }
- 
-    // 3. Catat event ke Alerts Log — fire-and-forget
-    //    Alert muncul di halaman Alerts Log setelah reviewer membuat keputusan.
+
     try {
       await postFraudAlert(txn, decision, notes);
     } catch (err) {
@@ -955,7 +924,7 @@ const handleReview = useCallback(async (txn, decision, notes) => {
           <h1>Manual Review</h1>
           <p className="subtitle">Review and verify flagged transactions</p>
         </div>
-        {/* Banner kecil jika pakai fallback data */}
+
         {apiError && (
           <div
             style={{
@@ -977,7 +946,6 @@ const handleReview = useCallback(async (txn, decision, notes) => {
         )}
       </div>
 
-      {/* ── ReviewFilter owns ALL filter/sort/pagination state ── */}
       <ReviewFilter transactions={transactions}>
         {({
           filtered,
@@ -989,12 +957,12 @@ const handleReview = useCallback(async (txn, decision, notes) => {
           sectionHeader,
           tableHead,
           datePickerPortal,
+          activeFiltersBar,
         }) => (
           <>
-            {filterBar}
-
             <div className="review-section">
               {sectionHeader}
+              {activeFiltersBar}
 
               <div className="txn-table-wrapper">
                 {filtered.length === 0 ? (
@@ -1112,15 +1080,15 @@ const handleReview = useCallback(async (txn, decision, notes) => {
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
-                              className="btn-detail"
+                              className="btn-aksi"
                               onClick={() => setSelectedTxn(t)}
                             >
-                              <i className="bi bi-eye"></i>Detail
+                              <i className="bi bi-eye"></i>Aksi
                             </button>
                           </td>
                         </tr>
                       ))}
-                      {/* Ghost rows untuk jaga tinggi tabel tetap 10 baris */}
+
                       {Array.from({ length: 10 - paginatedTxns.length }).map(
                         (_, i) => (
                           <tr key={`ghost-${i}`} className="txn-row-ghost">

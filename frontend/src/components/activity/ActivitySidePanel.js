@@ -1,30 +1,29 @@
-import React from 'react';
-import { FILTER_CONFIG } from './activityData';
+import React from "react";
+import { FILTER_CONFIG } from "./activityData";
 
-/* Terima `activities` sebagai prop supaya count sidebar sesuai data real */
-const ActivitySidePanel = ({ activities = [], activeFilter, onFilterChange }) => {
-  // Count per type dari data yang masuk (real + static)
+const ActivitySidePanel = ({
+  activities = [],
+  activeFilter,
+  onFilterChange,
+}) => {
   const typeCounts = {};
-  activities.forEach(a => {
+  activities.forEach((a) => {
     typeCounts[a.type] = (typeCounts[a.type] || 0) + 1;
   });
 
-  // Recent 5 (sudah diurutkan di parent — terbaru dulu)
   const recent = activities.slice(0, 5);
 
   const dotColorMap = {
-    red:    'dot-red',
-    green:  'dot-green',
-    blue:   'dot-blue',
-    orange: 'dot-orange',
-    purple: 'dot-purple',
-    gray:   'dot-gray',
+    red: "dot-red",
+    green: "dot-green",
+    blue: "dot-blue",
+    orange: "dot-orange",
+    purple: "dot-purple",
+    gray: "dot-gray",
   };
 
   return (
     <div className="activity-sidebar-panel">
-
-      {/* Quick Filter by Type */}
       <div className="side-card">
         <div className="side-card-header">
           <i className="bi bi-funnel"></i>
@@ -32,24 +31,27 @@ const ActivitySidePanel = ({ activities = [], activeFilter, onFilterChange }) =>
         </div>
         <div className="side-card-body">
           <div className="type-filter-list">
-            {FILTER_CONFIG.map(f => (
+            {FILTER_CONFIG.map((f) => (
               <div
                 key={f.value}
-                className={`type-filter-item ${activeFilter === f.value ? 'active' : ''}`}
+                className={`type-filter-item ${activeFilter === f.value ? "active" : ""}`}
                 onClick={() => onFilterChange(f.value)}
               >
                 <div className="type-filter-left">
-                  {f.dot
-                    ? <span className={`type-dot ${dotColorMap[f.dot]}`}></span>
-                    : <span className="type-dot" style={{ background: '#c7d2fe' }}></span>
-                  }
+                  {f.dot ? (
+                    <span className={`type-dot ${dotColorMap[f.dot]}`}></span>
+                  ) : (
+                    <span
+                      className="type-dot"
+                      style={{ background: "#c7d2fe" }}
+                    ></span>
+                  )}
                   <span className="type-filter-label">{f.label}</span>
                 </div>
                 <span className="type-filter-count">
-                  {f.value === 'all'
+                  {f.value === "all"
                     ? activities.length
-                    : (typeCounts[f.value] || 0)
-                  }
+                    : typeCounts[f.value] || 0}
                 </span>
               </div>
             ))}
@@ -57,7 +59,6 @@ const ActivitySidePanel = ({ activities = [], activeFilter, onFilterChange }) =>
         </div>
       </div>
 
-      {/* Recent Activity */}
       <div className="side-card">
         <div className="side-card-header">
           <i className="bi bi-clock-history"></i>
@@ -79,7 +80,6 @@ const ActivitySidePanel = ({ activities = [], activeFilter, onFilterChange }) =>
           </div>
         </div>
       </div>
-
     </div>
   );
 };

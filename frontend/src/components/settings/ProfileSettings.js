@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 const ProfileSettings = ({ data, onSave }) => {
   const [formData, setFormData] = useState(data);
@@ -6,9 +6,9 @@ const ProfileSettings = ({ data, onSave }) => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
@@ -32,7 +32,7 @@ const ProfileSettings = ({ data, onSave }) => {
             Profile Information
           </h5>
           {!isEditing && (
-            <button 
+            <button
               className="btn btn-sm btn-outline-danger"
               onClick={() => setIsEditing(true)}
             >
@@ -44,7 +44,6 @@ const ProfileSettings = ({ data, onSave }) => {
       </div>
       <div className="card-body">
         <form onSubmit={handleSubmit}>
-          {/* Avatar Section */}
           <div className="profile-avatar-section mb-4">
             <div className="avatar-wrapper">
               <div className="avatar-circle">
@@ -66,7 +65,6 @@ const ProfileSettings = ({ data, onSave }) => {
             </div>
           </div>
 
-          {/* Form Fields */}
           <div className="row">
             <div className="col-md-6 mb-3">
               <label className="form-label">
@@ -120,17 +118,19 @@ const ProfileSettings = ({ data, onSave }) => {
                 <i className="bi bi-building me-1"></i>
                 Department
               </label>
-              <input
-                type="text"
-                className="form-control"
+              <select
+                className="form-select"
                 name="department"
                 value={formData.department}
                 onChange={handleInputChange}
                 disabled={!isEditing}
-              />
+              >
+                <option value="Risk Management">Risk Management</option>
+                <option value="Fraud Prevention">Fraud Prevention</option>
+              </select>
             </div>
 
-            <div className="col-md-12 mb-3">
+            <div className="col-md-6 mb-3">
               <label className="form-label">
                 <i className="bi bi-shield-check me-1"></i>
                 Role
@@ -142,25 +142,23 @@ const ProfileSettings = ({ data, onSave }) => {
                 value={formData.role}
                 disabled
               />
-              <small className="text-muted">Contact administrator to change role</small>
+              <small className="text-muted">
+                Contact administrator to change role
+              </small>
             </div>
           </div>
 
-          {/* Action Buttons */}
           {isEditing && (
             <div className="d-flex gap-2 justify-content-end mt-4">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="btn btn-outline-secondary"
                 onClick={handleCancel}
               >
                 <i className="bi bi-x-circle me-1"></i>
                 Cancel
               </button>
-              <button 
-                type="submit" 
-                className="btn btn-danger"
-              >
+              <button type="submit" className="btn btn-danger">
                 <i className="bi bi-check-circle me-1"></i>
                 Save Changes
               </button>

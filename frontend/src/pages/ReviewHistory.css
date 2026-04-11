@@ -1,18 +1,11 @@
-/*
-  ReviewHistory styles — enhanced with sortable columns, filter dropdowns, live search
-*/
-
-/* Page wrapper */
 .rh-page-wrapper {
   padding: 2rem;
-  max-width: 1440px;
-  margin: 0 auto;
+  width: 100%;
   background: #f0f2f5;
   min-height: 100vh;
   font-family: "IBM Plex Sans", sans-serif;
 }
 
-/* Modal backdrop */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -33,15 +26,13 @@
   }
 }
 
-/* ── Table base ── */
 .rh-table td {
   padding: 1rem 1.25rem;
 }
 .rh-table th {
   padding: 0;
-} /* th inner handles padding */
+}
 
-/* ── Sortable th ── */
 .rh-th-sortable {
   background: #f8fafc;
   user-select: none;
@@ -89,7 +80,6 @@
   font-size: 0.75rem;
 }
 
-/* ── Column filter button ── */
 .rh-th-filter-wrap {
   position: relative;
   flex-shrink: 0;
@@ -122,7 +112,6 @@
   color: #fff;
 }
 
-/* ── Column dropdown ── */
 .rh-col-dropdown {
   position: absolute;
   top: calc(100% + 6px);
@@ -187,7 +176,6 @@
   color: #7c3aed !important;
 }
 
-/* ── Filter Bar ── */
 .rh-filterbar {
   display: flex;
   align-items: center;
@@ -200,7 +188,6 @@
   flex-wrap: wrap;
 }
 
-/* Live search */
 .rh-search-wrap {
   position: relative;
   flex: 1;
@@ -261,7 +248,6 @@
   color: #0f172a;
 }
 
-/* Filter pills */
 .rh-filter-pill {
   display: inline-flex;
   align-items: center;
@@ -292,7 +278,6 @@
   font-size: 0.9rem;
 }
 
-/* Clear all */
 .rh-clear-all {
   display: inline-flex;
   align-items: center;
@@ -328,12 +313,10 @@
   white-space: nowrap;
 }
 
-/* txn-table-wrapper when filterbar is above */
 .rh-filterbar + .txn-table-wrapper {
   border-radius: 0 0 0 0;
 }
 
-/* ── Search highlight ── */
 .rh-highlight {
   background: #fef08a;
   color: #713f12;
@@ -342,7 +325,6 @@
   font-weight: 700;
 }
 
-/* ── Empty state ── */
 .rh-empty-state {
   text-align: center;
   padding: 4rem 2rem !important;
@@ -376,7 +358,6 @@
   border-color: #7c3aed;
 }
 
-/* ── Date Picker Modal ── */
 .rh-datepicker-overlay {
   position: fixed;
   inset: 0;
@@ -517,7 +498,6 @@
   background: #6d28d9;
 }
 
-/* ── Cell styles ── */
 .rh-ts {
   font-size: 0.78rem;
   font-weight: 600;
@@ -640,7 +620,6 @@
   border-bottom: none;
 }
 
-/* ── Responsive filter bar ── */
 @media (max-width: 640px) {
   .rh-filterbar {
     flex-direction: column;

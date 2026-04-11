@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   getFrequencyLabel,
   getFrequencyIcon,
@@ -7,9 +7,72 @@ import {
   formatScheduleTime,
 } from "./scheduleConstants";
 
-/* ═══════════════════════════════════════════
-   ScheduleTable — Main data table
-═══════════════════════════════════════════ */
+const FREQ_OPTIONS = [
+  { value: "all", label: "Semua" },
+  { value: "daily", label: "Harian" },
+  { value: "weekly", label: "Mingguan" },
+  { value: "monthly", label: "Bulanan" },
+];
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "Semua" },
+  { value: "active", label: "Aktif" },
+  { value: "paused", label: "Paused" },
+];
+
+const ColumnDropdown = ({ options, value, onChange, label }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const activeLabel = options.find((o) => o.value === value)?.label ?? label;
+  const isFiltered = value !== "all";
+
+  return (
+    <div className="rs-col-filter" ref={ref}>
+      <button
+        className={`rs-col-filter__trigger ${isFiltered ? "rs-col-filter__trigger--active" : ""}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>{label}</span>
+        {isFiltered && (
+          <span className="rs-col-filter__badge">{activeLabel}</span>
+        )}
+        <i
+          className={`bi bi-chevron-${open ? "up" : "down"} rs-col-filter__chevron`}
+        />
+      </button>
+
+      {open && (
+        <div className="rs-col-filter__dropdown">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              className={`rs-col-filter__opt ${value === o.value ? "rs-col-filter__opt--active" : ""}`}
+              onClick={() => {
+                onChange(o.value);
+                setOpen(false);
+              }}
+            >
+              {value === o.value && (
+                <i className="bi bi-check2 rs-col-filter__check" />
+              )}
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ScheduleTable = ({
   schedules,
   onEdit,
@@ -17,13 +80,21 @@ const ScheduleTable = ({
   onToggleStatus,
   onDetail,
   onManualRun,
+  filterFreq,
+  setFilterFreq,
+  filterStatus,
+  setFilterStatus,
 }) => {
   if (schedules.length === 0) {
     return (
       <div className="rs-empty">
-        <div className="rs-empty__icon"><i className="bi bi-calendar-x" /></div>
+        <div className="rs-empty__icon">
+          <i className="bi bi-calendar-x" />
+        </div>
         <p className="rs-empty__title">Tidak ada schedule ditemukan</p>
-        <p className="rs-empty__sub">Coba ubah filter atau buat schedule baru.</p>
+        <p className="rs-empty__sub">
+          Coba ubah filter atau buat schedule baru.
+        </p>
       </div>
     );
   }
@@ -35,18 +106,31 @@ const ScheduleTable = ({
           <tr>
             <th>Schedule</th>
             <th>Model ML</th>
-            <th>Frekuensi</th>
+            <th>
+              <ColumnDropdown
+                label="Frekuensi"
+                options={FREQ_OPTIONS}
+                value={filterFreq}
+                onChange={setFilterFreq}
+              />
+            </th>
             <th>Waktu Eksekusi</th>
             <th>Last Run</th>
             <th>Next Run</th>
-            <th>Status</th>
+            <th>
+              <ColumnDropdown
+                label="Status"
+                options={STATUS_OPTIONS}
+                value={filterStatus}
+                onChange={setFilterStatus}
+              />
+            </th>
             <th>Aksi</th>
           </tr>
         </thead>
         <tbody>
           {schedules.map((s) => (
             <tr key={s.id} className="rs-table__row">
-              {/* Schedule name */}
               <td>
                 <div className="rs-cell-name">
                   <span
@@ -59,7 +143,6 @@ const ScheduleTable = ({
                 </div>
               </td>
 
-              {/* Model */}
               <td>
                 <span className="rs-model-tag">
                   <i className="bi bi-cpu" />
@@ -67,7 +150,6 @@ const ScheduleTable = ({
                 </span>
               </td>
 
-              {/* Frequency */}
               <td>
                 <span className="rs-freq-badge">
                   <i className={`bi ${getFrequencyIcon(s.frequency)}`} />
@@ -75,18 +157,16 @@ const ScheduleTable = ({
                 </span>
               </td>
 
-              {/* Execution time */}
               <td className="rs-cell-time">{formatScheduleTime(s)}</td>
 
-              {/* Last run */}
               <td className="rs-cell-muted">{s.lastRun}</td>
 
-              {/* Next run */}
-              <td className={`rs-cell-next ${s.nextRun === "—" ? "rs-cell-muted" : ""}`}>
+              <td
+                className={`rs-cell-next ${s.nextRun === "—" ? "rs-cell-muted" : ""}`}
+              >
                 {s.nextRun}
               </td>
 
-              {/* Status badge */}
               <td>
                 <span className={`rs-badge ${getStatusClass(s.status)}`}>
                   <span className="rs-badge__dot" />
@@ -94,10 +174,8 @@ const ScheduleTable = ({
                 </span>
               </td>
 
-              {/* Action buttons */}
               <td>
                 <div className="rs-actions">
-                  {/* Detail */}
                   <button
                     className="rs-action-btn rs-action-btn--info"
                     onClick={() => onDetail(s)}
@@ -106,7 +184,6 @@ const ScheduleTable = ({
                     <i className="bi bi-eye" />
                   </button>
 
-                  {/* Run manually */}
                   <button
                     className="rs-action-btn rs-action-btn--run"
                     onClick={() => onManualRun(s)}
@@ -115,7 +192,6 @@ const ScheduleTable = ({
                     <i className="bi bi-play-fill" />
                   </button>
 
-                  {/* Edit */}
                   <button
                     className="rs-action-btn rs-action-btn--edit"
                     onClick={() => onEdit(s)}
@@ -124,7 +200,6 @@ const ScheduleTable = ({
                     <i className="bi bi-pencil" />
                   </button>
 
-                  {/* Toggle status */}
                   <button
                     className={`rs-action-btn ${
                       s.status === "active"
@@ -134,10 +209,11 @@ const ScheduleTable = ({
                     onClick={() => onToggleStatus(s)}
                     title={s.status === "active" ? "Pause" : "Aktifkan"}
                   >
-                    <i className={`bi ${s.status === "active" ? "bi-pause-fill" : "bi-play-fill"}`} />
+                    <i
+                      className={`bi ${s.status === "active" ? "bi-pause-fill" : "bi-play-fill"}`}
+                    />
                   </button>
 
-                  {/* Delete */}
                   <button
                     className="rs-action-btn rs-action-btn--delete"
                     onClick={() => onDelete(s)}

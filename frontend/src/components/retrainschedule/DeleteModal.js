@@ -1,21 +1,23 @@
 import React from "react";
 
-/* ═══════════════════════════════════════════
-   DeleteModal — Confirmation dialog
-═══════════════════════════════════════════ */
 const DeleteModal = ({ schedule, onConfirm, onCancel }) => {
   if (!schedule) return null;
 
   return (
     <div className="rs-modal-backdrop" onClick={onCancel}>
-      <div className="rs-modal rs-modal--confirm" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="rs-modal rs-modal--confirm"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="rs-modal__header rs-modal__header--danger">
           <div className="rs-modal__header-icon rs-modal__header-icon--danger">
             <i className="bi bi-trash3-fill" />
           </div>
           <div>
             <h2 className="rs-modal__title">Hapus Schedule</h2>
-            <p className="rs-modal__subtitle">Tindakan ini tidak dapat dibatalkan.</p>
+            <p className="rs-modal__subtitle">
+              Tindakan ini tidak dapat dibatalkan.
+            </p>
           </div>
           <button className="rs-modal__close" onClick={onCancel}>
             <i className="bi bi-x-lg" />
@@ -27,8 +29,8 @@ const DeleteModal = ({ schedule, onConfirm, onCancel }) => {
             <i className="bi bi-exclamation-triangle-fill rs-confirm-info__icon" />
             <p>
               Apakah Anda yakin ingin menghapus schedule{" "}
-              <strong>"{schedule.name}"</strong>?{" "}
-              Semua konfigurasi jadwal dan riwayat run akan dihapus permanen.
+              <strong>"{schedule.name}"</strong>? Semua konfigurasi jadwal dan
+              riwayat run akan dihapus permanen.
             </p>
           </div>
 

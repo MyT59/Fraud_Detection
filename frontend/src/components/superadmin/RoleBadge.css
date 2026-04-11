@@ -1,22 +1,71 @@
 .role-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 4px 10px; border-radius: 20px;
-  font-size: .75rem; font-weight: 600; letter-spacing: .02em; white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
-.role-badge i { font-size: .8rem; }
+.role-badge i {
+  font-size: 0.8rem;
+}
 
-.role-badge.role-superadmin { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-.role-badge.role-admin      { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
-.role-badge.role-analyst    { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+.role-badge.role-superadmin {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+.role-badge.role-admin {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+.role-badge.role-analyst {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
 
 .status-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 4px 10px; border-radius: 20px; font-size: .75rem; font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
-.status-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.status-badge.status-active    { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
-.status-badge.status-active::before { background: #16a34a; }
-.status-badge.status-inactive  { background: #f9fafb; color: #6b7280; border: 1px solid #e5e7eb; }
-.status-badge.status-inactive::before { background: #9ca3af; }
-.status-badge.status-suspended { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-.status-badge.status-suspended::before { background: #dc2626; }
+.status-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-badge.status-active {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+.status-badge.status-active::before {
+  background: #16a34a;
+}
+.status-badge.status-inactive {
+  background: #f9fafb;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+}
+.status-badge.status-inactive::before {
+  background: #9ca3af;
+}
+.status-badge.status-suspended {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+.status-badge.status-suspended::before {
+  background: #dc2626;
+}

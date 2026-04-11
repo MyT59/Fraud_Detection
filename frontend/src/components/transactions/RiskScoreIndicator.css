@@ -1,5 +1,3 @@
-/* Risk Score Indicator Styles */
-
 .risk-score-indicator {
   display: inline-flex;
   flex-direction: column;
@@ -7,13 +5,11 @@
   gap: 0.5rem;
 }
 
-/* Circle Container */
 .risk-circle-container {
   position: relative;
   display: inline-block;
 }
 
-/* SVG Circle */
 .risk-circle {
   transform: rotate(-90deg);
 }
@@ -43,7 +39,6 @@
   stroke: #10b981;
 }
 
-/* Score Number */
 .risk-score-number {
   position: absolute;
   top: 50%;
@@ -53,16 +48,12 @@
   font-weight: 700;
 }
 
-/* Risk Label */
 .risk-label {
   font-size: 0.75rem;
   text-align: center;
   white-space: nowrap;
 }
 
-/* Size Variants */
-
-/* Small */
 .risk-indicator-small .risk-circle {
   width: 40px;
   height: 40px;
@@ -80,7 +71,6 @@
   font-size: 0.65rem;
 }
 
-/* Medium (Default) */
 .risk-indicator-medium .risk-circle {
   width: 60px;
   height: 60px;
@@ -95,7 +85,6 @@
   color: #a3a3a3;
 }
 
-/* Large */
 .risk-indicator-large .risk-circle {
   width: 80px;
   height: 80px;
@@ -114,9 +103,9 @@
   font-size: 0.875rem;
 }
 
-/* Animation */
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {

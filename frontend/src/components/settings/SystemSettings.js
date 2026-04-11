@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 const SystemSettings = ({ data, onSave }) => {
   const [formData, setFormData] = useState(data);
@@ -6,9 +6,9 @@ const SystemSettings = ({ data, onSave }) => {
 
   const handleSelectChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
     setHasChanges(true);
   };
@@ -33,49 +33,6 @@ const SystemSettings = ({ data, onSave }) => {
       </div>
       <div className="card-body">
         <div className="row">
-          {/* Language */}
-          <div className="col-md-6 mb-4">
-            <div className="system-setting-item">
-              <label className="form-label">
-                <i className="bi bi-translate me-2 text-primary"></i>
-                Language
-              </label>
-              <select
-                className="form-select"
-                name="language"
-                value={formData.language}
-                onChange={handleSelectChange}
-              >
-                <option value="id">Bahasa Indonesia</option>
-                <option value="en">English</option>
-              </select>
-              <small className="text-muted">Pilih bahasa untuk interface</small>
-            </div>
-          </div>
-
-          {/* Date Format */}
-          <div className="col-md-6 mb-4">
-            <div className="system-setting-item">
-              <label className="form-label">
-                <i className="bi bi-calendar3 me-2 text-info"></i>
-                Date Format
-              </label>
-              <select
-                className="form-select"
-                name="dateFormat"
-                value={formData.dateFormat}
-                onChange={handleSelectChange}
-              >
-                <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                <option value="DD-MMM-YYYY">DD-MMM-YYYY</option>
-              </select>
-              <small className="text-muted">Format tampilan tanggal</small>
-            </div>
-          </div>
-
-          {/* Theme */}
           <div className="col-md-12 mb-4">
             <div className="system-setting-item">
               <label className="form-label">
@@ -85,33 +42,51 @@ const SystemSettings = ({ data, onSave }) => {
               <div className="theme-selector">
                 <div className="row">
                   <div className="col-md-4">
-                    <div 
-                      className={`theme-option ${formData.theme === 'light' ? 'active' : ''}`}
-                      onClick={() => handleSelectChange({ target: { name: 'theme', value: 'light' } })}
+                    <div
+                      className={`theme-option ${formData.theme === "light" ? "active" : ""}`}
+                      onClick={() =>
+                        handleSelectChange({
+                          target: { name: "theme", value: "light" },
+                        })
+                      }
                     >
                       <i className="bi bi-sun-fill"></i>
                       <span>Light</span>
-                      {formData.theme === 'light' && <i className="bi bi-check-circle-fill"></i>}
+                      {formData.theme === "light" && (
+                        <i className="bi bi-check-circle-fill"></i>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-4">
-                    <div 
-                      className={`theme-option ${formData.theme === 'dark' ? 'active' : ''}`}
-                      onClick={() => handleSelectChange({ target: { name: 'theme', value: 'dark' } })}
+                    <div
+                      className={`theme-option ${formData.theme === "dark" ? "active" : ""}`}
+                      onClick={() =>
+                        handleSelectChange({
+                          target: { name: "theme", value: "dark" },
+                        })
+                      }
                     >
                       <i className="bi bi-moon-stars-fill"></i>
                       <span>Dark</span>
-                      {formData.theme === 'dark' && <i className="bi bi-check-circle-fill"></i>}
+                      {formData.theme === "dark" && (
+                        <i className="bi bi-check-circle-fill"></i>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-4">
-                    <div 
-                      className={`theme-option ${formData.theme === 'auto' ? 'active' : ''}`}
-                      onClick={() => handleSelectChange({ target: { name: 'theme', value: 'auto' } })}
+                    <div
+                      className={`theme-option ${formData.theme === "auto" ? "active" : ""}`}
+                      onClick={() =>
+                        handleSelectChange({
+                          target: { name: "theme", value: "auto" },
+                        })
+                      }
                     >
                       <i className="bi bi-circle-half"></i>
                       <span>Auto</span>
-                      {formData.theme === 'auto' && <i className="bi bi-check-circle-fill"></i>}
+                      {formData.theme === "auto" && (
+                        <i className="bi bi-check-circle-fill"></i>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -121,7 +96,6 @@ const SystemSettings = ({ data, onSave }) => {
           </div>
         </div>
 
-        {/* Action Buttons */}
         {hasChanges && (
           <div className="alert alert-warning d-flex justify-content-between align-items-center">
             <span>
@@ -129,16 +103,13 @@ const SystemSettings = ({ data, onSave }) => {
               You have unsaved changes
             </span>
             <div className="d-flex gap-2">
-              <button 
+              <button
                 className="btn btn-sm btn-outline-secondary"
                 onClick={handleReset}
               >
                 Reset
               </button>
-              <button 
-                className="btn btn-sm btn-danger"
-                onClick={handleSave}
-              >
+              <button className="btn btn-sm btn-danger" onClick={handleSave}>
                 Save Changes
               </button>
             </div>

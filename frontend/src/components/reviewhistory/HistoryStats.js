@@ -1,22 +1,43 @@
-import React from 'react';
-import './HistoryStats.css';
+import React from "react";
+import "./HistoryStats.css";
 
 const HistoryStats = ({ data }) => {
-  const total     = data.length;
-  const approved  = data.filter(d => d.action === 'approved').length;
-  const rejected  = data.filter(d => d.action === 'rejected').length;
+  const total = data.length;
+  const approved = data.filter((d) => d.action === "approved").length;
+  const rejected = data.filter((d) => d.action === "rejected").length;
 
   const approvalRate = total > 0 ? ((approved / total) * 100).toFixed(1) : 0;
 
   const cards = [
-    { id:1, label:'Total Reviewed', value:total,    icon:'bi-clipboard-check',   color:'purple',  sub:'All-time entries' },
-    { id:2, label:'Approved',       value:approved, icon:'bi-check-circle-fill', color:'success', sub:`${approvalRate}% approval rate` },
-    { id:3, label:'Rejected',       value:rejected, icon:'bi-x-circle-fill',     color:'danger',  sub:'Fraud confirmed' },
+    {
+      id: 1,
+      label: "Total Reviewed",
+      value: total,
+      icon: "bi-clipboard-check",
+      color: "purple",
+      sub: "All-time entries",
+    },
+    {
+      id: 2,
+      label: "Approved",
+      value: approved,
+      icon: "bi-check-circle-fill",
+      color: "success",
+      sub: `${approvalRate}% approval rate`,
+    },
+    {
+      id: 3,
+      label: "Rejected",
+      value: rejected,
+      icon: "bi-x-circle-fill",
+      color: "danger",
+      sub: "Fraud confirmed",
+    },
   ];
 
   return (
     <div className="history-stats-container">
-      {cards.map(card => (
+      {cards.map((card) => (
         <div key={card.id} className={`hstat-card hstat-${card.color}`}>
           <div className={`hstat-icon bg-${card.color}`}>
             <i className={`bi ${card.icon}`}></i>

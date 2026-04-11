@@ -9,29 +9,48 @@ import ComparisonChart from "../components/analytics/ComparisonChart";
 import PageLoader from "../components/common/PageLoader";
 import "./Analytics.css";
 
-// ─── Config ──────────────────────────────────────────────────────────────────
 const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
-// ─── Static fallback (tetap dipakai kalau API tidak tersedia) ────────────────
 const generateStaticFallback = () => {
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const locations = ["Jakarta", "Surabaya", "Bandung", "Medan", "Semarang", "Makassar", "Palembang"];
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const locations = [
+    "Jakarta",
+    "Surabaya",
+    "Bandung",
+    "Medan",
+    "Semarang",
+    "Makassar",
+    "Palembang",
+  ];
 
   const monthlyData = months.map((month) => ({
     month,
     label: month,
     transactions: Math.floor(Math.random() * 500) + 300,
-    fraud:        Math.floor(Math.random() * 100) + 20,
-    legit:        Math.floor(Math.random() * 400) + 280,
-    amount:       Math.floor(Math.random() * 50000000) + 20000000,
+    fraud: Math.floor(Math.random() * 100) + 20,
+    legit: Math.floor(Math.random() * 400) + 280,
+    amount: Math.floor(Math.random() * 50000000) + 20000000,
   }));
 
   const previousMonthlyData = months.map((month) => ({
     month,
-    label:        month,
+    label: month,
     transactions: Math.floor(Math.random() * 450) + 250,
-    fraud:        Math.floor(Math.random() * 90) + 15,
-    legit:        Math.floor(Math.random() * 380) + 235,
+    fraud: Math.floor(Math.random() * 90) + 15,
+    legit: Math.floor(Math.random() * 380) + 235,
   }));
 
   const locationData = locations.map((location) => ({
@@ -45,70 +64,96 @@ const generateStaticFallback = () => {
     monthlyData,
     previousMonthlyData,
     locationData,
-    fraudStats:  { fraud: Math.floor(Math.random() * 300) + 150, legit: Math.floor(Math.random() * 1500) + 800 },
-    dailyTrend:  Array.from({ length: 30 }, (_, i) => ({
+    fraudStats: {
+      fraud: Math.floor(Math.random() * 300) + 150,
+      legit: Math.floor(Math.random() * 1500) + 800,
+    },
+    dailyTrend: Array.from({ length: 30 }, (_, i) => ({
       day: i + 1,
       transactions: Math.floor(Math.random() * 50) + 20,
       fraudRate: (Math.random() * 15 + 5).toFixed(2),
     })),
+    domainStats: {
+      agenusa: { transactions: 5000, fraud: 250, legit: 4750 },
+      nusabill: { transactions: 5000, fraud: 300, legit: 4700 },
+    },
+    modelAccuracy: "96.5",
   };
 };
 
-// ─── Transform API response → format komponen ────────────────────────────────
-const transformApiResponse = (apiData) => {
+const transformApiResponse = (apiData, modelPerf) => {
   const monthly = apiData.monthly || [];
   const previous = apiData.previousMonthly || [];
 
-  // dailyTrend: derive dari monthly (atau kosong kalau tidak ada)
   const dailyTrend = monthly.map((m, i) => ({
-    day:          i + 1,
+    day: i + 1,
     transactions: m.transactions,
-    fraudRate:    m.transactions > 0
-      ? ((m.fraud / m.transactions) * 100).toFixed(2)
-      : "0.00",
+    fraudRate:
+      m.transactions > 0
+        ? ((m.fraud / m.transactions) * 100).toFixed(2)
+        : "0.00",
   }));
 
+  let modelAccuracy = null;
+  if (modelPerf?.training_metrics) {
+    const accA = modelPerf.training_metrics.agenusa?.accuracy || 0;
+    const accN = modelPerf.training_metrics.nusabill?.accuracy || 0;
+    if (accA && accN) modelAccuracy = (((accA + accN) / 2) * 100).toFixed(1);
+    else if (accA) modelAccuracy = (accA * 100).toFixed(1);
+    else if (accN) modelAccuracy = (accN * 100).toFixed(1);
+  }
+
   return {
-    monthlyData:         monthly,
+    monthlyData: monthly,
     previousMonthlyData: previous,
-    locationData:        apiData.locations || [],
-    fraudStats:          apiData.fraudStats || { fraud: 0, legit: 0 },
+    locationData: apiData.locations || [],
+    fraudStats: apiData.fraudStats || { fraud: 0, legit: 0 },
     dailyTrend,
+    domainStats: apiData.overview?.by_domain || null,
+    modelAccuracy,
   };
 };
 
-// ─── API fetch helper ─────────────────────────────────────────────────────────
 const fetchAnalyticsFromAPI = async (signal) => {
-  const res = await fetch(`${API_BASE}/analytics/all`, { signal });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+  const [resAll, resModelPerf] = await Promise.all([
+    fetch(`${API_BASE}/analytics/all`, { signal }),
+    fetch(`${API_BASE}/analytics/model-performance`, { signal }),
+  ]);
+  if (!resAll.ok) throw new Error(`API error: ${resAll.status}`);
+  const allData = await resAll.json();
+  const modelPerf = resModelPerf.ok ? await resModelPerf.json() : null;
+
+  const resOverview = await fetch(`${API_BASE}/analytics/overview`, { signal });
+  const overview = resOverview.ok ? await resOverview.json() : null;
+  if (overview) allData.overview = overview;
+
+  return { allData, modelPerf };
 };
 
-// ─── Component ───────────────────────────────────────────────────────────────
 const Analytics = () => {
-  const [analyticsData,   setAnalyticsData]   = useState(null);
-  const [timeRange,       setTimeRange]        = useState("year");
-  const [loading,         setLoading]          = useState(true);
-  const [dataSource,      setDataSource]       = useState("api");   // "api" | "static"
-  const [apiError,        setApiError]         = useState(null);
-  const [lastRefreshed,   setLastRefreshed]    = useState(null);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [timeRange, setTimeRange] = useState("year");
+  const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState("api");
+  const [apiError, setApiError] = useState(null);
+  const [lastRefreshed, setLastRefreshed] = useState(null);
 
-  // ── Fetch data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async (signal) => {
     setLoading(true);
     setApiError(null);
 
     try {
-      const apiData    = await fetchAnalyticsFromAPI(signal);
-      const transformed = transformApiResponse(apiData);
+      const { allData, modelPerf } = await fetchAnalyticsFromAPI(signal);
+      const transformed = transformApiResponse(allData, modelPerf);
       setAnalyticsData(transformed);
       setDataSource("api");
       setLastRefreshed(new Date());
     } catch (err) {
       if (err.name === "AbortError") return;
-
-      // Fallback ke data statis
-      console.warn("[Analytics] API tidak tersedia, pakai static fallback.", err.message);
+      console.warn(
+        "[Analytics] API tidak tersedia, pakai static fallback.",
+        err.message,
+      );
       setApiError(err.message);
       setAnalyticsData(generateStaticFallback());
       setDataSource("static");
@@ -118,112 +163,94 @@ const Analytics = () => {
     }
   }, []);
 
-  // ── Re-fetch saat timeRange berubah ───────────────────────────────────────
   useEffect(() => {
     const controller = new AbortController();
     loadData(controller.signal);
     return () => controller.abort();
   }, [timeRange, loadData]);
 
-  // ── Derived stats ──────────────────────────────────────────────────────────
-  const totalTransactions = analyticsData
-    ? analyticsData.monthlyData.reduce((s, m) => s + m.transactions, 0)
-    : 0;
-  const totalFraud = analyticsData
-    ? analyticsData.monthlyData.reduce((s, m) => s + m.fraud, 0)
-    : 0;
-  const totalLegit = analyticsData
-    ? analyticsData.monthlyData.reduce((s, m) => s + m.legit, 0)
-    : 0;
-  const fraudRate    = totalTransactions > 0
-    ? ((totalFraud / totalTransactions) * 100).toFixed(2)
-    : "0.00";
-  const totalAmount  = analyticsData
-    ? analyticsData.monthlyData.reduce((s, m) => s + (m.amount || 0), 0)
-    : 0;
-
-  // ── Loading state ──────────────────────────────────────────────────────────
   if (loading || !analyticsData) {
     return <PageLoader message="Memuat data analytics..." />;
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="analytics-page">
       <div className="container-fluid py-4">
-
-        {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div className="page-header mb-4">
-          <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
-            <div>
+        <div className="analytics-page-header mb-4">
+          <div className="analytics-header-top">
+            <div className="analytics-title-group">
               <h1 className="page-title">
                 <i className="bi bi-graph-up"></i> Analytics Dashboard
               </h1>
-              <p className="page-subtitle">
-                Comprehensive fraud analytics and insights
-                {/* Data-source badge */}
+              <div className="analytics-meta">
                 <span
-                  className={`badge ms-2 ${dataSource === "api" ? "bg-success" : "bg-warning text-dark"}`}
-                  style={{ fontSize: "0.7rem", verticalAlign: "middle" }}
-                  title={dataSource === "api"
-                    ? `Data live dari API backend. Diperbarui: ${lastRefreshed?.toLocaleTimeString()}`
-                    : `API tidak tersedia (${apiError}). Menampilkan data statis.`}
-                >
-                  {dataSource === "api"
-                    ? <><i className="bi bi-cloud-check me-1"></i>Live Data</>
-                    : <><i className="bi bi-exclamation-triangle me-1"></i>Static Fallback</>
+                  className={`data-source-badge ${dataSource === "api" ? "live" : "static"}`}
+                  title={
+                    dataSource === "api"
+                      ? `Live API data. Updated: ${lastRefreshed?.toLocaleTimeString()}`
+                      : `API unavailable (${apiError}). Showing static data.`
                   }
+                >
+                  {dataSource === "api" ? (
+                    <>
+                      <i className="bi bi-cloud-check"></i> Live Data
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-exclamation-triangle"></i> Static
+                      Fallback
+                    </>
+                  )}
                 </span>
-              </p>
+                {lastRefreshed && (
+                  <span className="last-updated">
+                    Updated {lastRefreshed.toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="d-flex gap-2 align-items-center">
-              {/* Refresh button */}
-              <button
-                className="btn btn-outline-secondary btn-sm"
-                onClick={() => loadData(new AbortController().signal)}
-                title="Refresh data dari API"
-                style={{ borderRadius: 8 }}
-              >
-                <i className="bi bi-arrow-clockwise"></i>
-              </button>
-
-              <TimeRangeSelector
-                selectedRange={timeRange}
-                onRangeChange={setTimeRange}
-              />
-              <AnalyticsExportButton
-                analyticsData={analyticsData}
-                timeRange={timeRange}
-              />
-            </div>
+            <button
+              className="analytics-refresh-btn"
+              onClick={() => loadData(new AbortController().signal)}
+              title="Refresh data"
+            >
+              <i className="bi bi-arrow-clockwise"></i>
+              <span>Refresh</span>
+            </button>
           </div>
 
-          {/* API error banner */}
-          {apiError && (
-            <div
-              className="alert alert-warning alert-dismissible d-flex align-items-center gap-2 mt-3 py-2"
-              style={{ fontSize: "0.85rem", borderRadius: 8 }}
-            >
-              <i className="bi bi-wifi-off"></i>
-              <span>
-                <strong>API backend tidak dapat dijangkau.</strong> Menampilkan data statis sebagai fallback.
-                Pastikan server berjalan di <code>{API_BASE}</code>.
-              </span>
-            </div>
-          )}
+          <div className="analytics-controls-row">
+            <TimeRangeSelector
+              selectedRange={timeRange}
+              onRangeChange={setTimeRange}
+            />
+            <AnalyticsExportButton
+              analyticsData={analyticsData}
+              timeRange={timeRange}
+            />
+          </div>
         </div>
 
-        {/* ── Stats Overview ───────────────────────────────────────────────── */}
+        {apiError && (
+          <div
+            className="alert alert-warning d-flex align-items-center gap-2 mb-4 py-2"
+            style={{ fontSize: "0.85rem", borderRadius: 8 }}
+          >
+            <i className="bi bi-wifi-off"></i>
+            <span>
+              <strong>API backend tidak dapat dijangkau.</strong> Menampilkan
+              data statis sebagai fallback. Pastikan server berjalan di{" "}
+              <code>{API_BASE}</code>.
+            </span>
+          </div>
+        )}
+
         <StatsOverview
-          totalTransactions={totalTransactions}
-          totalFraud={totalFraud}
-          totalLegit={totalLegit}
-          fraudRate={fraudRate}
-          totalAmount={totalAmount}
+          domainStats={analyticsData.domainStats}
+          modelAccuracy={analyticsData.modelAccuracy}
         />
 
-        {/* ── Charts Row 1 ─────────────────────────────────────────────────── */}
         <div className="row mb-4">
           <div className="col-lg-8 mb-4">
             <div className="card chart-card">
@@ -253,15 +280,17 @@ const Analytics = () => {
           </div>
         </div>
 
-        {/* ── Charts Row 2 ─────────────────────────────────────────────────── */}
         <div className="row mb-4">
           <div className="col-lg-7 mb-4">
             <div className="card chart-card">
               <div className="card-header">
                 <h5 className="card-title">
-                  <i className="bi bi-arrow-left-right me-2"></i>Period Comparison
+                  <i className="bi bi-arrow-left-right me-2"></i>Period
+                  Comparison
                 </h5>
-                <p className="card-subtitle">Compare current vs previous period</p>
+                <p className="card-subtitle">
+                  Compare current vs previous period
+                </p>
               </div>
               <div className="card-body">
                 <ComparisonChart
@@ -285,7 +314,6 @@ const Analytics = () => {
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );

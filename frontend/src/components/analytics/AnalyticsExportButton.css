@@ -1,5 +1,3 @@
-/* Analytics Export Button Styles */
-
 .analytics-export-container {
   position: relative;
   display: inline-block;
@@ -119,7 +117,6 @@
   margin: 0;
 }
 
-/* Responsive */
 @media (max-width: 768px) {
   .analytics-export-dropdown {
     left: 0;

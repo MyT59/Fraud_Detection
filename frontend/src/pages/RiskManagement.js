@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useCallback } from "react";
-import RiskStats from "../components/riskmanagement/RiskStats";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import BlacklistPanel from "../components/riskmanagement/BlacklistPanel";
-import BlacklistModal from "../components/riskmanagement/BlacklistModal";
+import BlacklistFormModal from "../components/riskmanagement/BlacklistFormModal";
 import RuleEngine from "../components/riskmanagement/RuleEngine";
 import RuleModal from "../components/riskmanagement/RuleModal";
+import RuleDetailModal from "../components/riskmanagement/RuleDetailModal";
 import "./RiskManagement.css";
 import PageLoader from "../components/common/PageLoader";
 
-/* ── Seed: Blacklist ── */
 const SEED_BLACKLIST = [
   {
     id: 1,
@@ -121,7 +120,6 @@ const SEED_BLACKLIST = [
   },
 ];
 
-/* ── Seed: Rules ── */
 const SEED_RULES = [
   {
     id: 1,
@@ -131,6 +129,9 @@ const SEED_RULES = [
     action: "block",
     enabled: true,
     hitCount: 23,
+    hitToday: 3,
+    hitWeek: 9,
+    hitMonth: 23,
     condition: "Jumlah Transaksi (Rp) > 50000000 (akun < 7 hari)",
     condField: "Jumlah Transaksi (Rp)",
     condOp: ">",
@@ -145,6 +146,9 @@ const SEED_RULES = [
     action: "block",
     enabled: true,
     hitCount: 8,
+    hitToday: 1,
+    hitWeek: 4,
+    hitMonth: 8,
     condition: "Frekuensi (per jam) > 10",
     condField: "Frekuensi (per jam)",
     condOp: ">",
@@ -159,6 +163,9 @@ const SEED_RULES = [
     action: "flag",
     enabled: true,
     hitCount: 41,
+    hitToday: 5,
+    hitWeek: 18,
+    hitMonth: 41,
     condition: "Jam Transaksi >= 1 dan <= 4",
     condField: "Jam Transaksi",
     condOp: ">=",
@@ -174,6 +181,9 @@ const SEED_RULES = [
     action: "review",
     enabled: true,
     hitCount: 17,
+    hitToday: 2,
+    hitWeek: 7,
+    hitMonth: 17,
     condition: "Jumlah Kumulatif (hari ini) > 100000000",
     condField: "Jumlah Kumulatif (hari ini)",
     condOp: ">",
@@ -188,6 +198,9 @@ const SEED_RULES = [
     action: "flag",
     enabled: true,
     hitCount: 6,
+    hitToday: 0,
+    hitWeek: 2,
+    hitMonth: 6,
     condition: "Kode Negara Tujuan ≠ ID",
     condField: "Kode Negara Tujuan",
     condOp: "≠",
@@ -202,6 +215,9 @@ const SEED_RULES = [
     action: "block",
     enabled: false,
     hitCount: 0,
+    hitToday: 0,
+    hitWeek: 0,
+    hitMonth: 0,
     condition: "Frekuensi (per hari) > 50",
     condField: "Frekuensi (per hari)",
     condOp: ">",
@@ -210,38 +226,84 @@ const SEED_RULES = [
   },
 ];
 
-/* ── Toast hook ── */
 let _tid = 0;
 const useToast = () => {
   const [toasts, setToasts] = useState([]);
-  const push = useCallback((msg, type = "success") => {
+  const timers = useRef({});
+
+  const push = useCallback((msg, type = "success", key = null) => {
     const id = ++_tid;
-    setToasts((p) => [...p, { id, msg, type }]);
-    setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 3100);
+    if (key && timers.current[key]) {
+      clearTimeout(timers.current[key]);
+      delete timers.current[key];
+    }
+    setToasts((p) => {
+      const filtered = key ? p.filter((t) => t._key !== key) : p;
+      return [...filtered, { id, msg, type, _key: key }];
+    });
+    const timerId = setTimeout(() => {
+      setToasts((p) => p.filter((t) => t.id !== id));
+      if (key) delete timers.current[key];
+    }, 3100);
+    if (key) timers.current[key] = timerId;
+    else timers.current[id] = timerId;
   }, []);
-  return { toasts, push };
+
+  const dismiss = useCallback((id) => {
+    Object.keys(timers.current).forEach((k) => {
+      if (String(k) === String(id)) {
+        clearTimeout(timers.current[k]);
+        delete timers.current[k];
+      }
+    });
+    setToasts((p) => {
+      const toast = p.find((t) => t.id === id);
+      if (toast?._key && timers.current[toast._key]) {
+        clearTimeout(timers.current[toast._key]);
+        delete timers.current[toast._key];
+      }
+      return p.filter((t) => t.id !== id);
+    });
+  }, []);
+
+  return { toasts, push, dismiss };
 };
 
-/* ── Page ── */
 const RiskManagement = () => {
   const [loading, setLoading] = useState(true);
-
   const [blacklist, setBlacklist] = useState(SEED_BLACKLIST);
   const [rules, setRules] = useState(SEED_RULES);
 
-  /* modal states */
-  const [blModal, setBlModal] = useState({ open: false, mode: "single" });
+  const [blModal, setBlModal] = useState({
+    open: false,
+    mode: "single",
+    editData: null,
+  });
+
   const [ruleModal, setRuleModal] = useState({ open: false, editData: null });
 
-  const { toasts, push } = useToast();
+  const [ruleDetailModal, setRuleDetailModal] = useState({
+    open: false,
+    rule: null,
+  });
 
-  /* ── Blacklist handlers ── */
+  const { toasts, push, dismiss } = useToast();
+
   const handleBlSubmit = (mode, items) => {
     const now = new Date().toLocaleDateString("id-ID", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
+
+    if (mode === "edit") {
+      setBlacklist((p) =>
+        p.map((b) => (b.id === items[0].id ? { ...b, ...items[0] } : b)),
+      );
+      push(`Rekening ${items[0].accountNumber} berhasil diperbarui.`, "info");
+      return;
+    }
+
     const newItems = items.map((it) => ({ ...it, addedAt: it.addedAt || now }));
     setBlacklist((p) => [...newItems, ...p]);
     push(
@@ -265,7 +327,24 @@ const RiskManagement = () => {
     push("Rekening disetujui dan sekarang aktif diblokir.", "info");
   };
 
-  /* ── Rule handlers ── */
+  const handleBlEdit = (item) => {
+    setBlModal({ open: true, mode: "single", editData: item });
+  };
+
+  const handleBlToggleStatus = (id, newStatus) => {
+    const item = blacklist.find((b) => b.id === id);
+    setBlacklist((p) =>
+      p.map((b) => (b.id === id ? { ...b, status: newStatus } : b)),
+    );
+    push(
+      `Rekening ${item?.accountNumber} ${
+        newStatus === "active" ? "diaktifkan kembali" : "dinonaktifkan"
+      }.`,
+      newStatus === "active" ? "success" : "warn",
+      "bl-toggle",
+    );
+  };
+
   const handleRuleSubmit = (data) => {
     if (data.id && rules.find((r) => r.id === data.id)) {
       setRules((p) => p.map((r) => (r.id === data.id ? { ...r, ...data } : r)));
@@ -290,10 +369,15 @@ const RiskManagement = () => {
         push(
           `Rule "${r.name}" ${next ? "diaktifkan" : "dinonaktifkan"}.`,
           next ? "success" : "warn",
+          "rule-toggle",
         );
         return { ...r, enabled: next };
       }),
     );
+  };
+
+  const handleRuleDetail = (rule) => {
+    setRuleDetailModal({ open: true, rule });
   };
 
   const toastIcon = (t) =>
@@ -314,7 +398,6 @@ const RiskManagement = () => {
 
   return (
     <div className="rm-page">
-      {/* Header */}
       <div className="rm-header">
         <div className="rm-header-left">
           <div className="rm-header-icon">
@@ -323,39 +406,41 @@ const RiskManagement = () => {
           <div>
             <h1 className="rm-page-title">Risk Management</h1>
             <p className="rm-page-subtitle">
-              Blacklist rekening penipu & konfigurasi rule otomatis sebelum
+              Blacklist rekening penipu &amp; konfigurasi rule otomatis sebelum
               transaksi masuk ke Manual Review
             </p>
           </div>
         </div>
       </div>
 
-      {/* Stats */}
-      <RiskStats blacklist={blacklist} rules={rules} />
-
-      {/* Blacklist Panel */}
       <BlacklistPanel
         data={blacklist}
-        onAdd={() => setBlModal({ open: true, mode: "single" })}
-        onBulkImport={() => setBlModal({ open: true, mode: "bulk" })}
+        onAdd={() => setBlModal({ open: true, mode: "single", editData: null })}
+        onBulkImport={() =>
+          setBlModal({ open: true, mode: "bulk", editData: null })
+        }
         onDelete={handleBlDelete}
         onApprove={handleBlApprove}
+        onEdit={handleBlEdit}
+        onToggleStatus={handleBlToggleStatus}
       />
 
-      {/* Rule Engine */}
       <RuleEngine
         rules={rules}
         onAdd={() => setRuleModal({ open: true, editData: null })}
         onEdit={(rule) => setRuleModal({ open: true, editData: rule })}
         onDelete={handleRuleDelete}
         onToggle={handleRuleToggle}
+        onDetail={handleRuleDetail}
       />
 
-      {/* Modals */}
-      <BlacklistModal
+      <BlacklistFormModal
         isOpen={blModal.open}
         mode={blModal.mode}
-        onClose={() => setBlModal({ open: false, mode: "single" })}
+        editData={blModal.editData}
+        onClose={() =>
+          setBlModal({ open: false, mode: "single", editData: null })
+        }
         onSubmit={handleBlSubmit}
       />
 
@@ -366,11 +451,35 @@ const RiskManagement = () => {
         onSubmit={handleRuleSubmit}
       />
 
-      {/* Toasts */}
+      <RuleDetailModal
+        isOpen={ruleDetailModal.open}
+        rule={
+          ruleDetailModal.rule
+            ? (rules.find((r) => r.id === ruleDetailModal.rule.id) ??
+              ruleDetailModal.rule)
+            : null
+        }
+        onClose={() => setRuleDetailModal({ open: false, rule: null })}
+        onEdit={(rule) => {
+          setRuleDetailModal({ open: false, rule: null });
+          setRuleModal({ open: true, editData: rule });
+        }}
+        onDelete={handleRuleDelete}
+        onToggle={handleRuleToggle}
+      />
+
       <div className="rm-toast-container">
         {toasts.map((t) => (
           <div key={t.id} className={`rm-toast t-${t.type}`}>
-            <i className={`bi ${toastIcon(t.type)}`} /> {t.msg}
+            <i className={`bi ${toastIcon(t.type)}`} />
+            <span style={{ flex: 1 }}>{t.msg}</span>
+            <button
+              className="rm-toast-close"
+              onClick={() => dismiss(t.id)}
+              title="Tutup"
+            >
+              <i className="bi bi-x" />
+            </button>
           </div>
         ))}
       </div>

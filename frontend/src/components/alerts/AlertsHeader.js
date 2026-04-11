@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 const AlertsHeader = ({ totalUnread, onMarkAllRead, onClearAll, isLive }) => {
   return (
@@ -7,21 +7,32 @@ const AlertsHeader = ({ totalUnread, onMarkAllRead, onClearAll, isLive }) => {
         <div className="alerts-header-icon">
           <i className="bi bi-bell-fill"></i>
           {totalUnread > 0 && (
-            <span className="alerts-header-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>
+            <span className="alerts-header-badge">
+              {totalUnread > 99 ? "99+" : totalUnread}
+            </span>
           )}
         </div>
         <div>
           <h1 className="alerts-title">
             Alerts Log
             {isLive && (
-              <span style={{
-                marginLeft: 10,
-                fontSize: '0.65rem', fontWeight: 700,
-                padding: '2px 8px', borderRadius: 10,
-                background: '#f0fdf4', border: '1px solid #bbf7d0',
-                color: '#059669', verticalAlign: 'middle',
-              }}>
-                <i className="bi bi-circle-fill" style={{ fontSize: '0.45rem', marginRight: 4 }}></i>
+              <span
+                style={{
+                  marginLeft: 10,
+                  fontSize: "0.65rem",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: 10,
+                  background: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  color: "#059669",
+                  verticalAlign: "middle",
+                }}
+              >
+                <i
+                  className="bi bi-circle-fill"
+                  style={{ fontSize: "0.45rem", marginRight: 4 }}
+                ></i>
                 Live
               </span>
             )}
@@ -29,7 +40,7 @@ const AlertsHeader = ({ totalUnread, onMarkAllRead, onClearAll, isLive }) => {
           <p className="alerts-subtitle">
             {totalUnread > 0
               ? `${totalUnread} notifikasi belum dibaca`
-              : 'Semua notifikasi sudah dibaca'}
+              : "Semua notifikasi sudah dibaca"}
           </p>
         </div>
       </div>

@@ -6,9 +6,6 @@ import {
   FREQUENCIES,
 } from "./scheduleConstants";
 
-/* ═══════════════════════════════════════════
-   ScheduleModal — Create / Edit form modal
-═══════════════════════════════════════════ */
 const ScheduleModal = ({
   isOpen,
   isEdit,
@@ -27,10 +24,11 @@ const ScheduleModal = ({
   return (
     <div className="rs-modal-backdrop" onClick={handleBackdropClick}>
       <div className="rs-modal rs-modal--form">
-        {/* Header */}
         <div className="rs-modal__header">
           <div className="rs-modal__header-icon">
-            <i className={`bi ${isEdit ? "bi-pencil-square" : "bi-plus-circle"}`} />
+            <i
+              className={`bi ${isEdit ? "bi-pencil-square" : "bi-plus-circle"}`}
+            />
           </div>
           <div>
             <h2 className="rs-modal__title">
@@ -47,9 +45,7 @@ const ScheduleModal = ({
           </button>
         </div>
 
-        {/* Body */}
         <div className="rs-modal__body">
-          {/* Row 1: Name + Model */}
           <div className="rs-form-row rs-form-row--2col">
             <div className="rs-form-group">
               <label className="rs-form-label">
@@ -77,7 +73,9 @@ const ScheduleModal = ({
                 onChange={(e) => updateForm("model", e.target.value)}
               >
                 {MODELS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
                 ))}
               </select>
               {formErrors.model && (
@@ -86,7 +84,6 @@ const ScheduleModal = ({
             </div>
           </div>
 
-          {/* Row 2: Frequency selector */}
           <div className="rs-form-group">
             <label className="rs-form-label">Frekuensi</label>
             <div className="rs-freq-options">
@@ -109,9 +106,7 @@ const ScheduleModal = ({
             </div>
           </div>
 
-          {/* Row 3: Conditional day picker + time */}
           <div className="rs-form-row rs-form-row--2col">
-            {/* Day of week — only for weekly */}
             {form.frequency === "weekly" && (
               <div className="rs-form-group">
                 <label className="rs-form-label">Hari</label>
@@ -121,13 +116,14 @@ const ScheduleModal = ({
                   onChange={(e) => updateForm("dayOfWeek", e.target.value)}
                 >
                   {DAYS_OF_WEEK.map((d) => (
-                    <option key={d} value={d}>{d}</option>
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
                   ))}
                 </select>
               </div>
             )}
 
-            {/* Day of month — only for monthly */}
             {form.frequency === "monthly" && (
               <div className="rs-form-group">
                 <label className="rs-form-label">Tanggal</label>
@@ -137,13 +133,14 @@ const ScheduleModal = ({
                   onChange={(e) => updateForm("dayOfMonth", e.target.value)}
                 >
                   {DAYS_OF_MONTH.map((d) => (
-                    <option key={d} value={d}>{d}</option>
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
                   ))}
                 </select>
               </div>
             )}
 
-            {/* Time */}
             <div className="rs-form-group">
               <label className="rs-form-label">
                 Waktu (UTC+7) <span className="rs-required">*</span>
@@ -160,7 +157,6 @@ const ScheduleModal = ({
             </div>
           </div>
 
-          {/* Row 4: Status */}
           <div className="rs-form-group">
             <label className="rs-form-label">Status Awal</label>
             <div className="rs-toggle-group">
@@ -171,14 +167,15 @@ const ScheduleModal = ({
                   className={`rs-toggle-btn ${form.status === st ? "rs-toggle-btn--active" : ""}`}
                   onClick={() => updateForm("status", st)}
                 >
-                  <i className={`bi ${st === "active" ? "bi-play-circle" : "bi-pause-circle"}`} />
+                  <i
+                    className={`bi ${st === "active" ? "bi-play-circle" : "bi-pause-circle"}`}
+                  />
                   {st === "active" ? "Aktif" : "Paused"}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Row 5: Description */}
           <div className="rs-form-group">
             <label className="rs-form-label">Deskripsi</label>
             <textarea
@@ -191,7 +188,6 @@ const ScheduleModal = ({
           </div>
         </div>
 
-        {/* Footer */}
         <div className="rs-modal__footer">
           <button className="rs-btn rs-btn--ghost" onClick={onClose}>
             Batal

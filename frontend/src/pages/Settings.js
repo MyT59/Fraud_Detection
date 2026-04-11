@@ -138,15 +138,12 @@ const Settings = () => {
   return (
     <div className="settings-page">
       <div className="container-fluid py-4">
-        {/* Header */}
         <div className="page-header mb-4">
           <h1 className="page-title">
             <i className="bi bi-gear"></i> Settings
           </h1>
-          <p className="page-subtitle">Kelola pengaturan akun dan sistem</p>
         </div>
 
-        {/* Save Status Alert */}
         {saveStatus && (
           <div
             className={`alert alert-${saveStatus === "success" ? "success" : "info"} alert-dismissible fade show`}
@@ -166,7 +163,6 @@ const Settings = () => {
         )}
 
         <div className="row">
-          {/* Sidebar Tabs */}
           <div className="col-lg-3 mb-4">
             <SettingsTabs
               activeTab={activeTab}
@@ -175,14 +171,12 @@ const Settings = () => {
             />
           </div>
 
-          {/* Content */}
           <div className="col-lg-9">
             <div className="settings-content-wrapper">{renderTabContent()}</div>
           </div>
         </div>
       </div>
 
-      {/* Logout Confirm Modal */}
       {showLogoutConfirm && (
         <div
           className="modal-overlay"

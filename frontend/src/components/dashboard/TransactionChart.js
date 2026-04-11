@@ -1,107 +1,598 @@
-import React from 'react';
-import { Line } from 'react-chartjs-2';
+import React, { useState, useMemo, useEffect } from "react";
+import { Line, Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
-  Filler
-} from 'chart.js';
-import './ChartCard.css';
+  Filler,
+} from "chart.js";
+import "./ChartCard.css";
+import "./TransactionChart.css";
 
 ChartJS.register(
-  CategoryScale, LinearScale, PointElement, LineElement,
-  Title, Tooltip, Legend, Filler
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
 );
 
-// Fallback statis kalau prop `data` tidak dikirim
-const STATIC_DATA = [
-  { label: 'Mon', transactions: 120 },
-  { label: 'Tue', transactions: 190 },
-  { label: 'Wed', transactions: 150 },
-  { label: 'Thu', transactions: 220 },
-  { label: 'Fri', transactions: 180 },
-  { label: 'Sat', transactions: 210 },
-  { label: 'Sun', transactions: 165 },
+const genToday = () => {
+  const now = new Date();
+  const currentHour = now.getHours();
+  return Array.from({ length: 24 }, (_, h) => {
+    const isPast = h < currentHour;
+    const isCurrent = h === currentHour;
+
+    const base =
+      h >= 8 && h <= 21
+        ? 12 + Math.round(Math.sin(((h - 8) / 13) * Math.PI) * 12)
+        : h >= 5 && h < 8
+          ? 4
+          : h >= 22
+            ? 3
+            : 1;
+    const txn = isPast
+      ? Math.round(base + Math.random() * 8)
+      : isCurrent
+        ? Math.round((base + Math.random() * 8) * (now.getMinutes() / 60))
+        : 0;
+    const fraud = txn > 0 ? Math.round(Math.random() * Math.min(2, txn)) : 0;
+    return {
+      label: `${String(h).padStart(2, "0")}:00`,
+      transactions: txn,
+      fraud,
+    };
+  });
+};
+
+const genLastNDays = (n) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - (n - 1 - i));
+    const isToday = i === n - 1;
+
+    const base = Math.round(140 + Math.sin(i / 4) * 40 + Math.random() * 35);
+    const txn = isToday
+      ? Math.round(base * (new Date().getHours() / 24))
+      : base;
+    const fraud = txn > 0 ? Math.round(6 + Math.random() * 8) : 0;
+    return {
+      label: `${d.getDate()}/${d.getMonth() + 1}`,
+      transactions: txn,
+      fraud,
+    };
+  });
+};
+
+const genLast12Months = () => {
+  const MONTHS = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const now = new Date();
+  return Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+    const isCurrentMonth = i === 11;
+    const base = Math.round(3800 + i * 220 + Math.random() * 400);
+
+    const daysInMonth = new Date(
+      d.getFullYear(),
+      d.getMonth() + 1,
+      0,
+    ).getDate();
+    const txn = isCurrentMonth
+      ? Math.round(base * (now.getDate() / daysInMonth))
+      : base;
+    const fraud = Math.round(txn * (0.04 + Math.random() * 0.01));
+    return {
+      label: MONTHS[d.getMonth()],
+      transactions: txn,
+      fraud,
+    };
+  });
+};
+
+const buildStaticData = () => ({
+  today: genToday(),
+  "7d": genLastNDays(7),
+  "30d": genLastNDays(30),
+  "1y": genLast12Months(),
+});
+
+const RANGE_OPTIONS = [
+  { key: "today", label: "Today" },
+  { key: "7d", label: "7 days" },
+  { key: "30d", label: "30 days" },
+  { key: "1y", label: "1 year" },
+  { key: "custom", label: "Custom", isCalendar: true },
 ];
 
-const TransactionChart = ({ data }) => {
-  const source = (data && data.length > 0) ? data : STATIC_DATA;
+const CARD_TITLES = {
+  today: "Transactions Today",
+  "7d": "Transactions Per Week",
+  "30d": "Transactions Per Month",
+  "1y": "Transactions Per One Year",
+  custom: "Transactions Per Date",
+};
 
-  const chartData = {
-    labels: source.map(d => d.label),
-    datasets: [
-      {
-        label: 'Transactions',
-        data: source.map(d => d.transactions),
-        borderColor: '#dc2626',
-        backgroundColor: 'rgba(220, 38, 38, 0.1)',
-        borderWidth: 2,
-        tension: 0.3,
-        fill: true,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointBackgroundColor: '#dc2626',
-        pointBorderColor: '#ffffff',
-        pointBorderWidth: 2,
-      }
-    ]
-  };
+const CARD_SUBTITLES = {
+  today: (() => {
+    const d = new Date();
+    return `${d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} — hourly`;
+  })(),
+  "7d": "Last 7 days",
+  "30d": "Last 30 days",
+  "1y": "Last 12 months",
+  custom: "Custom date range",
+};
 
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: '#262626',
-        padding: 12,
-        titleFont: { size: 13, weight: '600' },
-        bodyFont:  { size: 14, weight: '700' },
-        displayColors: false,
-        cornerRadius: 6,
-        callbacks: {
-          afterLabel: (ctx) => {
-            const row = source[ctx.dataIndex];
-            if (row?.fraud !== undefined) {
-              return `Fraud: ${row.fraud}`;
-            }
-            return '';
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        border: { display: false },
-        grid: { color: '#f5f5f5', drawBorder: false },
-        ticks: { font: { size: 12, weight: '500' }, color: '#737373', padding: 8 }
-      },
-      x: {
-        border: { display: false },
-        grid: { display: false },
-        ticks: { font: { size: 12, weight: '600' }, color: '#525252', padding: 8 }
-      }
+const DEFAULT_RANGE = "today";
+
+const TransactionChart = ({ data, onRangeChange }) => {
+  const [activeRange, setActiveRange] = useState(DEFAULT_RANGE);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split("T")[0];
+  });
+  const [dateTo, setDateTo] = useState(new Date().toISOString().split("T")[0]);
+  const [customData, setCustomData] = useState(null);
+  const [expanded, setExpanded] = useState(false);
+
+  const [staticData, setStaticData] = useState(() => buildStaticData());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setStaticData((prev) => ({ ...prev, today: genToday() }));
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const handler = (e) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [expanded]);
+
+  useEffect(() => {
+    document.body.style.overflow = expanded ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [expanded]);
+
+  const chartData = useMemo(() => {
+    if (activeRange === "custom" && customData) return customData;
+    if (data && data.length > 0 && activeRange !== "today") return data;
+    return staticData[activeRange] || staticData[DEFAULT_RANGE];
+  }, [activeRange, customData, data, staticData]);
+
+  const handleRangeClick = (key) => {
+    if (key === "custom") {
+      setShowDatePicker((p) => !p);
+      return;
     }
+    setShowDatePicker(false);
+    setActiveRange(key);
+    if (onRangeChange) onRangeChange(key, null);
   };
 
-  return (
-    <div className="chart-card-simple">
-      <div className="chart-header">
-        <div>
-          <h3 className="chart-title">Transactions Per Day</h3>
-          <p className="chart-subtitle">Last 7 days</p>
+  const handleReset = () => {
+    setActiveRange(DEFAULT_RANGE);
+    setShowDatePicker(false);
+    setCustomData(null);
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    setDateFrom(d.toISOString().split("T")[0]);
+    setDateTo(new Date().toISOString().split("T")[0]);
+    if (onRangeChange) onRangeChange(DEFAULT_RANGE, null);
+  };
+
+  const handleApplyCustom = () => {
+    if (!dateFrom || !dateTo || dateTo < dateFrom) return;
+    const d1 = new Date(dateFrom);
+    const d2 = new Date(dateTo);
+    const days = Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
+    const generated = Array.from({ length: days }, (_, i) => {
+      const d = new Date(d1);
+      d.setDate(d.getDate() + i);
+      return {
+        label: `${d.getDate()}/${d.getMonth() + 1}`,
+        transactions: Math.round(150 + Math.random() * 80),
+        fraud: Math.round(6 + Math.random() * 10),
+      };
+    });
+    setCustomData(generated);
+    setActiveRange("custom");
+    setShowDatePicker(false);
+    if (onRangeChange)
+      onRangeChange("custom", { from: dateFrom, to: dateTo, data: generated });
+  };
+
+  const buildChart = (fullLabels = false) => {
+    const isToday = activeRange === "today";
+
+    const datasets = isToday
+      ? [
+          {
+            label: "Transactions",
+            data: chartData.map((d) => d.transactions),
+            backgroundColor: "rgba(220,38,38,0.72)",
+            borderColor: "#dc2626",
+            borderWidth: 1,
+            borderRadius: 3,
+            yAxisID: "y",
+          },
+          {
+            label: "Fraud",
+            data: chartData.map((d) => d.fraud || 0),
+            backgroundColor: "rgba(252,165,165,0.85)",
+            borderColor: "#fca5a5",
+            borderWidth: 1,
+            borderRadius: 3,
+            yAxisID: "y1",
+          },
+        ]
+      : [
+          {
+            label: "Transactions",
+            data: chartData.map((d) => d.transactions),
+            borderColor: "#dc2626",
+            backgroundColor: "rgba(220,38,38,0.08)",
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            pointRadius: activeRange === "1y" ? 4 : 3,
+            pointHoverRadius: 6,
+            pointBackgroundColor: "#dc2626",
+            pointBorderColor: "#ffffff",
+            pointBorderWidth: 2,
+            yAxisID: "y",
+          },
+          {
+            label: "Fraud",
+            data: chartData.map((d) => d.fraud || 0),
+            borderColor: "#fca5a5",
+            backgroundColor: "rgba(252,165,165,0.05)",
+            borderWidth: 1.5,
+            tension: 0.3,
+            fill: false,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+            pointBackgroundColor: "#fca5a5",
+            pointBorderColor: "#ffffff",
+            pointBorderWidth: 1.5,
+            yAxisID: "y1",
+          },
+        ];
+
+    const options = {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#262626",
+          padding: 12,
+          titleFont: { size: 13, weight: "600" },
+          bodyFont: { size: 14, weight: "600" },
+          displayColors: true,
+          cornerRadius: 6,
+          callbacks: {
+            label: (ctx) =>
+              `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          position: "left",
+          border: { display: false },
+          grid: { color: "#f5f5f5", drawBorder: false },
+          ticks: {
+            font: { size: 12, weight: "500" },
+            color: "#737373",
+            padding: 8,
+          },
+        },
+        y1: {
+          beginAtZero: true,
+          position: "right",
+          border: { display: false },
+          grid: { display: false },
+          ticks: {
+            font: { size: 12, weight: "500" },
+            color: "#fca5a5",
+            padding: 8,
+          },
+        },
+        x: {
+          border: { display: false },
+          grid: { display: false },
+          ticks: {
+            font: { size: 12, weight: "600" },
+            color: "#525252",
+            padding: 8,
+            maxRotation: 45,
+            autoSkip: !fullLabels && chartData.length > 20,
+            maxTicksLimit:
+              !fullLabels && chartData.length > 20 ? 12 : undefined,
+          },
+        },
+      },
+    };
+
+    return {
+      Component: isToday ? Bar : Line,
+      data: { labels: chartData.map((d) => d.label), datasets },
+      options,
+    };
+  };
+
+  const isDefault = activeRange === DEFAULT_RANGE && !showDatePicker;
+
+  const LegendRow = () => (
+    <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+      {[
+        { color: "#dc2626", label: "Transactions" },
+        { color: "#fca5a5", label: "Fraud" },
+      ].map(({ color, label }) => (
+        <span
+          key={label}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: 11,
+            color: "#737373",
+          }}
+        >
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: 2,
+              background: color,
+              display: "inline-block",
+            }}
+          />
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+
+  const FilterControls = ({ alignEnd = true }) => (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: alignEnd ? "flex-end" : "flex-start",
+        gap: 8,
+      }}
+    >
+      <div className="txn-filter-bar">
+        {RANGE_OPTIONS.map((opt) => (
+          <button
+            key={opt.key}
+            className={`txn-filter-btn${
+              activeRange === opt.key ||
+              (opt.key === "custom" && showDatePicker)
+                ? " active"
+                : ""
+            }${opt.isCalendar ? " calendar-btn" : ""}`}
+            onClick={() => handleRangeClick(opt.key)}
+            title={opt.isCalendar ? "Pick custom date range" : undefined}
+          >
+            {opt.isCalendar && (
+              <i className="bi bi-calendar3" style={{ fontSize: 11 }} />
+            )}
+            {opt.label}
+          </button>
+        ))}
+        {!isDefault && (
+          <button
+            className="txn-filter-btn txn-reset-btn"
+            onClick={handleReset}
+            title="Reset to Today"
+          >
+            <i
+              className="bi bi-arrow-counterclockwise"
+              style={{ fontSize: 11 }}
+            />
+            Reset
+          </button>
+        )}
+      </div>
+
+      {showDatePicker && (
+        <div className="txn-date-row">
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+          <span style={{ fontSize: 11, color: "#9ca3af" }}>→</span>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom}
+            max={new Date().toISOString().split("T")[0]}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+          <button className="txn-apply-btn" onClick={handleApplyCustom}>
+            Apply
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const ExpandedView = () => {
+    const { Component: EC, data: ed, options: eo } = buildChart(true);
+    const colLabel =
+      activeRange === "today"
+        ? "Hour"
+        : activeRange === "1y"
+          ? "Month"
+          : "Date";
+
+    return (
+      <div className="txn-expand-overlay" onClick={() => setExpanded(false)}>
+        <div className="txn-expand-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="txn-expand-header">
+            <div>
+              <h3 className="chart-title" style={{ fontSize: 16 }}>
+                {CARD_TITLES[activeRange] || "Transactions"}
+              </h3>
+              <p className="chart-subtitle">{CARD_SUBTITLES[activeRange]}</p>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <FilterControls />
+              <button
+                className="txn-icon-btn"
+                onClick={() => setExpanded(false)}
+                title="Close (Esc)"
+              >
+                <i className="bi bi-x-lg" style={{ fontSize: 14 }} />
+              </button>
+            </div>
+          </div>
+
+          <div style={{ position: "relative", height: 360, marginTop: 8 }}>
+            <EC data={ed} options={{ ...eo, maintainAspectRatio: false }} />
+          </div>
+          <LegendRow />
+
+          <div className="txn-expand-table-wrap">
+            <table className="txn-expand-table">
+              <thead>
+                <tr>
+                  <th>{colLabel}</th>
+                  <th>Transactions</th>
+                  <th>Fraud</th>
+                  <th>Legitimate</th>
+                  <th>Fraud Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chartData.map((row, i) => {
+                  const fraud = row.fraud || 0;
+                  const legit = row.transactions - fraud;
+                  const rate =
+                    row.transactions > 0
+                      ? ((fraud / row.transactions) * 100).toFixed(1)
+                      : "0.0";
+                  const rateClass =
+                    parseFloat(rate) >= 10
+                      ? "high"
+                      : parseFloat(rate) >= 5
+                        ? "medium"
+                        : "low";
+                  return (
+                    <tr key={i}>
+                      <td className="txn-tbl-label">{row.label}</td>
+                      <td>{row.transactions.toLocaleString()}</td>
+                      <td style={{ color: "#dc2626", fontWeight: 600 }}>
+                        {fraud.toLocaleString()}
+                      </td>
+                      <td style={{ color: "#16a34a" }}>
+                        {legit.toLocaleString()}
+                      </td>
+                      <td>
+                        <span className={`txn-rate-badge ${rateClass}`}>
+                          {rate}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-      <div className="chart-container">
-        <Line data={chartData} options={options} />
+    );
+  };
+
+  const { Component, data: cData, options: cOptions } = buildChart(false);
+
+  return (
+    <>
+      <div className="chart-card-simple">
+        <div className="chart-header" style={{ flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h3 className="chart-title">
+              {CARD_TITLES[activeRange] || "Transactions"}
+            </h3>
+            <p className="chart-subtitle">{CARD_SUBTITLES[activeRange]}</p>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <FilterControls />
+            <button
+              className="txn-icon-btn"
+              onClick={() => setExpanded(true)}
+              title="Expand chart"
+            >
+              <i className="bi bi-arrows-fullscreen" style={{ fontSize: 13 }} />
+            </button>
+          </div>
+        </div>
+
+        <div className="chart-container">
+          <Component data={cData} options={cOptions} />
+        </div>
+
+        <LegendRow />
       </div>
-    </div>
+
+      {expanded && <ExpandedView />}
+    </>
   );
 };
 

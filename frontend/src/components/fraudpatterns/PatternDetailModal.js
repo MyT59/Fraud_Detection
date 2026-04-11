@@ -1,31 +1,28 @@
-import React from 'react';
-import './PatternDetailModal.css';
+import React from "react";
+import "./PatternDetailModal.css";
 
 const RISK_META = {
-  high:   { label: 'High Risk',   color: '#dc2626', bg: '#fef2f2' },
-  medium: { label: 'Medium Risk', color: '#d97706', bg: '#fffbeb' },
-  low:    { label: 'Low Risk',    color: '#0284c7', bg: '#f0f9ff' },
+  high: { label: "High Risk", color: "#dc2626", bg: "#fef2f2" },
+  medium: { label: "Medium Risk", color: "#d97706", bg: "#fffbeb" },
+  low: { label: "Low Risk", color: "#0284c7", bg: "#f0f9ff" },
 };
 
 const STATUS_META = {
-  active:   { label: 'Active',       bg: '#dcfce7', color: '#16a34a' },
-  inactive: { label: 'Inactive',     bg: '#f1f5f9', color: '#64748b' },
-  review:   { label: 'Under Review', bg: '#fef3c7', color: '#92400e' },
+  active: { label: "Active", bg: "#dcfce7", color: "#16a34a" },
+  inactive: { label: "Inactive", bg: "#f1f5f9", color: "#64748b" },
+  review: { label: "Under Review", bg: "#fef3c7", color: "#92400e" },
 };
 
 const PatternDetailModal = ({ pattern, onClose }) => {
   if (!pattern) return null;
-  const risk   = RISK_META[pattern.riskLevel]   || RISK_META.medium;
-  const status = STATUS_META[pattern.status]    || STATUS_META.active;
+  const risk = RISK_META[pattern.riskLevel] || RISK_META.medium;
+  const status = STATUS_META[pattern.status] || STATUS_META.active;
 
   return (
     <div className="pdm-overlay" onClick={onClose}>
-      <div className="pdm-box" onClick={e => e.stopPropagation()}>
-
-        {/* Colored top bar */}
+      <div className="pdm-box" onClick={(e) => e.stopPropagation()}>
         <div className="pdm-topbar" style={{ background: risk.color }}></div>
 
-        {/* Header */}
         <div className="pdm-header">
           <div className="pdm-header-left">
             <span className="pdm-category">{pattern.category}</span>
@@ -36,27 +33,34 @@ const PatternDetailModal = ({ pattern, onClose }) => {
           </button>
         </div>
 
-        {/* Badges */}
         <div className="pdm-badges">
-          <span className="pdm-risk-chip" style={{ background: risk.bg, color: risk.color }}>
+          <span
+            className="pdm-risk-chip"
+            style={{ background: risk.bg, color: risk.color }}
+          >
             <i className="bi bi-exclamation-triangle-fill"></i>
             {risk.label}
           </span>
-          <span className="pdm-status-chip" style={{ background: status.bg, color: status.color }}>
-            {pattern.status === 'active' && <i className="bi bi-check-circle-fill"></i>}
-            {pattern.status === 'inactive' && <i className="bi bi-pause-circle-fill"></i>}
-            {pattern.status === 'review' && <i className="bi bi-clock-fill"></i>}
+          <span
+            className="pdm-status-chip"
+            style={{ background: status.bg, color: status.color }}
+          >
+            {pattern.status === "active" && (
+              <i className="bi bi-check-circle-fill"></i>
+            )}
+            {pattern.status === "inactive" && (
+              <i className="bi bi-pause-circle-fill"></i>
+            )}
+            {pattern.status === "review" && (
+              <i className="bi bi-clock-fill"></i>
+            )}
             {status.label}
           </span>
         </div>
 
-        {/* Scrollable body */}
         <div className="pdm-body">
-
-          {/* Description */}
           <p className="pdm-desc">{pattern.description}</p>
 
-          {/* Key metrics */}
           <div className="pdm-metrics-grid">
             <div className="pdm-metric">
               <div className="pdm-metric-val" style={{ color: risk.color }}>
@@ -78,7 +82,6 @@ const PatternDetailModal = ({ pattern, onClose }) => {
             </div>
           </div>
 
-          {/* Indicators */}
           <div className="pdm-section">
             <div className="pdm-section-title">
               <i className="bi bi-radar"></i>Detection Indicators
@@ -93,7 +96,6 @@ const PatternDetailModal = ({ pattern, onClose }) => {
             </ul>
           </div>
 
-          {/* Recommended actions */}
           <div className="pdm-section">
             <div className="pdm-section-title">
               <i className="bi bi-lightning-charge-fill"></i>Recommended Actions
@@ -108,34 +110,43 @@ const PatternDetailModal = ({ pattern, onClose }) => {
             </div>
           </div>
 
-          {/* Trend bar */}
           <div className="pdm-section">
             <div className="pdm-section-title">
               <i className="bi bi-bar-chart-line"></i>Detection Rate Trend
             </div>
             <div className="pdm-trend-row">
               <span className="pdm-trend-label">This month vs last month</span>
-              <span className={`pdm-trend-val ${pattern.trend > 0 ? 'up' : 'down'}`}>
-                <i className={`bi bi-arrow-${pattern.trend > 0 ? 'up' : 'down'}-right`}></i>
+              <span
+                className={`pdm-trend-val ${pattern.trend > 0 ? "up" : "down"}`}
+              >
+                <i
+                  className={`bi bi-arrow-${pattern.trend > 0 ? "up" : "down"}-right`}
+                ></i>
                 {Math.abs(pattern.trend)}%
               </span>
             </div>
             <div className="pdm-trend-bar-wrap">
               <div
                 className="pdm-trend-bar-fill"
-                style={{ width: `${Math.min(100, pattern.accuracy)}%`, background: risk.color }}
+                style={{
+                  width: `${Math.min(100, pattern.accuracy)}%`,
+                  background: risk.color,
+                }}
               ></div>
             </div>
           </div>
 
-          {/* Meta */}
           <div className="pdm-meta-row">
-            <span><i className="bi bi-calendar-event"></i> Last updated: {pattern.lastUpdated}</span>
-            <span><i className="bi bi-tag"></i> ID: {pattern.id}</span>
+            <span>
+              <i className="bi bi-calendar-event"></i> Last updated:{" "}
+              {pattern.lastUpdated}
+            </span>
+            <span>
+              <i className="bi bi-tag"></i> ID: {pattern.id}
+            </span>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="pdm-footer">
           <button className="pdm-btn-close" onClick={onClose}>
             <i className="bi bi-x-circle"></i>Close

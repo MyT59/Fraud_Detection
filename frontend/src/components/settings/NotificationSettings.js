@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 const NotificationSettings = ({ data, onSave }) => {
   const [formData, setFormData] = useState(data);
@@ -6,7 +6,7 @@ const NotificationSettings = ({ data, onSave }) => {
   const handleToggle = (field) => {
     const newData = {
       ...formData,
-      [field]: !formData[field]
+      [field]: !formData[field],
     };
     setFormData(newData);
     onSave(newData);
@@ -14,21 +14,21 @@ const NotificationSettings = ({ data, onSave }) => {
 
   const notifications = [
     {
-      key: 'fraudAlerts',
-      icon: 'exclamation-triangle',
-      color: 'danger',
-      title: 'Fraud Alerts',
-      description: 'Notifikasi segera saat terdeteksi fraud',
-      enabled: formData.fraudAlerts
+      key: "fraudAlerts",
+      icon: "exclamation-triangle",
+      color: "danger",
+      title: "Fraud Alerts",
+      description: "Notifikasi segera saat terdeteksi fraud",
+      enabled: formData.fraudAlerts,
     },
     {
-      key: 'pushNotifications',
-      icon: 'bell',
-      color: 'warning',
-      title: 'Push Notifications',
-      description: 'Notifikasi push di browser atau mobile',
-      enabled: formData.pushNotifications
-    }
+      key: "pushNotifications",
+      icon: "bell",
+      color: "warning",
+      title: "Push Notifications",
+      description: "Notifikasi push di browser atau mobile",
+      enabled: formData.pushNotifications,
+    },
   ];
 
   return (
@@ -45,9 +45,9 @@ const NotificationSettings = ({ data, onSave }) => {
         </p>
 
         {notifications.map((notification, index) => (
-          <div 
+          <div
             key={notification.key}
-            className={`setting-item ${index === notifications.length - 1 ? 'border-0 pb-0' : ''}`}
+            className={`setting-item ${index === notifications.length - 1 ? "border-0 pb-0" : ""}`}
           >
             <div className="setting-info">
               <div className={`setting-icon bg-${notification.color}`}>

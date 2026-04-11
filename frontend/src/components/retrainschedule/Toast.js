@@ -1,13 +1,10 @@
 import React from "react";
 
-/* ═══════════════════════════════════════════
-   Toast — Notification snackbar
-═══════════════════════════════════════════ */
 const ICON_MAP = {
   success: "bi-check-circle-fill",
-  danger:  "bi-trash-fill",
-  info:    "bi-info-circle-fill",
-  run:     "bi-play-circle-fill",
+  danger: "bi-trash-fill",
+  info: "bi-info-circle-fill",
+  run: "bi-play-circle-fill",
 };
 
 const Toast = ({ toast }) => {

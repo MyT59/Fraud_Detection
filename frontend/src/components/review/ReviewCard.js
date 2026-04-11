@@ -1,59 +1,74 @@
-import React from 'react';
-import './ReviewCard.css';
+import React from "react";
+import "./ReviewCard.css";
 
-/* ── Service badge ── */
 const ServiceBadge = ({ service }) => (
-  <span style={{
-    display: 'inline-block',
-    padding: '1px 7px',
-    borderRadius: '4px',
-    fontSize: '.66rem',
-    fontWeight: 700,
-    letterSpacing: '.04em',
-    background: service === 'agenusa' ? '#eff6ff' : '#fdf4ff',
-    color:      service === 'agenusa' ? '#1d4ed8' : '#7c3aed',
-    border: `1px solid ${service === 'agenusa' ? '#bfdbfe' : '#e9d5ff'}`,
-  }}>
-    {service === 'agenusa' ? 'AGENUSA' : 'NUSABILL'}
+  <span
+    style={{
+      display: "inline-block",
+      padding: "1px 7px",
+      borderRadius: "4px",
+      fontSize: ".66rem",
+      fontWeight: 700,
+      letterSpacing: ".04em",
+      background: service === "agenusa" ? "#eff6ff" : "#fdf4ff",
+      color: service === "agenusa" ? "#1d4ed8" : "#7c3aed",
+      border: `1px solid ${service === "agenusa" ? "#bfdbfe" : "#e9d5ff"}`,
+    }}
+  >
+    {service === "agenusa" ? "AGENUSA" : "NUSABILL"}
   </span>
 );
 
-const ReviewCard = ({ transaction, onClick, isSelected, onSelect, isMultiSelected }) => {
+const ReviewCard = ({
+  transaction,
+  onClick,
+  isSelected,
+  onSelect,
+  isMultiSelected,
+}) => {
   const getRiskColor = (riskLevel) => {
     const colors = {
-      low: '#10b981',
-      medium: '#f59e0b',
-      high: '#ef4444',
-      critical: '#dc2626'
+      low: "#10b981",
+      medium: "#f59e0b",
+      high: "#ef4444",
+      critical: "#dc2626",
     };
-    return colors[riskLevel] || '#6b7280';
+    return colors[riskLevel] || "#6b7280";
   };
 
   const getStatusBadge = (status) => {
     const badges = {
-      pending: { icon: 'bi-clock-history', text: 'Pending', class: 'pending' },
-      approved: { icon: 'bi-check-circle-fill', text: 'Approved', class: 'approved' },
-      rejected: { icon: 'bi-x-circle-fill', text: 'Rejected', class: 'rejected' }
+      pending: { icon: "bi-clock-history", text: "Pending", class: "pending" },
+      approved: {
+        icon: "bi-check-circle-fill",
+        text: "Approved",
+        class: "approved",
+      },
+      rejected: {
+        icon: "bi-x-circle-fill",
+        text: "Rejected",
+        class: "rejected",
+      },
     };
     return badges[status] || badges.pending;
   };
 
   const formatAmount = (amount) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
     }).format(amount);
   };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('id-ID', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -73,15 +88,14 @@ const ReviewCard = ({ transaction, onClick, isSelected, onSelect, isMultiSelecte
   };
 
   return (
-    <div 
-      className={`review-card ${isSelected ? 'selected' : ''} ${isMultiSelected ? 'multi-selected' : ''} ${(onSelect && transaction.status === 'pending') ? 'has-checkbox' : ''}`}
+    <div
+      className={`review-card ${isSelected ? "selected" : ""} ${isMultiSelected ? "multi-selected" : ""} ${onSelect && transaction.status === "pending" ? "has-checkbox" : ""}`}
       onClick={handleCardClick}
     >
-      {/* NEW: Checkbox for multi-selection */}
-      {onSelect && transaction.status === 'pending' && (
+      {onSelect && transaction.status === "pending" && (
         <div className="selection-checkbox" onClick={handleCheckboxClick}>
-          <input 
-            type="checkbox" 
+          <input
+            type="checkbox"
             checked={isMultiSelected}
             onChange={() => {}}
             onClick={handleCheckboxClick}
@@ -100,25 +114,25 @@ const ReviewCard = ({ transaction, onClick, isSelected, onSelect, isMultiSelecte
               {statusBadge.text}
             </span>
           </div>
-          {/* Account Number (agenusa) atau Customer ID (nusabill) */}
+
           <div className="user-info">
             <i className="bi bi-person-circle"></i>
             <span className="user-name">{transaction.accountId}</span>
           </div>
         </div>
-        
+
         <div className="fraud-score-container">
-          <div 
+          <div
             className="fraud-score-circle"
-            style={{ 
+            style={{
               borderColor: getRiskColor(transaction.riskLevel),
-              color: getRiskColor(transaction.riskLevel)
+              color: getRiskColor(transaction.riskLevel),
             }}
           >
             <span className="score-value">{transaction.fraudScore}</span>
             <span className="score-label">Risk</span>
           </div>
-          <span 
+          <span
             className="risk-level"
             style={{ color: getRiskColor(transaction.riskLevel) }}
           >
@@ -129,45 +143,66 @@ const ReviewCard = ({ transaction, onClick, isSelected, onSelect, isMultiSelecte
 
       <div className="card-body">
         <div className="transaction-details">
-          {/* Amount — AMOUNT (agenusa) / BILL_AMOUNT (nusabill) */}
           <div className="detail-item">
             <i className="bi bi-cash-stack"></i>
             <div>
-              <span className="detail-label">{transaction.service === 'agenusa' ? 'Amount' : 'Bill Amount'}</span>
-              <span className="detail-value amount">{formatAmount(transaction.amount)}</span>
+              <span className="detail-label">
+                {transaction.service === "agenusa" ? "Amount" : "Bill Amount"}
+              </span>
+              <span className="detail-value amount">
+                {formatAmount(transaction.amount)}
+              </span>
               {transaction.amountNote && (
-                <span style={{ fontSize:'.72rem', color:'#ea580c', display:'block' }}>{transaction.amountNote}</span>
+                <span
+                  style={{
+                    fontSize: ".72rem",
+                    color: "#ea580c",
+                    display: "block",
+                  }}
+                >
+                  {transaction.amountNote}
+                </span>
               )}
             </div>
           </div>
 
-          {/* Type / Channel — PROCESSING_CODE (agenusa) / CHANNEL (nusabill) */}
           <div className="detail-item">
             <i className="bi bi-arrow-left-right"></i>
             <div>
-              <span className="detail-label">{transaction.service === 'agenusa' ? 'Type' : 'Channel'}</span>
+              <span className="detail-label">
+                {transaction.service === "agenusa" ? "Type" : "Channel"}
+              </span>
               <span className="detail-value">{transaction.typeOrChannel}</span>
             </div>
           </div>
 
-          {/* Dest Account / Bill ID */}
           <div className="detail-item">
             <i className="bi bi-send"></i>
             <div>
-              <span className="detail-label">{transaction.service === 'agenusa' ? 'Dest. Account' : 'Bill ID'}</span>
-              <span className="detail-value" style={{ fontFamily:'monospace', fontSize:'.82rem' }}>
+              <span className="detail-label">
+                {transaction.service === "agenusa"
+                  ? "Dest. Account"
+                  : "Bill ID"}
+              </span>
+              <span
+                className="detail-value"
+                style={{ fontFamily: "monospace", fontSize: ".82rem" }}
+              >
                 {transaction.destOrBill}
               </span>
             </div>
           </div>
 
-          {/* Date & Time — TIMESTAMP_DB (agenusa) / "—" (nusabill: no date column) */}
           <div className="detail-item">
             <i className="bi bi-calendar-event"></i>
             <div>
               <span className="detail-label">Date & Time</span>
               <span className="detail-value">
-                {transaction.dateTime ? formatDate(transaction.dateTime) : <span style={{ color:'#94a3b8' }}>—</span>}
+                {transaction.dateTime ? (
+                  formatDate(transaction.dateTime)
+                ) : (
+                  <span style={{ color: "#94a3b8" }}>—</span>
+                )}
               </span>
             </div>
           </div>
@@ -181,10 +216,14 @@ const ReviewCard = ({ transaction, onClick, isSelected, onSelect, isMultiSelecte
             </div>
             <div className="anomaly-tags">
               {transaction.anomalies.slice(0, 2).map((anomaly, index) => (
-                <span key={index} className="anomaly-tag">{anomaly}</span>
+                <span key={index} className="anomaly-tag">
+                  {anomaly}
+                </span>
               ))}
               {transaction.anomalies.length > 2 && (
-                <span className="anomaly-tag more">+{transaction.anomalies.length - 2} more</span>
+                <span className="anomaly-tag more">
+                  +{transaction.anomalies.length - 2} more
+                </span>
               )}
             </div>
           </div>

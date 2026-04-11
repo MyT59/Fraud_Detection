@@ -1,5 +1,5 @@
-import React from 'react';
-import './StatCard.css';
+import React from "react";
+import "./StatCard.css";
 
 const StatCard = ({ title, value, icon, type, change }) => {
   return (
@@ -9,8 +9,11 @@ const StatCard = ({ title, value, icon, type, change }) => {
           <i className={icon}></i>
         </div>
         {change && (
-          <span className={`stat-change ${change >= 0 ? 'positive' : 'negative'}`}>
-            {change >= 0 ? '+' : ''}{change}%
+          <span
+            className={`stat-change ${change >= 0 ? "positive" : "negative"}`}
+          >
+            {change >= 0 ? "+" : ""}
+            {change}%
           </span>
         )}
       </div>

@@ -3,7 +3,6 @@
   width: 100%;
 }
 
-/* ── Page Header ── */
 .page-header {
   display: flex;
   align-items: flex-start;
@@ -71,7 +70,6 @@
   transform: scale(0.97);
 }
 
-/* ── Toast Notification ── */
 .toast-container {
   position: fixed;
   bottom: 24px;
@@ -131,7 +129,6 @@
   }
 }
 
-/* ── Activity Log Section ── */
 .section-title {
   font-size: 1rem;
   font-weight: 700;

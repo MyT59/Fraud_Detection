@@ -4,10 +4,10 @@ import PatternFilter from "../components/fraudpatterns/PatternFilter";
 import PatternCard from "../components/fraudpatterns/PatternCard";
 import PatternDetailModal from "../components/fraudpatterns/PatternDetailModal";
 import PatternTrendChart from "../components/fraudpatterns/PatternTrendChart";
+import ExportModal from "../components/fraudpatterns/ExportModal"; // ← NEW
 import PageLoader from "../components/common/PageLoader";
 import "./FraudPatterns.css";
 
-/* ── Seed Data ── */
 const ALL_PATTERNS = [
   {
     id: 1,
@@ -230,78 +230,23 @@ const ALL_PATTERNS = [
       "Enforce 7-day cooling period for new high-value transfers",
       "Require enhanced KYC for new accounts over threshold",
       "Manual review mandatory for all flagged new-account transactions",
-      "Limit daily transaction value for unverified accounts",
-    ],
-  },
-  {
-    id: 9,
-    mlKey: "refund_abuse_pattern",
-    name: "Suspicious Recipient Pattern",
-    description:
-      "Funds being transferred to accounts with characteristics matching money mule profiles: newly created, infrequently used, or linked to previous fraud reports.",
-    category: "Transaction",
-    riskLevel: "medium",
-    status: "active",
-    occurrences: 29,
-    accuracy: 84.2,
-    falsePositiveRate: 9.3,
-    avgLossIDR: "22.7 Jt",
-    trend: 7,
-    lastUpdated: "11 Feb 2026",
-    indicators: [
-      "Recipient account has no prior inbound transactions",
-      "Recipient account created within last 30 days",
-      "Same recipient across multiple flagged transactions",
-      "Recipient account shows immediate withdrawal after receipt",
-    ],
-    recommendedActions: [
-      "Screen recipient accounts against fraud database",
-      "Add suspicious recipients to watch list",
-      "Require confirmation for first-time high-value recipients",
-      "Collaborate with recipient's bank for account verification",
-    ],
-  },
-  {
-    id: 10,
-    name: "Session Hijacking Indicators",
-    description:
-      "Behavioral signals suggesting the session token or credentials have been stolen and are being used by a different party than the legitimate account owner.",
-    category: "Credential",
-    riskLevel: "high",
-    status: "inactive",
-    occurrences: 21,
-    accuracy: 92.8,
-    falsePositiveRate: 4.5,
-    avgLossIDR: "35.0 Jt",
-    trend: -5,
-    lastUpdated: "8 Feb 2026",
-    indicators: [
-      "Session token reused from a different IP",
-      "Sudden change in user-agent mid-session",
-      "Geographic impossibility between login and transaction",
-      "Transaction pattern differs from all historical behavior",
-    ],
-    recommendedActions: [
-      "Invalidate and rotate session tokens immediately",
-      "Force re-login with MFA for all active sessions",
-      "Alert user and lock account pending confirmation",
-      "Preserve full session logs for forensic investigation",
+      "Cross-reference with known money mule network patterns",
     ],
   },
 ];
 
 const FraudPatterns = () => {
   const [loading, setLoading] = useState(true);
-  const [patterns, setPatterns] = useState(ALL_PATTERNS); // ← real data dari ML
+  const [patterns, setPatterns] = useState(ALL_PATTERNS);
   const [apiError, setApiError] = useState(false);
   const [riskFilter, setRiskFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("occurrences_desc");
   const [selectedPattern, setSelectedPattern] = useState(null);
-  const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'chart'
+  const [viewMode, setViewMode] = useState("grid");
+  const [showExport, setShowExport] = useState(false); // ← NEW
 
-  /* ── Fetch pattern stats dari ML backend ── */
   useEffect(() => {
     const fetchPatternStats = async () => {
       try {
@@ -312,7 +257,6 @@ const FraudPatterns = () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
-        // Merge occurrences real dari ML ke metadata ALL_PATTERNS
         const merged = ALL_PATTERNS.map((p) => {
           const mlPattern = data.patterns.find((mp) => mp.key === p.mlKey);
           if (!mlPattern) return p;
@@ -324,7 +268,6 @@ const FraudPatterns = () => {
           };
         });
 
-        // Pattern ML yang belum ada di ALL_PATTERNS (pattern baru dari model)
         const extraPatterns = data.patterns
           .filter((mp) => !ALL_PATTERNS.some((p) => p.mlKey === mp.key))
           .map((mp, i) => ({
@@ -348,7 +291,10 @@ const FraudPatterns = () => {
         setPatterns([...merged, ...extraPatterns]);
         setApiError(false);
       } catch (err) {
-        console.warn("Pattern stats API offline, pakai data statis:", err.message);
+        console.warn(
+          "Pattern stats API offline, pakai data statis:",
+          err.message,
+        );
         setApiError(true);
         setPatterns(ALL_PATTERNS);
       } finally {
@@ -396,7 +342,6 @@ const FraudPatterns = () => {
 
   return (
     <div className="fraud-patterns-page">
-      {/* Page header */}
       <div className="fp-page-header">
         <div className="fp-header-left">
           <div className="fp-header-icon">
@@ -409,8 +354,8 @@ const FraudPatterns = () => {
             </p>
           </div>
         </div>
+
         <div className="fp-header-actions">
-          {/* View mode toggle */}
           <div className="fp-view-toggle">
             <button
               className={`fp-view-btn ${viewMode === "grid" ? "active" : ""}`}
@@ -427,14 +372,14 @@ const FraudPatterns = () => {
               <i className="bi bi-bar-chart-line"></i>
             </button>
           </div>
-          <button className="fp-export-btn">
+
+          <button className="fp-export-btn" onClick={() => setShowExport(true)}>
             <i className="bi bi-download"></i>
-            Export Report
+            Export Patterns List
           </button>
         </div>
       </div>
 
-      {/* API offline banner */}
       {apiError && (
         <div
           style={{
@@ -456,10 +401,8 @@ const FraudPatterns = () => {
         </div>
       )}
 
-      {/* Stats */}
       <PatternStats patterns={patterns} />
 
-      {/* Filter */}
       <PatternFilter
         riskFilter={riskFilter}
         setRiskFilter={setRiskFilter}
@@ -472,7 +415,6 @@ const FraudPatterns = () => {
         totalResults={filtered.length}
       />
 
-      {/* Content */}
       {viewMode === "chart" ? (
         <PatternTrendChart
           patterns={filtered.length > 0 ? filtered : patterns}
@@ -499,12 +441,15 @@ const FraudPatterns = () => {
         </>
       )}
 
-      {/* Detail modal */}
       {selectedPattern && (
         <PatternDetailModal
           pattern={selectedPattern}
           onClose={() => setSelectedPattern(null)}
         />
+      )}
+
+      {showExport && (
+        <ExportModal patterns={patterns} onClose={() => setShowExport(false)} />
       )}
     </div>
   );

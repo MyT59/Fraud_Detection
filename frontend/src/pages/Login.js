@@ -14,16 +14,12 @@ const Login = () => {
 
   return (
     <div className="login-page">
-      {/* Animated background */}
       <LoginBackground />
 
-      {/* Left — Branding */}
       <LoginBrand />
 
-      {/* Vertical divider */}
       <div className="login-divider" />
 
-      {/* Right — Form */}
       <LoginForm onLoginSuccess={handleLoginSuccess} />
     </div>
   );

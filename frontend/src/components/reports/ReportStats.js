@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 const ReportStats = ({ stats }) => {
   return (
@@ -31,7 +31,10 @@ const ReportStats = ({ stats }) => {
               <div className="stat-value">{stats.completed}</div>
               <div className="stat-change positive">
                 <i className="bi bi-arrow-up"></i>
-                {stats.total > 0 ? ((stats.completed / stats.total) * 100).toFixed(1) : 0}% success rate
+                {stats.total > 0
+                  ? ((stats.completed / stats.total) * 100).toFixed(1)
+                  : 0}
+                % success rate
               </div>
             </div>
             <div className="bg-number">{stats.completed}</div>

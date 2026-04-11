@@ -54,7 +54,6 @@
   flex: 1;
 }
 
-/* Custom scrollbar */
 .detail-content::-webkit-scrollbar {
   width: 6px;
 }
@@ -72,7 +71,6 @@
   background: #9ca3af;
 }
 
-/* Risk Score Section */
 .risk-section {
   margin-bottom: 2rem;
 }
@@ -129,7 +127,6 @@
   letter-spacing: 0.5px;
 }
 
-/* Info Sections */
 .info-section {
   margin-bottom: 1.5rem;
 }
@@ -184,7 +181,6 @@
   font-size: 1.1rem;
 }
 
-/* Anomalies Section */
 .anomalies-section {
   background: #fef3c7;
   padding: 1rem;
@@ -217,7 +213,6 @@
   border-bottom: 1px solid #fde68a;
 }
 
-/* Decision Section */
 .decision-section {
   margin-top: 2rem;
   padding-top: 1.5rem;
@@ -268,7 +263,6 @@
   background: #fee2e2;
 }
 
-/* Confirm Section */
 .confirm-section {
   margin-top: 2rem;
   padding-top: 1.5rem;
@@ -347,7 +341,6 @@
   background: #dc2626;
 }
 
-/* Already Reviewed State */
 .already-reviewed {
   text-align: center;
   padding: 3rem 1rem;
@@ -398,7 +391,6 @@
   margin: 0;
 }
 
-/* Responsive */
 @media (max-width: 1199px) {
   .review-detail-panel {
     position: fixed;

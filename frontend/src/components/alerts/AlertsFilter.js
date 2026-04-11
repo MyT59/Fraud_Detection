@@ -1,27 +1,27 @@
-import React from 'react';
+import React from "react";
 
 const TYPE_OPTIONS = [
-  { value: 'all',       label: 'Semua Tipe'     },
-  { value: 'fraud',     label: 'Fraud Detected' },
-  { value: 'rule',      label: 'Rule Triggered' },
-  { value: 'blacklist', label: 'Blacklist Hit'  },
-  { value: 'review',    label: 'Manual Review'  },
-  { value: 'system',    label: 'System Alert'   },
+  { value: "all", label: "Semua Tipe" },
+  { value: "fraud", label: "Fraud Detected" },
+  { value: "rule", label: "Rule Triggered" },
+  { value: "blacklist", label: "Blacklist Hit" },
+  { value: "review", label: "Manual Review" },
+  { value: "system", label: "System Alert" },
 ];
 
 const STATUS_OPTIONS = [
-  { value: 'all',      label: 'Semua Status' },
-  { value: 'unread',   label: 'Belum Dibaca' },
-  { value: 'read',     label: 'Sudah Dibaca' },
-  { value: 'resolved', label: 'Resolved'     },
+  { value: "all", label: "Semua Status" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+  { value: "unread", label: "Belum Dibaca" },
 ];
 
 const SEVERITY_OPTIONS = [
-  { value: 'all',      label: 'Semua Level' },
-  { value: 'critical', label: 'Critical'    },
-  { value: 'high',     label: 'High'        },
-  { value: 'medium',   label: 'Medium'      },
-  { value: 'low',      label: 'Low'         },
+  { value: "all", label: "Semua Level" },
+  { value: "critical", label: "Critical" },
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "low", label: "Low" },
 ];
 
 const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
@@ -35,10 +35,13 @@ const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
             className="alerts-search-input"
             placeholder="Cari berdasarkan pesan, ID transaksi..."
             value={filters.search}
-            onChange={e => onFilterChange({ search: e.target.value })}
+            onChange={(e) => onFilterChange({ search: e.target.value })}
           />
           {filters.search && (
-            <button className="alerts-search-clear" onClick={() => onFilterChange({ search: '' })}>
+            <button
+              className="alerts-search-clear"
+              onClick={() => onFilterChange({ search: "" })}
+            >
               <i className="bi bi-x-lg"></i>
             </button>
           )}
@@ -47,25 +50,37 @@ const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
         <select
           className="alerts-select"
           value={filters.type}
-          onChange={e => onFilterChange({ type: e.target.value })}
+          onChange={(e) => onFilterChange({ type: e.target.value })}
         >
-          {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </select>
 
         <select
           className="alerts-select"
           value={filters.severity}
-          onChange={e => onFilterChange({ severity: e.target.value })}
+          onChange={(e) => onFilterChange({ severity: e.target.value })}
         >
-          {SEVERITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {SEVERITY_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </select>
 
         <select
           className="alerts-select"
           value={filters.status}
-          onChange={e => onFilterChange({ status: e.target.value })}
+          onChange={(e) => onFilterChange({ status: e.target.value })}
         >
-          {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {STATUS_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </select>
 
         <button className="alerts-btn-outline" onClick={onReset}>

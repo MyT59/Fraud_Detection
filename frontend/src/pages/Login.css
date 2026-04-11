@@ -1,6 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap");
 
-/* ── Variables ── */
 :root {
   --login-bg: #0a0a0a;
   --login-surface: #111111;
@@ -15,14 +14,12 @@
   --login-input-bg: #161616;
 }
 
-/* ── Reset for login page ── */
 .login-page * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-/* ── Page Layout ── */
 .login-page {
   min-height: 100vh;
   display: flex;
@@ -32,7 +29,6 @@
   position: relative;
 }
 
-/* ── Animated Background ── */
 .login-bg {
   position: fixed;
   inset: 0;
@@ -98,7 +94,6 @@
   }
 }
 
-/* Floating particles */
 .login-particle {
   position: absolute;
   width: 2px;
@@ -126,23 +121,24 @@
   }
 }
 
-/* ── Left Panel — Branding ── */
 .login-brand-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 64px;
+  padding: 64px 56px 64px 64px;
   position: relative;
   z-index: 1;
-  max-width: 560px;
+  max-width: 580px;
+  min-width: 0;
+  overflow: visible;
 }
 
 .login-brand-logo {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-bottom: 64px;
+  margin-bottom: 56px;
   animation: fadeSlideUp 0.6s ease both;
 }
 
@@ -178,19 +174,20 @@
   text-transform: uppercase;
 }
 
-/* Headline */
 .login-brand-headline {
   animation: fadeSlideUp 0.6s ease 0.1s both;
 }
 
 .login-brand-headline h1 {
   font-family: "Syne", sans-serif;
-  font-size: clamp(2.4rem, 4vw, 3.4rem);
+  font-size: clamp(2.2rem, 3.5vw, 3.2rem);
   font-weight: 800;
   color: var(--login-text);
-  line-height: 1.1;
+  line-height: 1.08;
   letter-spacing: -0.03em;
   margin-bottom: 1.25rem;
+  word-break: keep-all;
+  white-space: normal;
 }
 
 .login-brand-headline h1 em {
@@ -199,17 +196,16 @@
 }
 
 .login-brand-headline p {
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: var(--login-muted);
-  line-height: 1.6;
-  max-width: 380px;
+  line-height: 1.65;
+  max-width: 360px;
 }
 
-/* Stats row */
 .login-brand-stats {
   display: flex;
   gap: 2rem;
-  margin-top: 3rem;
+  margin-top: 2.5rem;
   animation: fadeSlideUp 0.6s ease 0.2s both;
 }
 
@@ -221,7 +217,7 @@
 
 .brand-stat-value {
   font-family: "Syne", sans-serif;
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   font-weight: 800;
   color: var(--login-text);
   line-height: 1;
@@ -232,19 +228,18 @@
 }
 
 .brand-stat-label {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--login-muted-2);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
-/* Feature chips */
 .login-brand-features {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 2.5rem;
+  margin-top: 2rem;
   animation: fadeSlideUp 0.6s ease 0.3s both;
 }
 
@@ -267,7 +262,6 @@
   color: var(--login-red);
 }
 
-/* Vertical divider */
 .login-divider {
   width: 1px;
   background: linear-gradient(
@@ -280,9 +274,9 @@
   flex-shrink: 0;
   position: relative;
   z-index: 1;
+  align-self: stretch;
 }
 
-/* ── Right Panel — Form ── */
 .login-form-panel {
   flex: 1;
   display: flex;
@@ -299,7 +293,6 @@
   animation: fadeSlideUp 0.6s ease 0.15s both;
 }
 
-/* Form header */
 .login-form-header {
   margin-bottom: 2rem;
 }
@@ -318,7 +311,6 @@
   color: var(--login-muted);
 }
 
-/* Error alert */
 .login-error {
   display: flex;
   align-items: center;
@@ -358,7 +350,6 @@
   }
 }
 
-/* ── Form Fields ── */
 .login-field {
   margin-bottom: 1.1rem;
 }
@@ -399,7 +390,6 @@
   color: var(--login-text);
   outline: none;
   transition: all 0.2s;
-  -webkit-autofill: unset;
 }
 
 .login-input::placeholder {
@@ -413,12 +403,10 @@
   box-shadow: 0 0 0 3px var(--login-red-glow);
 }
 
-.login-input:focus + .login-input-icon,
 .login-input-wrap:focus-within .login-input-icon {
   color: var(--login-red);
 }
 
-/* Password toggle */
 .login-input-password {
   padding-right: 44px;
 }
@@ -444,7 +432,6 @@
   color: var(--login-text);
 }
 
-/* Remember + Forgot row */
 .login-options {
   display: flex;
   align-items: center;
@@ -490,7 +477,6 @@
   text-decoration: underline;
 }
 
-/* ── Submit Button ── */
 .login-submit {
   width: 100%;
   padding: 13px;
@@ -540,7 +526,6 @@
   cursor: not-allowed;
 }
 
-/* Spinner inside button */
 .login-spinner {
   width: 16px;
   height: 16px;
@@ -556,7 +541,6 @@
   }
 }
 
-/* ── Divider ── */
 .login-form-divider {
   display: flex;
   align-items: center;
@@ -580,7 +564,6 @@
   white-space: nowrap;
 }
 
-/* ── Demo credentials hint ── */
 .login-demo-hint {
   background: rgba(220, 38, 38, 0.05);
   border: 1px solid var(--login-border-2);
@@ -609,7 +592,6 @@
   font-weight: 600;
 }
 
-/* ── Footer ── */
 .login-form-footer {
   margin-top: 1.75rem;
   text-align: center;
@@ -630,7 +612,6 @@
   text-decoration: underline;
 }
 
-/* Security badge */
 .login-security-badge {
   display: inline-flex;
   align-items: center;
@@ -645,7 +626,6 @@
   font-size: 0.75rem;
 }
 
-/* ── Animation ── */
 @keyframes fadeSlideUp {
   from {
     opacity: 0;
@@ -657,20 +637,16 @@
   }
 }
 
-/* ── Responsive ── */
 @media (max-width: 992px) {
   .login-brand-panel {
     display: none;
   }
-
   .login-divider {
     display: none;
   }
-
   .login-form-panel {
     padding: 32px 24px;
   }
-
   .login-form-container {
     max-width: 100%;
   }
@@ -682,7 +658,6 @@
     align-items: flex-start;
     padding-top: 48px;
   }
-
   .login-form-header h2 {
     font-size: 1.5rem;
   }

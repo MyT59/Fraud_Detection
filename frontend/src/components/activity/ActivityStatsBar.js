@@ -1,16 +1,15 @@
-import React from 'react';
-import { STATS_BAR } from './activityData';
+import React from "react";
+import { STATS_BAR } from "./activityData";
 
-/* Terima `activities` sebagai prop supaya bisa hitung data real + static */
 const ActivityStatsBar = ({ activities = [] }) => {
-  const counts = STATS_BAR.map(stat => ({
+  const counts = STATS_BAR.map((stat) => ({
     ...stat,
-    count: activities.filter(a => a.type === stat.key).length,
+    count: activities.filter((a) => a.type === stat.key).length,
   }));
 
   return (
     <div className="activity-stats-bar">
-      {counts.map(stat => (
+      {counts.map((stat) => (
         <div className="stat-bar-item" key={stat.key}>
           <div className={`stat-bar-icon ${stat.color}`}>
             <i className={`bi ${stat.icon}`}></i>

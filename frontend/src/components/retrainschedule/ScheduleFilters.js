@@ -1,82 +1,99 @@
 import React from "react";
 
-/* ═══════════════════════════════════════════
-   ScheduleFilters — Search + filter pills
-═══════════════════════════════════════════ */
+const FREQ_LABELS = { daily: "Harian", weekly: "Mingguan", monthly: "Bulanan" };
+const STATUS_LABELS = { active: "Aktif", paused: "Paused" };
+
 const ScheduleFilters = ({
-  filterStatus, setFilterStatus,
-  filterFreq,   setFilterFreq,
-  searchQuery,  setSearchQuery,
+  searchQuery,
+  setSearchQuery,
+  filterStatus,
+  setFilterStatus,
+  filterFreq,
+  setFilterFreq,
   totalShown,
 }) => {
-  const statusOpts = [
-    { value: "all",    label: "Semua" },
-    { value: "active", label: "Aktif" },
-    { value: "paused", label: "Paused" },
-  ];
+  const activeFilters = [
+    searchQuery.trim() && {
+      key: "search",
+      icon: "bi-search",
+      label: `"${searchQuery.trim()}"`,
+      onRemove: () => setSearchQuery(""),
+    },
+    filterStatus !== "all" && {
+      key: "status",
+      icon: "bi-circle-fill",
+      label: `Status: ${STATUS_LABELS[filterStatus]}`,
+      onRemove: () => setFilterStatus("all"),
+    },
+    filterFreq !== "all" && {
+      key: "freq",
+      icon: "bi-calendar",
+      label: `Frekuensi: ${FREQ_LABELS[filterFreq]}`,
+      onRemove: () => setFilterFreq("all"),
+    },
+  ].filter(Boolean);
 
-  const freqOpts = [
-    { value: "all",     label: "Semua" },
-    { value: "daily",   label: "Harian" },
-    { value: "weekly",  label: "Mingguan" },
-    { value: "monthly", label: "Bulanan" },
-  ];
+  const hasFilters = activeFilters.length > 0;
+
+  const resetAll = () => {
+    setSearchQuery("");
+    setFilterStatus("all");
+    setFilterFreq("all");
+  };
 
   return (
-    <div className="rs-filters-bar">
-      {/* Search */}
-      <div className="rs-search-wrap">
-        <i className="bi bi-search rs-search-icon" />
-        <input
-          type="text"
-          className="rs-search-input"
-          placeholder="Cari nama schedule atau model..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-        {searchQuery && (
-          <button className="rs-search-clear" onClick={() => setSearchQuery("")}>
-            <i className="bi bi-x" />
+    <div className="rs-filters-wrap">
+      <div className="rs-filters-bar">
+        <div className="rs-search-wrap">
+          <i className="bi bi-search rs-search-icon" />
+          <input
+            type="text"
+            className="rs-search-input"
+            placeholder="Cari nama schedule atau model..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              className="rs-search-clear"
+              onClick={() => setSearchQuery("")}
+            >
+              <i className="bi bi-x" />
+            </button>
+          )}
+        </div>
+
+        <span className="rs-result-count">
+          <i className="bi bi-funnel" /> {totalShown} schedule
+        </span>
+      </div>
+
+      {hasFilters && (
+        <div className="rs-active-filters">
+          <span className="rs-active-filters__label">Filter aktif:</span>
+
+          <div className="rs-active-filters__chips">
+            {activeFilters.map((f) => (
+              <span key={f.key} className="rs-filter-chip">
+                <i className={`bi ${f.icon} rs-filter-chip__icon`} />
+                {f.label}
+                <button
+                  className="rs-filter-chip__remove"
+                  onClick={f.onRemove}
+                  title="Hapus filter"
+                >
+                  <i className="bi bi-x" />
+                </button>
+              </span>
+            ))}
+          </div>
+
+          <button className="rs-reset-btn" onClick={resetAll}>
+            <i className="bi bi-arrow-counterclockwise" />
+            Reset semua
           </button>
-        )}
-      </div>
-
-      {/* Status filter */}
-      <div className="rs-filter-group">
-        <span className="rs-filter-label">Status</span>
-        <div className="rs-pills">
-          {statusOpts.map((o) => (
-            <button
-              key={o.value}
-              className={`rs-pill ${filterStatus === o.value ? "rs-pill--active" : ""}`}
-              onClick={() => setFilterStatus(o.value)}
-            >
-              {o.label}
-            </button>
-          ))}
         </div>
-      </div>
-
-      {/* Frequency filter */}
-      <div className="rs-filter-group">
-        <span className="rs-filter-label">Frekuensi</span>
-        <div className="rs-pills">
-          {freqOpts.map((o) => (
-            <button
-              key={o.value}
-              className={`rs-pill ${filterFreq === o.value ? "rs-pill--active" : ""}`}
-              onClick={() => setFilterFreq(o.value)}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Result count */}
-      <span className="rs-result-count">
-        <i className="bi bi-funnel" /> {totalShown} schedule
-      </span>
+      )}
     </div>
   );
 };

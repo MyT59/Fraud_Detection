@@ -79,12 +79,12 @@ const RetrainSchedule = () => {
       <ScheduleStats stats={stats} />
 
       <ScheduleFilters
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
         filterStatus={filterStatus}
         setFilterStatus={setFilterStatus}
         filterFreq={filterFreq}
         setFilterFreq={setFilterFreq}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
         totalShown={filteredSchedules.length}
       />
 
@@ -95,6 +95,10 @@ const RetrainSchedule = () => {
         onToggleStatus={toggleStatus}
         onDetail={openDetail}
         onManualRun={openManualRun}
+        filterFreq={filterFreq}
+        setFilterFreq={setFilterFreq}
+        filterStatus={filterStatus}
+        setFilterStatus={setFilterStatus}
       />
 
       <ScheduleModal

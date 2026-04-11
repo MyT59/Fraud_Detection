@@ -1,59 +1,57 @@
-import React, { useState } from 'react';
-import './ReportShareModal.css';
+import React, { useState } from "react";
+import "./ReportShareModal.css";
 
 const ReportShareModal = ({ report, isOpen, onClose, onShare }) => {
-  const [shareMethod, setShareMethod] = useState('email'); // email, link
+  const [shareMethod, setShareMethod] = useState("email");
   const [emailData, setEmailData] = useState({
-    recipients: '',
-    subject: `Fraud Detection Report: ${report?.type || 'Report'}`,
-    message: '',
-    includeAttachment: true
+    recipients: "",
+    subject: `Fraud Detection Report: ${report?.type || "Report"}`,
+    message: "",
+    includeAttachment: true,
   });
   const [linkData, setLinkData] = useState({
-    expiresIn: '7',
-    password: '',
-    allowDownload: true
+    expiresIn: "7",
+    password: "",
+    allowDownload: true,
   });
-  const [generatedLink, setGeneratedLink] = useState('');
+  const [generatedLink, setGeneratedLink] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
 
   if (!isOpen || !report) return null;
 
   const handleEmailChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setEmailData(prev => ({
+    setEmailData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === "checkbox" ? checked : value,
     }));
   };
 
   const handleLinkChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setLinkData(prev => ({
+    setLinkData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === "checkbox" ? checked : value,
     }));
   };
 
   const handleShareByEmail = () => {
-    // Validate
     if (!emailData.recipients) {
-      alert('Please enter at least one recipient email');
+      alert("Please enter at least one recipient email");
       return;
     }
 
     onShare?.({
-      method: 'email',
+      method: "email",
       data: emailData,
-      reportId: report.id
+      reportId: report.id,
     });
 
-    alert('Report sent successfully!');
+    alert("Report sent successfully!");
     onClose();
   };
 
   const handleGenerateLink = () => {
-    // Generate dummy link
     const randomId = Math.random().toString(36).substring(7);
     const link = `https://fraud-detection.app/reports/share/${randomId}`;
     setGeneratedLink(link);
@@ -67,50 +65,54 @@ const ReportShareModal = ({ report, isOpen, onClose, onShare }) => {
 
   return (
     <>
-      {/* Backdrop — lighter & blurred */}
       <div
         onClick={onClose}
         style={{
-          position: 'fixed',
+          position: "fixed",
           inset: 0,
-          background: 'rgba(12,12,14,0.30)',
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
+          background: "rgba(12,12,14,0.30)",
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
           zIndex: 1050,
         }}
       />
 
-      {/* Modal — perfectly centered */}
       <div
         tabIndex="-1"
         style={{
-          position: 'fixed',
+          position: "fixed",
           inset: 0,
           zIndex: 1055,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '1rem',
-          pointerEvents: 'none',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "1rem",
+          pointerEvents: "none",
         }}
       >
         <div
-          style={{ pointerEvents: 'all', width: '100%', maxWidth: '580px', margin: 0 }}
+          style={{
+            pointerEvents: "all",
+            width: "100%",
+            maxWidth: "580px",
+            margin: 0,
+          }}
           className="modal-dialog modal-dialog-centered modal-lg"
         >
           <div className="modal-content share-modal-content">
-            {/* Header */}
             <div className="modal-header">
               <h5 className="modal-title">
                 <i className="bi bi-share text-danger me-2"></i>
                 Share Report
               </h5>
-              <button type="button" className="btn-close" onClick={onClose}></button>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={onClose}
+              ></button>
             </div>
 
-            {/* Body */}
             <div className="modal-body">
-              {/* Report Info */}
               <div className="report-info-banner mb-4">
                 <div className="info-icon">
                   <i className="bi bi-file-earmark-text"></i>
@@ -123,26 +125,24 @@ const ReportShareModal = ({ report, isOpen, onClose, onShare }) => {
                 </div>
               </div>
 
-              {/* Share Method Tabs */}
               <div className="share-methods mb-4">
                 <button
-                  className={`method-tab ${shareMethod === 'email' ? 'active' : ''}`}
-                  onClick={() => setShareMethod('email')}
+                  className={`method-tab ${shareMethod === "email" ? "active" : ""}`}
+                  onClick={() => setShareMethod("email")}
                 >
                   <i className="bi bi-envelope"></i>
                   <span>Email</span>
                 </button>
                 <button
-                  className={`method-tab ${shareMethod === 'link' ? 'active' : ''}`}
-                  onClick={() => setShareMethod('link')}
+                  className={`method-tab ${shareMethod === "link" ? "active" : ""}`}
+                  onClick={() => setShareMethod("link")}
                 >
                   <i className="bi bi-link-45deg"></i>
                   <span>Share Link</span>
                 </button>
               </div>
 
-              {/* Email Method */}
-              {shareMethod === 'email' && (
+              {shareMethod === "email" && (
                 <div className="share-content">
                   <div className="mb-3">
                     <label className="form-label">
@@ -200,20 +200,23 @@ const ReportShareModal = ({ report, isOpen, onClose, onShare }) => {
                       checked={emailData.includeAttachment}
                       onChange={handleEmailChange}
                     />
-                    <label className="form-check-label" htmlFor="includeAttachment">
+                    <label
+                      className="form-check-label"
+                      htmlFor="includeAttachment"
+                    >
                       Include report as attachment ({report.format})
                     </label>
                   </div>
 
                   <div className="alert alert-info mt-3 mb-0">
                     <i className="bi bi-info-circle me-2"></i>
-                    Recipients will receive an email with the report attached or a secure download link.
+                    Recipients will receive an email with the report attached or
+                    a secure download link.
                   </div>
                 </div>
               )}
 
-              {/* Link Method */}
-              {shareMethod === 'link' && (
+              {shareMethod === "link" && (
                 <div className="share-content">
                   {!generatedLink ? (
                     <>
@@ -263,7 +266,10 @@ const ReportShareModal = ({ report, isOpen, onClose, onShare }) => {
                           checked={linkData.allowDownload}
                           onChange={handleLinkChange}
                         />
-                        <label className="form-check-label" htmlFor="allowDownload">
+                        <label
+                          className="form-check-label"
+                          htmlFor="allowDownload"
+                        >
                           Allow recipients to download the report
                         </label>
                       </div>
@@ -283,8 +289,10 @@ const ReportShareModal = ({ report, isOpen, onClose, onShare }) => {
                           <i className="bi bi-check-circle-fill"></i>
                         </div>
                         <h6>Link Generated Successfully!</h6>
-                        <p className="text-muted">Share this link with anyone you want to give access to</p>
-                        
+                        <p className="text-muted">
+                          Share this link with anyone you want to give access to
+                        </p>
+
                         <div className="link-box">
                           <input
                             type="text"
@@ -296,30 +304,45 @@ const ReportShareModal = ({ report, isOpen, onClose, onShare }) => {
                             className="btn btn-outline-danger"
                             onClick={handleCopyLink}
                           >
-                            <i className={`bi bi-${linkCopied ? 'check' : 'clipboard'}`}></i>
-                            {linkCopied ? 'Copied!' : 'Copy'}
+                            <i
+                              className={`bi bi-${linkCopied ? "check" : "clipboard"}`}
+                            ></i>
+                            {linkCopied ? "Copied!" : "Copy"}
                           </button>
                         </div>
 
                         <div className="link-info mt-3">
                           <div className="info-item">
                             <i className="bi bi-clock"></i>
-                            <span>Expires in: {linkData.expiresIn === 'never' ? 'Never' : `${linkData.expiresIn} days`}</span>
+                            <span>
+                              Expires in:{" "}
+                              {linkData.expiresIn === "never"
+                                ? "Never"
+                                : `${linkData.expiresIn} days`}
+                            </span>
                           </div>
                           <div className="info-item">
                             <i className="bi bi-lock"></i>
-                            <span>{linkData.password ? 'Password protected' : 'No password'}</span>
+                            <span>
+                              {linkData.password
+                                ? "Password protected"
+                                : "No password"}
+                            </span>
                           </div>
                           <div className="info-item">
                             <i className="bi bi-download"></i>
-                            <span>{linkData.allowDownload ? 'Download allowed' : 'View only'}</span>
+                            <span>
+                              {linkData.allowDownload
+                                ? "Download allowed"
+                                : "View only"}
+                            </span>
                           </div>
                         </div>
                       </div>
 
                       <button
                         className="btn btn-outline-secondary w-100 mt-3"
-                        onClick={() => setGeneratedLink('')}
+                        onClick={() => setGeneratedLink("")}
                       >
                         <i className="bi bi-arrow-left me-2"></i>
                         Generate New Link
@@ -330,13 +353,20 @@ const ReportShareModal = ({ report, isOpen, onClose, onShare }) => {
               )}
             </div>
 
-            {/* Footer */}
             <div className="modal-footer">
-              <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                onClick={onClose}
+              >
                 Close
               </button>
-              {shareMethod === 'email' && (
-                <button type="button" className="btn btn-danger" onClick={handleShareByEmail}>
+              {shareMethod === "email" && (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleShareByEmail}
+                >
                   <i className="bi bi-send me-2"></i>
                   Send Email
                 </button>

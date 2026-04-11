@@ -1,10 +1,10 @@
-import React from 'react';
-import './PatternTrendChart.css';
+import React from "react";
+import "./PatternTrendChart.css";
 
 const PatternTrendChart = ({ patterns }) => {
-  const maxOccurrences = Math.max(...patterns.map(p => p.occurrences));
+  const maxOccurrences = Math.max(...patterns.map((p) => p.occurrences));
 
-  const RISK_COLOR = { high: '#dc2626', medium: '#f59e0b', low: '#0284c7' };
+  const RISK_COLOR = { high: "#dc2626", medium: "#f59e0b", low: "#0284c7" };
 
   return (
     <div className="ptc-wrapper">
@@ -13,7 +13,9 @@ const PatternTrendChart = ({ patterns }) => {
           <i className="bi bi-bar-chart-line"></i>
           Pattern Detection Volume
         </span>
-        <span className="ptc-subtitle">Occurrences per pattern (descending)</span>
+        <span className="ptc-subtitle">
+          Occurrences per pattern (descending)
+        </span>
       </div>
 
       <div className="ptc-chart">
@@ -38,11 +40,16 @@ const PatternTrendChart = ({ patterns }) => {
                   </div>
                 </div>
                 <span className="ptc-pct">
-                  {((pattern.occurrences / patterns.reduce((s,p) => s + p.occurrences, 0)) * 100).toFixed(1)}%
+                  {(
+                    (pattern.occurrences /
+                      patterns.reduce((s, p) => s + p.occurrences, 0)) *
+                    100
+                  ).toFixed(1)}
+                  %
                 </span>
               </div>
             );
-        })}
+          })}
       </div>
 
       <div className="ptc-legend">

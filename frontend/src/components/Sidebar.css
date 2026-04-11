@@ -1,6 +1,3 @@
-/* ═══════════════════════════════════════════
-   SIDEBAR BASE
-═══════════════════════════════════════════ */
 .sidebar {
   position: fixed;
   left: 0;
@@ -15,17 +12,14 @@
   transition: width 0.25s ease;
 }
 
-/* ── Desktop collapsed: icon-only 64px ── */
 .sidebar.collapsed {
   width: 64px;
 }
 
-/* Overlay hidden by default */
-.sidebar-overlay { display: none; }
+.sidebar-overlay {
+  display: none;
+}
 
-/* ═══════════════════════════════════════════
-   COLLAPSE BUTTON (desktop only)
-═══════════════════════════════════════════ */
 .sidebar-collapse-btn {
   display: flex;
   align-items: center;
@@ -40,7 +34,9 @@
   color: #9ca3af;
   font-size: 13px;
   font-weight: 500;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   white-space: nowrap;
 }
 
@@ -49,23 +45,26 @@
   color: #374151;
 }
 
-/* Saat collapsed: center icon */
 .sidebar.collapsed .sidebar-collapse-btn {
   justify-content: center;
   padding: 0;
 }
 
-/* Sembunyikan di mobile */
 @media (max-width: 992px) {
-  .sidebar-collapse-btn { display: none; }
+  .sidebar-collapse-btn {
+    display: none;
+  }
 }
 
-/* ═══════════════════════════════════════════
-   NAV + MENU
-═══════════════════════════════════════════ */
-.sidebar-nav { padding: .5rem 0 1rem; }
+.sidebar-nav {
+  padding: 0.5rem 0 1rem;
+}
 
-.sidebar-menu { list-style: none; padding: 0; margin: 0; }
+.sidebar-menu {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
 
 .sidebar-menu-item {
   margin-bottom: 0.25rem;
@@ -94,20 +93,29 @@
   overflow: hidden;
 }
 
-/* Collapsed: center icon */
 .sidebar.collapsed .sidebar-menu-link {
   justify-content: center !important;
   padding: 0.875rem !important;
   gap: 0;
 }
 
-.sidebar-menu-link:hover  { background: #f9fafb !important; color: #374151 !important; }
-.sidebar-menu-link.active { background: #fef2f2 !important; color: #ef4444 !important; }
+.sidebar-menu-link:hover {
+  background: #f9fafb !important;
+  color: #374151 !important;
+}
+.sidebar-menu-link.active {
+  background: #fef2f2 !important;
+  color: #ef4444 !important;
+}
 
-.sidebar-menu-link i { font-size: 1.25rem; flex-shrink: 0; }
-.sidebar-menu-label  { flex: 1; }
+.sidebar-menu-link i {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+.sidebar-menu-label {
+  flex: 1;
+}
 
-/* Badge normal */
 .sidebar-menu-badge {
   background: #ef4444;
   color: white;
@@ -119,9 +127,11 @@
   text-align: center;
   flex-shrink: 0;
 }
-.sidebar-menu-link.active .sidebar-menu-badge { background: white; color: #ef4444; }
+.sidebar-menu-link.active .sidebar-menu-badge {
+  background: white;
+  color: #ef4444;
+}
 
-/* Badge dot (collapsed) */
 .sidebar-badge-dot {
   position: absolute;
   top: 5px;
@@ -136,17 +146,20 @@
   text-align: center;
 }
 
-/* ═══════════════════════════════════════════
-   SCROLLBAR
-═══════════════════════════════════════════ */
-.sidebar::-webkit-scrollbar        { width: 6px; }
-.sidebar::-webkit-scrollbar-track  { background: #f9fafb; }
-.sidebar::-webkit-scrollbar-thumb  { background: #d1d5db; border-radius: 3px; }
-.sidebar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar::-webkit-scrollbar-track {
+  background: #f9fafb;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
 
-/* ═══════════════════════════════════════════
-   MOBILE & TABLET (≤992px)
-═══════════════════════════════════════════ */
 @media (max-width: 992px) {
   .sidebar,
   .sidebar.collapsed {
@@ -157,20 +170,27 @@
 
   .sidebar.open {
     left: 0;
-    box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
   }
 
   .sidebar-overlay {
     display: block;
     position: fixed;
-    top: 64px; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.5);
+    top: 64px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
     z-index: 99;
     animation: fadeIn 0.3s ease;
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }

@@ -1,5 +1,3 @@
-/* ── ActivityFilters ── prefix "af-" */
-
 .af-bar {
   display: flex;
   align-items: center;
@@ -12,7 +10,6 @@
   border-radius: 10px;
 }
 
-/* Search */
 .af-search-wrap {
   position: relative;
   display: flex;
@@ -38,7 +35,10 @@
   color: #111827;
   background: #fafafa;
   outline: none;
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
   font-family: inherit;
 }
 
@@ -48,7 +48,9 @@
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.07);
 }
 
-.af-search::placeholder { color: #c9d0db; }
+.af-search::placeholder {
+  color: #c9d0db;
+}
 
 .af-clear {
   position: absolute;
@@ -65,9 +67,10 @@
   line-height: 1;
 }
 
-.af-clear:hover { color: #374151; }
+.af-clear:hover {
+  color: #374151;
+}
 
-/* Pills */
 .af-pills {
   display: flex;
   gap: 6px;
@@ -110,12 +113,19 @@
   flex-shrink: 0;
 }
 
-.af-dot-create  { background: #16a34a; }
-.af-dot-edit    { background: #2563eb; }
-.af-dot-suspend { background: #ea580c; }
-.af-dot-delete  { background: #dc2626; }
+.af-dot-create {
+  background: #16a34a;
+}
+.af-dot-edit {
+  background: #2563eb;
+}
+.af-dot-suspend {
+  background: #ea580c;
+}
+.af-dot-delete {
+  background: #dc2626;
+}
 
-/* Reset */
 .af-reset {
   display: inline-flex;
   align-items: center;
@@ -146,6 +156,10 @@
     padding: 14px;
   }
 
-  .af-search-wrap { min-width: unset; }
-  .af-pills { justify-content: flex-start; }
+  .af-search-wrap {
+    min-width: unset;
+  }
+  .af-pills {
+    justify-content: flex-start;
+  }
 }

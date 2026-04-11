@@ -1,15 +1,13 @@
-/* ─── Activity Timeline Card ─────────────────────────────── */
 .activity-timeline-card {
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-/* ─── Header ─────────────────────────────────────────────── */
 .timeline-header {
   display: flex;
   justify-content: space-between;
@@ -20,7 +18,8 @@
   gap: 0.75rem;
 }
 
-.header-left {}
+.header-left {
+}
 
 .timeline-title {
   font-size: 1rem;
@@ -43,7 +42,6 @@
   margin: 0;
 }
 
-/* Filter pills */
 .timeline-filter {
   display: flex;
   gap: 0.3rem;
@@ -74,22 +72,23 @@
   color: #4f46e5;
 }
 
-/* ─── Scrollable Content ─────────────────────────────────── */
 .timeline-content {
   flex: 1;
   overflow-y: auto;
   padding: 0.5rem 0;
-  /* no max-height — let it fill the card */
 }
 
-.timeline-content::-webkit-scrollbar { width: 4px; }
-.timeline-content::-webkit-scrollbar-track { background: transparent; }
+.timeline-content::-webkit-scrollbar {
+  width: 4px;
+}
+.timeline-content::-webkit-scrollbar-track {
+  background: transparent;
+}
 .timeline-content::-webkit-scrollbar-thumb {
   background: #e5e7eb;
   border-radius: 2px;
 }
 
-/* ─── Timeline Item ──────────────────────────────────────── */
 .timeline-item {
   display: flex;
   align-items: flex-start;
@@ -103,9 +102,8 @@
   background: #fafafa;
 }
 
-/* Subtle divider between items */
 .timeline-item + .timeline-item::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 4.25rem;
@@ -114,7 +112,6 @@
   background: #f3f4f6;
 }
 
-/* ─── Left column: icon ──────────────────────────────────── */
 .timeline-icon-col {
   flex-shrink: 0;
   display: flex;
@@ -139,14 +136,37 @@
   transform: scale(1.08);
 }
 
-.activity-red    { background: #fef2f2; color: #dc2626; border: 1.5px solid #fecaca; }
-.activity-green  { background: #f0fdf4; color: #10b981; border: 1.5px solid #bbf7d0; }
-.activity-blue   { background: #eff6ff; color: #3b82f6; border: 1.5px solid #bfdbfe; }
-.activity-orange { background: #fffbeb; color: #f59e0b; border: 1.5px solid #fde68a; }
-.activity-purple { background: #faf5ff; color: #8b5cf6; border: 1.5px solid #ddd6fe; }
-.activity-gray   { background: #f9fafb; color: #9ca3af; border: 1.5px solid #e5e7eb; }
+.activity-red {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1.5px solid #fecaca;
+}
+.activity-green {
+  background: #f0fdf4;
+  color: #10b981;
+  border: 1.5px solid #bbf7d0;
+}
+.activity-blue {
+  background: #eff6ff;
+  color: #3b82f6;
+  border: 1.5px solid #bfdbfe;
+}
+.activity-orange {
+  background: #fffbeb;
+  color: #f59e0b;
+  border: 1.5px solid #fde68a;
+}
+.activity-purple {
+  background: #faf5ff;
+  color: #8b5cf6;
+  border: 1.5px solid #ddd6fe;
+}
+.activity-gray {
+  background: #f9fafb;
+  color: #9ca3af;
+  border: 1.5px solid #e5e7eb;
+}
 
-/* Vertical connector line */
 .timeline-connector {
   width: 1.5px;
   flex: 1;
@@ -156,13 +176,11 @@
   border-radius: 1px;
 }
 
-/* ─── Right column: content ──────────────────────────────── */
 .timeline-body {
   flex: 1;
   min-width: 0;
 }
 
-/* Title row */
 .timeline-row-top {
   display: flex;
   align-items: flex-start;
@@ -190,9 +208,10 @@
   gap: 0.2rem;
 }
 
-.activity-time i { font-size: 0.625rem; }
+.activity-time i {
+  font-size: 0.625rem;
+}
 
-/* Description */
 .activity-description {
   font-size: 0.78rem;
   color: #6b7280;
@@ -200,7 +219,6 @@
   line-height: 1.45;
 }
 
-/* Tags row */
 .activity-tags {
   display: flex;
   flex-wrap: wrap;
@@ -233,9 +251,10 @@
   margin-left: auto;
 }
 
-.tag-user i { font-size: 0.625rem; }
+.tag-user i {
+  font-size: 0.625rem;
+}
 
-/* ─── Footer ─────────────────────────────────────────────── */
 .timeline-footer {
   padding: 0.875rem 1.5rem;
   border-top: 1px solid #f3f4f6;
@@ -265,9 +284,10 @@
   background: #eef2ff;
 }
 
-.btn-load-more i { font-size: 0.8rem; }
+.btn-load-more i {
+  font-size: 0.8rem;
+}
 
-/* ─── Responsive ─────────────────────────────────────────── */
 @media (max-width: 768px) {
   .timeline-header {
     flex-wrap: wrap;

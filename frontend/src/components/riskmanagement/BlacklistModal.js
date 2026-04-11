@@ -1,299 +1,286 @@
-import React, { useState, useEffect, useRef } from 'react';
-import './BlacklistModal.css';
+import React, { useEffect, useState } from "react";
+import "./BlacklistModal.css";
 
-const BANKS = [
-  'BCA','BRI','BNI','Mandiri','BSI','CIMB Niaga','Danamon',
-  'Permata','BTN','Maybank','OCBC','Panin','BNC','Jenius','GoPay','OVO','Dana',
-];
-
-const REASONS = [
-  'Penipuan Online','Rekening Mule','Phishing','Social Engineering',
-  'Investasi Bodong','Jual Beli Palsu','Pinjol Ilegal','Lainnya',
-];
-
-const EMPTY = {
-  accountNumber: '', accountName: '', bank: '',
-  reason: '', reasonDetail: '', source: 'manual',
+const SOURCE_CONFIG = {
+  manual: { label: "Input Manual", cls: "src-manual", icon: "bi-person-fill" },
+  system: { label: "Auto-Detect", cls: "src-system", icon: "bi-cpu-fill" },
+  import: { label: "Bulk Import", cls: "src-import", icon: "bi-upload" },
 };
 
-/* ── Parse bulk text ──────────────────────────────────────────────
-   Supports formats:
-   1234567890|Budi Santoso|BCA|Penipuan
-   1234567890,Budi Santoso,BCA,Penipuan
-   1234567890 Budi Santoso BCA Penipuan   (space-separated, 4 tokens)
-──────────────────────────────────────────────────────────────── */
-const parseBulk = (text) => {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  return lines.reduce((acc, line) => {
-    const parts = line.includes('|') ? line.split('|')
-                : line.includes(',') ? line.split(',')
-                : line.split(/\s+/);
-    if (parts.length >= 1 && parts[0].trim()) {
-      acc.push({
-        accountNumber: parts[0]?.trim() || '',
-        accountName:   parts[1]?.trim() || '',
-        bank:          parts[2]?.trim() || '',
-        reason:        parts[3]?.trim() || 'Penipuan Online',
-        source:        'import',
-      });
-    }
-    return acc;
-  }, []);
+const STATUS_CONFIG = {
+  active: { label: "Aktif Blokir", cls: "st-active", icon: "bi-shield-fill-x" },
+  pending: {
+    label: "Menunggu Verifikasi",
+    cls: "st-pending",
+    icon: "bi-hourglass-split",
+  },
+  inactive: { label: "Nonaktif", cls: "st-inactive", icon: "bi-shield-slash" },
 };
 
-const BlacklistModal = ({ isOpen, mode: initMode = 'single', onClose, onSubmit }) => {
-  const [tab, setTab]             = useState(initMode);
-  const [form, setForm]           = useState(EMPTY);
-  const [errors, setErrors]       = useState({});
-  const [loading, setLoading]     = useState(false);
-  const [bulkText, setBulkText]   = useState('');
-  const [dragOver, setDragOver]   = useState(false);
-  const fileRef                   = useRef();
+const REASON_ICON = {
+  "Penipuan Online": "bi-laptop",
+  "Rekening Mule": "bi-arrow-left-right",
+  Phishing: "bi-fish",
+  "Social Engineering": "bi-people-fill",
+  "Investasi Bodong": "bi-graph-down-arrow",
+  "Jual Beli Palsu": "bi-bag-x",
+  "Pinjol Ilegal": "bi-currency-dollar",
+  Lainnya: "bi-exclamation-octagon",
+};
+
+const BlacklistDetailModal = ({
+  isOpen,
+  item,
+  onClose,
+  onEdit,
+  onDelete,
+  onApprove,
+  onToggleStatus,
+}) => {
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      setTab(initMode);
-      setForm(EMPTY);
-      setErrors({});
-      setBulkText('');
-      setLoading(false);
+      setConfirmDelete(false);
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
     }
-  }, [isOpen, initMode]);
+  }, [isOpen]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e) => {
+      if (e.key === "Escape") {
+        if (confirmDelete) setConfirmDelete(false);
+        else onClose();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [isOpen, onClose, confirmDelete]);
 
-  const set = (f, v) => {
-    setForm(p => ({ ...p, [f]: v }));
-    if (errors[f]) setErrors(p => ({ ...p, [f]: undefined }));
-  };
+  if (!isOpen || !item) return null;
 
-  /* ── Single validate ── */
-  const validateSingle = () => {
-    const e = {};
-    if (!form.accountNumber.trim()) e.accountNumber = 'Nomor rekening wajib diisi.';
-    else if (!/^\d{6,20}$/.test(form.accountNumber.replace(/\s/g, '')))
-      e.accountNumber = 'Format nomor tidak valid (6–20 digit).';
-    if (!form.accountName.trim()) e.accountName = 'Nama pemilik wajib diisi.';
-    if (!form.bank) e.bank = 'Pilih bank.';
-    if (!form.reason) e.reason = 'Pilih alasan.';
-    return e;
-  };
-
-  const handleSubmitSingle = async () => {
-    const e = validateSingle();
-    if (Object.keys(e).length) { setErrors(e); return; }
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 450));
-    onSubmit('single', [{ ...form, id: Date.now(), status: 'pending', hitCount: 0 }]);
-    setLoading(false);
-    onClose();
-  };
-
-  /* ── Bulk ── */
-  const parsed    = parseBulk(bulkText);
-  const validRows = parsed.filter(p => p.accountNumber);
-
-  const handleSubmitBulk = async () => {
-    if (!validRows.length) return;
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 500));
-    const now = new Date().toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' });
-    onSubmit('bulk', validRows.map((r, i) => ({
-      ...r,
-      id: Date.now() + i,
-      status: 'pending',
-      hitCount: 0,
-      addedAt: now,
-      reason: r.reason || 'Penipuan Online',
-    })));
-    setLoading(false);
-    onClose();
-  };
-
-  /* ── Drag & drop file ── */
-  const handleFile = (file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => setBulkText(e.target.result);
-    reader.readAsText(file);
-  };
-
-  const F = ({ label, req, opt, err, children }) => (
-    <div className="blm-field">
-      <label className="blm-label">
-        {label}
-        {req && <span className="blm-req"> *</span>}
-        {opt && <span className="blm-opt"> (opsional)</span>}
-      </label>
-      {children}
-      {err && <span className="blm-field-err"><i className="bi bi-exclamation-circle-fill" /> {err}</span>}
-    </div>
-  );
+  const src = SOURCE_CONFIG[item.source] || SOURCE_CONFIG.manual;
+  const st = STATUS_CONFIG[item.status] || STATUS_CONFIG.active;
+  const reasonIcon = REASON_ICON[item.reason] || "bi-exclamation-octagon";
 
   return (
-    <div className="blm-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="blm-box">
-
-        {/* Header */}
-        <div className="blm-header">
-          <div className="blm-header-left">
-            <div className="blm-icon"><i className="bi bi-ban" /></div>
-            <div>
-              <div className="blm-title">Tambah ke Blacklist</div>
-              <div className="blm-subtitle">Input manual rekening penipu atau import daftar</div>
+    <div
+      className="bdm-overlay"
+      onClick={(e) =>
+        e.target === e.currentTarget && !confirmDelete && onClose()
+      }
+    >
+      <div className="bdm-box">
+        <div className={`bdm-header bdm-header--${item.status}`}>
+          <div className="bdm-header-bg" />
+          <div className="bdm-header-content">
+            <div className="bdm-header-top">
+              <div className="bdm-avatar">
+                <i className="bi bi-person-fill-slash" />
+              </div>
+              <button className="bdm-close" onClick={onClose} title="Tutup">
+                <i className="bi bi-x-lg" />
+              </button>
+            </div>
+            <div className="bdm-header-info">
+              <div className="bdm-acct-number">{item.accountNumber}</div>
+              <div className="bdm-acct-name">{item.accountName || "—"}</div>
+              <div className="bdm-header-badges">
+                <span className={`bdm-status-badge ${st.cls}`}>
+                  <i className={`bi ${st.icon}`} />
+                  {st.label}
+                </span>
+                <span className="bdm-bank-badge">
+                  <i className="bi bi-bank" />
+                  {item.bank || "—"}
+                </span>
+              </div>
             </div>
           </div>
-          <button className="blm-close" onClick={onClose}><i className="bi bi-x-lg" /></button>
         </div>
 
-        {/* Tabs */}
-        <div className="blm-tabs">
-          <button className={`blm-tab ${tab === 'single' ? 'active' : ''}`} onClick={() => setTab('single')}>
-            <i className="bi bi-plus-circle" /> Input Manual
-          </button>
-          <button className={`blm-tab ${tab === 'bulk' ? 'active' : ''}`} onClick={() => setTab('bulk')}>
-            <i className="bi bi-upload" /> Bulk Import
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="blm-body">
-
-          {tab === 'single' && <>
-            <div className="blm-section"><span>Informasi Rekening</span></div>
-
-            <F label="Nomor Rekening" req err={errors.accountNumber}>
-              <input
-                className={`blm-input ${errors.accountNumber ? 'err' : ''}`}
-                type="text"
-                placeholder="cth: 1234567890"
-                value={form.accountNumber}
-                onChange={e => set('accountNumber', e.target.value)}
-                autoFocus
-              />
-            </F>
-
-            <div className="blm-row">
-              <F label="Nama Pemilik Rekening" req err={errors.accountName}>
-                <input
-                  className={`blm-input ${errors.accountName ? 'err' : ''}`}
-                  type="text"
-                  placeholder="cth: Budi Penipu"
-                  value={form.accountName}
-                  onChange={e => set('accountName', e.target.value)}
-                />
-              </F>
-              <F label="Bank" req err={errors.bank}>
-                <div className="blm-select-wrap">
-                  <select
-                    className={`blm-select ${errors.bank ? 'err' : ''}`}
-                    value={form.bank}
-                    onChange={e => set('bank', e.target.value)}
-                  >
-                    <option value="">— Pilih Bank —</option>
-                    {BANKS.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                </div>
-              </F>
+        <div className="bdm-body">
+          <div className="bdm-stat-strip">
+            <div className="bdm-stat">
+              <span className="bdm-stat-val">{item.hitCount || 0}</span>
+              <span className="bdm-stat-lbl">Total Hit</span>
             </div>
-
-            <div className="blm-section"><span>Alasan & Sumber</span></div>
-
-            <div className="blm-row">
-              <F label="Alasan Blacklist" req err={errors.reason}>
-                <div className="blm-select-wrap">
-                  <select
-                    className={`blm-select ${errors.reason ? 'err' : ''}`}
-                    value={form.reason}
-                    onChange={e => set('reason', e.target.value)}
-                  >
-                    <option value="">— Pilih Alasan —</option>
-                    {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-              </F>
-              <F label="Sumber Informasi">
-                <div className="blm-select-wrap">
-                  <select className="blm-select" value={form.source} onChange={e => set('source', e.target.value)}>
-                    <option value="manual">Input Manual</option>
-                    <option value="system">Auto-Detect</option>
-                  </select>
-                </div>
-              </F>
+            <div className="bdm-stat-divider" />
+            <div className="bdm-stat">
+              <span className="bdm-stat-val">{item.addedAt || "—"}</span>
+              <span className="bdm-stat-lbl">Ditambahkan</span>
             </div>
-
-            <F label="Keterangan Tambahan" opt>
-              <textarea
-                className="blm-textarea"
-                placeholder="Deskripsi lebih lanjut mengenai modus penipuan..."
-                value={form.reasonDetail}
-                onChange={e => set('reasonDetail', e.target.value)}
-              />
-            </F>
-          </>}
-
-          {tab === 'bulk' && <>
-            {/* Drop zone */}
-            <div
-              className={`blm-drop-zone ${dragOver ? 'drag-over' : ''}`}
-              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
-              onClick={() => fileRef.current?.click()}
-            >
-              <i className="bi bi-cloud-upload" />
-              <div className="blm-drop-title">Seret & lepas file CSV/TXT di sini</div>
-              <div className="blm-drop-sub">atau <span className="blm-drop-link">pilih file</span></div>
-              <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display:'none' }}
-                onChange={e => handleFile(e.target.files[0])} />
+            <div className="bdm-stat-divider" />
+            <div className="bdm-stat">
+              <span className={`bdm-stat-val bdm-stat-src ${src.cls}`}>
+                <i className={`bi ${src.icon}`} />
+                {src.label}
+              </span>
+              <span className="bdm-stat-lbl">Sumber</span>
             </div>
+          </div>
 
-            <div className="blm-bulk-hint">
-              <strong>Format yang didukung</strong> (satu baris per rekening):<br />
-              <code>NomorRekening | NamaPemilik | Bank | Alasan</code><br />
-              <code>NomorRekening , NamaPemilik , Bank , Alasan</code><br />
-              Kolom <em>NamaPemilik</em>, <em>Bank</em>, dan <em>Alasan</em> bersifat opsional.
+          <div className="bdm-section-title">
+            <i className="bi bi-info-circle" />
+            Informasi Rekening
+          </div>
+          <div className="bdm-info-grid">
+            <div className="bdm-info-item">
+              <span className="bdm-info-label">Nomor Rekening</span>
+              <span className="bdm-info-val bdm-mono">
+                {item.accountNumber}
+              </span>
             </div>
-
-            <F label="Atau paste daftar langsung">
-              <textarea
-                className="blm-bulk-textarea"
-                placeholder={`Contoh:\n1234567890 | Budi Santoso | BCA | Penipuan Online\n0987654321 | Sari Penipu | BRI | Rekening Mule\n5566778899 | Agus Bohong | Mandiri`}
-                value={bulkText}
-                onChange={e => setBulkText(e.target.value)}
-              />
-            </F>
-
-            {validRows.length > 0 && (
-              <div className="blm-parse-preview">
-                <i className="bi bi-check-circle-fill" />
-                {validRows.length} rekening siap diimpor — semua akan masuk status <strong>Pending</strong> untuk ditinjau
+            <div className="bdm-info-item">
+              <span className="bdm-info-label">Nama Pemilik</span>
+              <span className="bdm-info-val">{item.accountName || "—"}</span>
+            </div>
+            <div className="bdm-info-item">
+              <span className="bdm-info-label">Bank</span>
+              <span className="bdm-info-val">
+                <span className="bdm-pill bdm-pill-gray">
+                  {item.bank || "—"}
+                </span>
+              </span>
+            </div>
+            <div className="bdm-info-item">
+              <span className="bdm-info-label">Status</span>
+              <span className={`bdm-status-inline ${st.cls}`}>
+                <i className={`bi ${st.icon}`} />
+                {st.label}
+              </span>
+            </div>
+            <div className="bdm-info-item bdm-info-item--full">
+              <span className="bdm-info-label">Alasan Blacklist</span>
+              <span className="bdm-info-val bdm-reason-val">
+                <span className="bdm-reason-icon">
+                  <i className={`bi ${reasonIcon}`} />
+                </span>
+                {item.reason || "—"}
+              </span>
+            </div>
+            {item.reasonDetail && (
+              <div className="bdm-info-item bdm-info-item--full">
+                <span className="bdm-info-label">Keterangan Tambahan</span>
+                <span className="bdm-info-val bdm-reason-detail">
+                  {item.reasonDetail}
+                </span>
               </div>
             )}
-          </>}
-
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="blm-footer">
-          <button className="blm-btn-cancel" onClick={onClose} disabled={loading}>Batal</button>
-          <button
-            className="blm-btn-submit"
-            onClick={tab === 'single' ? handleSubmitSingle : handleSubmitBulk}
-            disabled={loading || (tab === 'bulk' && validRows.length === 0)}
-          >
-            {loading
-              ? <><span className="blm-spinner" />Menyimpan...</>
-              : tab === 'single'
-                ? <><i className="bi bi-ban" />Tambah ke Blacklist</>
-                : <><i className="bi bi-upload" />Import {validRows.length > 0 ? `${validRows.length} Rekening` : ''}</>
-            }
-          </button>
+        <div className="bdm-footer">
+          <div className="bdm-footer-left">
+            <button
+              className="bdm-foot-btn bdm-foot-btn--danger"
+              onClick={() => setConfirmDelete(true)}
+              title="Hapus dari blacklist"
+            >
+              <i className="bi bi-trash3" />
+              Hapus
+            </button>
+          </div>
+          <div className="bdm-footer-right">
+            {item.status === "pending" && (
+              <button
+                className="bdm-foot-btn bdm-foot-btn--approve"
+                onClick={() => {
+                  onApprove(item.id);
+                  onClose();
+                }}
+              >
+                <i className="bi bi-check-circle" />
+                Setujui & Aktifkan
+              </button>
+            )}
+            {item.status === "active" && (
+              <button
+                className="bdm-foot-btn bdm-foot-btn--warn"
+                onClick={() => {
+                  onToggleStatus(item.id, "inactive");
+                  onClose();
+                }}
+              >
+                <i className="bi bi-pause-circle" />
+                Nonaktifkan
+              </button>
+            )}
+            {item.status === "inactive" && (
+              <button
+                className="bdm-foot-btn bdm-foot-btn--approve"
+                onClick={() => {
+                  onToggleStatus(item.id, "active");
+                  onClose();
+                }}
+              >
+                <i className="bi bi-play-circle" />
+                Aktifkan Kembali
+              </button>
+            )}
+            <button
+              className="bdm-foot-btn bdm-foot-btn--edit"
+              onClick={() => {
+                onEdit(item);
+                onClose();
+              }}
+            >
+              <i className="bi bi-pencil" />
+              Edit Data
+            </button>
+          </div>
         </div>
 
+        {confirmDelete && (
+          <div className="bdm-confirm-overlay">
+            <div className="bdm-confirm-box">
+              <div className="bdm-confirm-icon-wrap">
+                <i className="bi bi-exclamation-triangle-fill" />
+              </div>
+              <h3 className="bdm-confirm-title">Hapus Rekening Blacklist?</h3>
+              <p className="bdm-confirm-msg">
+                Data rekening{" "}
+                <strong className="bdm-confirm-acct">
+                  {item.accountNumber}
+                </strong>{" "}
+                atas nama <strong>{item.accountName || "—"}</strong> akan{" "}
+                <strong>terhapus secara permanen</strong> dari daftar blacklist
+                dan tidak dapat dikembalikan.
+              </p>
+              <div className="bdm-confirm-warning">
+                <i className="bi bi-shield-exclamation" />
+                Apakah Anda masih ingin melanjutkan?
+              </div>
+              <div className="bdm-confirm-actions">
+                <button
+                  className="bdm-confirm-btn-cancel"
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  <i className="bi bi-arrow-left" />
+                  Batal
+                </button>
+                <button
+                  className="bdm-confirm-btn-delete"
+                  onClick={() => {
+                    onDelete(item.id);
+                    onClose();
+                  }}
+                >
+                  <i className="bi bi-trash3-fill" />
+                  Ya, Hapus Permanen
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default BlacklistModal;
+export default BlacklistDetailModal;

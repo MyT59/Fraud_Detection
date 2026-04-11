@@ -1,17 +1,16 @@
-export const BASE_URL = process.env.REACT_APP_ML_API_URL || 'http://localhost:8000';
+export const BASE_URL =
+  process.env.REACT_APP_ML_API_URL || "http://localhost:8000";
 
-// ── Helper fetch ──
 const post = async (endpoint, body) => {
   const res = await fetch(`${BASE_URL}${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json();
 };
 
-// ── Score batch transaksi dengan Random Forest (supervised) ──
 export const labelHistory = async (domain, records, thresholds = {}) => {
   return post(`/fds/${domain}/label-history`, {
     records,
@@ -20,7 +19,6 @@ export const labelHistory = async (domain, records, thresholds = {}) => {
   });
 };
 
-// ── Score dengan Isolation Forest (unsupervised / screening) ──
 export const scoreIsolation = async (domain, records) => {
   return post(`/isolation/${domain}/score-history`, { records });
 };

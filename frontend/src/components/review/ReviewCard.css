@@ -263,7 +263,6 @@
   font-size: 0.85rem;
 }
 
-/* Responsive */
 @media (max-width: 768px) {
   .review-card {
     padding: 1rem;
@@ -291,7 +290,7 @@
   .score-value {
     font-size: 1.25rem;
   }
-}/* Selection Checkbox */
+}
 .selection-checkbox {
   position: absolute;
   top: 1rem;
@@ -336,7 +335,6 @@
   accent-color: white;
 }
 
-/* Adjust card header when checkbox present (via JS class) */
 .review-card.has-checkbox .card-header {
   padding-left: 3.5rem;
 }

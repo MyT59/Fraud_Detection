@@ -1,7 +1,7 @@
-import React from 'react';
-import './PageLoader.css';
+import React from "react";
+import "./PageLoader.css";
 
-const PageLoader = ({ message = 'Memuat data...' }) => {
+const PageLoader = ({ message = "Memuat data..." }) => {
   return (
     <div className="page-loader">
       <div className="page-loader-inner">

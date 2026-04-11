@@ -1,5 +1,5 @@
-import React from 'react';
-import AlertItem from './AlertItem';
+import React from "react";
+import AlertItem from "./AlertItem";
 
 const AlertsFeed = ({ alerts, onMarkRead, onResolve, onDelete }) => {
   if (alerts.length === 0) {
@@ -22,7 +22,7 @@ const AlertsFeed = ({ alerts, onMarkRead, onResolve, onDelete }) => {
         </h2>
       </div>
       <div className="alerts-feed-list">
-        {alerts.map(alert => (
+        {alerts.map((alert) => (
           <AlertItem
             key={alert.id}
             alert={alert}

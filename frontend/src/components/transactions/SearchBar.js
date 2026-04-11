@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 const SearchBar = ({ searchQuery, onSearchChange }) => {
   const handleSearchInput = (e) => {
@@ -6,7 +6,7 @@ const SearchBar = ({ searchQuery, onSearchChange }) => {
   };
 
   const handleClearSearch = () => {
-    onSearchChange('');
+    onSearchChange("");
   };
 
   return (
@@ -22,7 +22,7 @@ const SearchBar = ({ searchQuery, onSearchChange }) => {
             onChange={handleSearchInput}
           />
           {searchQuery && (
-            <button 
+            <button
               className="btn btn-sm btn-link clear-search"
               onClick={handleClearSearch}
             >

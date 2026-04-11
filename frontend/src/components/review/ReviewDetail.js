@@ -1,38 +1,38 @@
-import React, { useState } from 'react';
-import './ReviewDetail.css';
+import React, { useState } from "react";
+import "./ReviewDetail.css";
 
 const ReviewDetail = ({ transaction, onClose, onReview }) => {
-  const [decision, setDecision] = useState('');
-  const [notes, setNotes] = useState('');
+  const [decision, setDecision] = useState("");
+  const [notes, setNotes] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
 
   const getRiskColor = (riskLevel) => {
     const colors = {
-      low: '#10b981',
-      medium: '#f59e0b',
-      high: '#ef4444',
-      critical: '#dc2626'
+      low: "#10b981",
+      medium: "#f59e0b",
+      high: "#ef4444",
+      critical: "#dc2626",
     };
-    return colors[riskLevel] || '#6b7280';
+    return colors[riskLevel] || "#6b7280";
   };
 
   const formatAmount = (amount) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
     }).format(amount);
   };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('id-ID', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
     });
   };
 
@@ -44,16 +44,16 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
   const handleConfirm = () => {
     onReview(transaction.id, decision, notes);
     setShowConfirm(false);
-    setNotes('');
-    setDecision('');
+    setNotes("");
+    setDecision("");
   };
 
   const handleCancel = () => {
     setShowConfirm(false);
-    setDecision('');
+    setDecision("");
   };
 
-  if (transaction.status !== 'pending') {
+  if (transaction.status !== "pending") {
     return (
       <div className="review-detail-panel">
         <div className="detail-header">
@@ -65,7 +65,9 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
 
         <div className="detail-content">
           <div className="already-reviewed">
-            <i className={`bi ${transaction.status === 'approved' ? 'bi-check-circle' : 'bi-x-circle'}`}></i>
+            <i
+              className={`bi ${transaction.status === "approved" ? "bi-check-circle" : "bi-x-circle"}`}
+            ></i>
             <h3>Already Reviewed</h3>
             <p>This transaction has been {transaction.status}</p>
             {transaction.reviewNotes && (
@@ -90,14 +92,13 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
       </div>
 
       <div className="detail-content">
-        {/* Risk Score Section */}
         <div className="risk-section">
           <div className="risk-score-large">
-            <div 
+            <div
               className="score-circle-large"
-              style={{ 
+              style={{
                 borderColor: getRiskColor(transaction.riskLevel),
-                color: getRiskColor(transaction.riskLevel)
+                color: getRiskColor(transaction.riskLevel),
               }}
             >
               <span className="score-value">{transaction.fraudScore}</span>
@@ -105,7 +106,7 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
             </div>
             <div className="risk-info">
               <span className="risk-label">Fraud Risk Score</span>
-              <span 
+              <span
                 className="risk-level-large"
                 style={{ color: getRiskColor(transaction.riskLevel) }}
               >
@@ -115,13 +116,14 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
           </div>
         </div>
 
-        {/* Transaction Info */}
         <div className="info-section">
           <h3 className="section-title">
-            {transaction.service === 'agenusa' ? 'Transaction Information' : 'Billing Information'}
+            {transaction.service === "agenusa"
+              ? "Transaction Information"
+              : "Billing Information"}
           </h3>
           <div className="info-grid">
-            {transaction.service === 'agenusa' ? (
+            {transaction.service === "agenusa" ? (
               <>
                 <div className="info-item">
                   <span className="info-label">Transaction ID</span>
@@ -129,23 +131,38 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
                 </div>
                 <div className="info-item">
                   <span className="info-label">Processing Code</span>
-                  <span className="info-value">{transaction.typeOrChannel} ({transaction.PROCESSING_CODE})</span>
+                  <span className="info-value">
+                    {transaction.typeOrChannel} ({transaction.PROCESSING_CODE})
+                  </span>
                 </div>
                 <div className="info-item">
                   <span className="info-label">Amount</span>
-                  <span className="info-value highlight">{formatAmount(transaction.AMOUNT)}</span>
+                  <span className="info-value highlight">
+                    {formatAmount(transaction.AMOUNT)}
+                  </span>
                 </div>
                 <div className="info-item">
-                  <span className="info-label">Date &amp; Time (TIMESTAMP_DB)</span>
-                  <span className="info-value">{formatDate(transaction.TIMESTAMP_DB)}</span>
+                  <span className="info-label">
+                    Date &amp; Time (TIMESTAMP_DB)
+                  </span>
+                  <span className="info-value">
+                    {formatDate(transaction.TIMESTAMP_DB)}
+                  </span>
                 </div>
                 <div className="info-item">
                   <span className="info-label">Dest. Account Number</span>
-                  <span className="info-value" style={{ fontFamily:'monospace' }}>{transaction.DEST_ACCOUNT_NUMBER}</span>
+                  <span
+                    className="info-value"
+                    style={{ fontFamily: "monospace" }}
+                  >
+                    {transaction.DEST_ACCOUNT_NUMBER}
+                  </span>
                 </div>
                 <div className="info-item">
                   <span className="info-label">Response Code</span>
-                  <span className="info-value">{transaction.RESPONSE_CODE}</span>
+                  <span className="info-value">
+                    {transaction.RESPONSE_CODE}
+                  </span>
                 </div>
               </>
             ) : (
@@ -160,45 +177,70 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
                 </div>
                 <div className="info-item">
                   <span className="info-label">Bill Amount</span>
-                  <span className="info-value highlight">{formatAmount(transaction.BILL_AMOUNT)}</span>
+                  <span className="info-value highlight">
+                    {formatAmount(transaction.BILL_AMOUNT)}
+                  </span>
                 </div>
                 <div className="info-item">
                   <span className="info-label">Payment Amount</span>
-                  <span className="info-value" style={{ color: transaction.BILL_AMOUNT !== transaction.PAYMENT_AMOUNT ? '#ea580c' : 'inherit' }}>
+                  <span
+                    className="info-value"
+                    style={{
+                      color:
+                        transaction.BILL_AMOUNT !== transaction.PAYMENT_AMOUNT
+                          ? "#ea580c"
+                          : "inherit",
+                    }}
+                  >
                     {formatAmount(transaction.PAYMENT_AMOUNT)}
-                    {transaction.BILL_AMOUNT !== transaction.PAYMENT_AMOUNT && ' ⚠️'}
+                    {transaction.BILL_AMOUNT !== transaction.PAYMENT_AMOUNT &&
+                      " ⚠️"}
                   </span>
                 </div>
                 <div className="info-item">
                   <span className="info-label">Bill ID</span>
-                  <span className="info-value" style={{ fontFamily:'monospace' }}>{transaction.BILL_ID}</span>
+                  <span
+                    className="info-value"
+                    style={{ fontFamily: "monospace" }}
+                  >
+                    {transaction.BILL_ID}
+                  </span>
                 </div>
                 <div className="info-item">
                   <span className="info-label">Refund Flag</span>
-                  <span className="info-value">{transaction.REFUND_FLAG ? '✅ Yes' : 'No'}</span>
+                  <span className="info-value">
+                    {transaction.REFUND_FLAG ? "✅ Yes" : "No"}
+                  </span>
                 </div>
               </>
             )}
           </div>
         </div>
 
-        {/* Account / Customer Info */}
         <div className="info-section">
           <h3 className="section-title">
-            {transaction.service === 'agenusa' ? 'Account Information' : 'Customer Information'}
+            {transaction.service === "agenusa"
+              ? "Account Information"
+              : "Customer Information"}
           </h3>
           <div className="info-grid">
             <div className="info-item">
-              <span className="info-label">{transaction.service === 'agenusa' ? 'Account Number' : 'Customer ID'}</span>
-              <span className="info-value" style={{ fontFamily:'monospace' }}>{transaction.accountId}</span>
+              <span className="info-label">
+                {transaction.service === "agenusa"
+                  ? "Account Number"
+                  : "Customer ID"}
+              </span>
+              <span className="info-value" style={{ fontFamily: "monospace" }}>
+                {transaction.accountId}
+              </span>
             </div>
-            {transaction.service === 'agenusa' && (
+            {transaction.service === "agenusa" && (
               <div className="info-item">
                 <span className="info-label">Layanan</span>
                 <span className="info-value">Agenusa (ATM / Transfer)</span>
               </div>
             )}
-            {transaction.service === 'nusabill' && (
+            {transaction.service === "nusabill" && (
               <div className="info-item">
                 <span className="info-label">Layanan</span>
                 <span className="info-value">Nusabill (Bill Payment)</span>
@@ -207,7 +249,6 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
           </div>
         </div>
 
-        {/* Anomalies */}
         {transaction.anomalies && transaction.anomalies.length > 0 && (
           <div className="info-section anomalies-section">
             <h3 className="section-title">
@@ -225,21 +266,20 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
           </div>
         )}
 
-        {/* Decision Section */}
         {!showConfirm ? (
           <div className="decision-section">
             <h3 className="section-title">Make Decision</h3>
             <div className="decision-buttons">
-              <button 
+              <button
                 className="decision-btn approve"
-                onClick={() => handleDecision('approved')}
+                onClick={() => handleDecision("approved")}
               >
                 <i className="bi bi-check-circle"></i>
                 Approve Transaction
               </button>
-              <button 
+              <button
                 className="decision-btn reject"
-                onClick={() => handleDecision('rejected')}
+                onClick={() => handleDecision("rejected")}
               >
                 <i className="bi bi-x-circle"></i>
                 Reject Transaction
@@ -249,7 +289,7 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
         ) : (
           <div className="confirm-section">
             <h3 className="section-title">
-              Confirm {decision === 'approved' ? 'Approval' : 'Rejection'}
+              Confirm {decision === "approved" ? "Approval" : "Rejection"}
             </h3>
             <div className="notes-input">
               <label>Review Notes (Optional)</label>
@@ -264,11 +304,11 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
               <button className="confirm-btn cancel" onClick={handleCancel}>
                 Cancel
               </button>
-              <button 
-                className={`confirm-btn ${decision === 'approved' ? 'approve' : 'reject'}`}
+              <button
+                className={`confirm-btn ${decision === "approved" ? "approve" : "reject"}`}
                 onClick={handleConfirm}
               >
-                Confirm {decision === 'approved' ? 'Approval' : 'Rejection'}
+                Confirm {decision === "approved" ? "Approval" : "Rejection"}
               </button>
             </div>
           </div>
