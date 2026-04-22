@@ -1,0 +1,20 @@
+import enum
+
+class BlacklistTypeEnum(str, enum.Enum):
+    USER_ID = "USER_ID"
+    CUSTOMER_ID = "CUSTOMER_ID"
+    ACCOUNT_NUMBER = "ACCOUNT_NUMBER"
+    DEVICE_ID = "DEVICE_ID"
+    TERMINAL_ID = "TERMINAL_ID"
+    IP_ADDRESS = "IP_ADDRESS"
+    MERCHANT_ID = "MERCHANT_ID"
+    INVOICE_NUMBER = "INVOICE_NUMBER"
+    RRN = "RRN"
+    PAYMENT_CODE = "PAYMENT_CODE"
+
+
+class TransactionStatusEnum(str, enum.Enum):
+    PENDING = "PENDING"
+    REVIEW = "REVIEW"
+    SAFE = "SAFE"
+    FRAUD = "FRAUD"
