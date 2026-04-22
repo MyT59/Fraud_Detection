@@ -11,6 +11,10 @@ class BlacklistTypeEnum(str, enum.Enum):
     INVOICE_NUMBER = "INVOICE_NUMBER"
     RRN = "RRN"
     PAYMENT_CODE = "PAYMENT_CODE"
+    BILLER_ID = "BILLER_ID"
+    CUSTOME_PHONE = "CUSTOME_PHONE"
+    CUSTOMER_EMAIL = "CUSTOMER_EMAIL"
+    VIRTUAL_ACCOUNT_NUMBER = "VIRTUAL_ACCOUNT_NUMBER"
 
 
 class TransactionStatusEnum(str, enum.Enum):
