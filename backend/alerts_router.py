@@ -5,9 +5,9 @@ Router khusus untuk menyimpan dan membaca alert yang dibuat secara
 langsung (misal: dari ManualReview setelah keputusan approve/reject).
 
 Endpoint:
-  POST /alerts          → simpan 1 alert baru ke alerts_log.json
-  GET  /alerts/saved    → baca alerts dari alerts_log.json saja
-                          (dipakai oleh _generate_alerts_from_data di main.py)
+    POST /alerts          → simpan 1 alert baru ke alerts_log.json
+    GET  /alerts/saved    → baca alerts dari alerts_log.json saja
+                        (dipakai oleh _generate_alerts_from_data di main.py)
 """
 
 import json

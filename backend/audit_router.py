@@ -2,15 +2,15 @@
 audit_router.py — Audit Log API
 
 Endpoints:
-  POST /audit-logs          — tulis satu log entry baru
-  GET  /audit-logs          — list log (filter type, search, pagination)
-  GET  /audit-logs/stats    — ringkasan hitungan per type
-  DELETE /audit-logs        — hapus semua log (opsional, untuk dev/reset)
+    POST /audit-logs          — tulis satu log entry baru
+    GET  /audit-logs          — list log (filter type, search, pagination)
+    GET  /audit-logs/stats    — ringkasan hitungan per type
+    DELETE /audit-logs        — hapus semua log (opsional, untuk dev/reset)
 
 Storage: audit_logs.json (tukar dengan DB di production).
 
 Shape satu log entry:
-  {
+    {
     "id":          "alg-<uuid8>",
     "type":        "create" | "edit" | "suspend" | "delete",
     "actor_name":  "Irwan Setiawan",
@@ -20,7 +20,7 @@ Shape satu log entry:
     "detail":      "Mengubah role Andi Wijaya menjadi Admin",
     "timestamp":   "2024-03-13T09:30:00+00:00",
     "time_label":  "13 Mar 2024"
-  }
+    }
 """
 
 from __future__ import annotations
