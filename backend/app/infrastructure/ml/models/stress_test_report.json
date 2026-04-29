@@ -1,202 +1,118 @@
 {
-  "generated_at_utc": "2026-03-02T03:55:42.269453+00:00",
-  "notes": "Stress test untuk robustness model terhadap noise, drift, missing values, unseen category.",
-  "domains": {
-    "agenusa": {
-      "baseline": {
-        "random_forest": {
-          "accuracy": 0.9908,
-          "precision_fraud": 0.9526881720430107,
-          "recall_fraud": 0.9486081370449678,
-          "f1_fraud": 0.9506437768240343,
-          "roc_auc": 0.9955392550749653
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9562,
-          "precision_fraud": 0.756198347107438,
-          "recall_fraud": 0.7837259100642399,
-          "f1_fraud": 0.7697160883280757,
-          "roc_auc": 0.9460978756310493
-        }
-      },
-      "amount_jitter": {
-        "random_forest": {
-          "accuracy": 0.9848,
-          "precision_fraud": 0.896551724137931,
-          "recall_fraud": 0.9464668094218416,
-          "f1_fraud": 0.9208333333333333,
-          "roc_auc": 0.9930738703705541
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9558,
-          "precision_fraud": 0.7479838709677419,
-          "recall_fraud": 0.7944325481798715,
-          "f1_fraud": 0.770508826583593,
-          "roc_auc": 0.9469462816339468
-        }
-      },
-      "time_shift": {
-        "random_forest": {
-          "accuracy": 0.964,
-          "precision_fraud": 0.9735973597359736,
-          "recall_fraud": 0.6316916488222698,
-          "f1_fraud": 0.7662337662337663,
-          "roc_auc": 0.9589798531917496
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.934,
-          "precision_fraud": 0.7008797653958945,
-          "recall_fraud": 0.5117773019271948,
-          "f1_fraud": 0.5915841584158416,
-          "roc_auc": 0.87851685781783
-        }
-      },
-      "missing_noise": {
-        "random_forest": {
-          "accuracy": 0.981,
-          "precision_fraud": 0.8795918367346939,
-          "recall_fraud": 0.9229122055674518,
-          "f1_fraud": 0.9007314524555904,
-          "roc_auc": 0.9886683946561758
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9518,
-          "precision_fraud": 0.7383966244725738,
-          "recall_fraud": 0.7494646680942184,
-          "f1_fraud": 0.7438894792773645,
-          "roc_auc": 0.933912668033753
-        }
-      },
-      "unseen_category": {
-        "random_forest": {
-          "accuracy": 0.9768,
-          "precision_fraud": 0.8421052631578947,
-          "recall_fraud": 0.9250535331905781,
-          "f1_fraud": 0.8816326530612245,
-          "roc_auc": 0.9919193579701745
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9494,
-          "precision_fraud": 0.7757731958762887,
-          "recall_fraud": 0.6445396145610278,
-          "f1_fraud": 0.704093567251462,
-          "roc_auc": 0.9018404647148606
-        }
-      },
-      "combo_shift": {
-        "random_forest": {
-          "accuracy": 0.9596,
-          "precision_fraud": 0.9027355623100304,
-          "recall_fraud": 0.6359743040685225,
-          "f1_fraud": 0.7462311557788944,
-          "roc_auc": 0.9221478843465785
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9254,
-          "precision_fraud": 0.6865079365079365,
-          "recall_fraud": 0.37044967880085655,
-          "f1_fraud": 0.4812239221140473,
-          "roc_auc": 0.8104620364294957
-        }
-      }
-    },
-    "nusabill": {
-      "baseline": {
-        "random_forest": {
-          "accuracy": 0.9672,
-          "precision_fraud": 0.7383966244725738,
-          "recall_fraud": 0.8974358974358975,
-          "f1_fraud": 0.8101851851851852,
-          "roc_auc": 0.9912559096723955
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9216,
-          "precision_fraud": 0.498046875,
-          "recall_fraud": 0.6538461538461539,
-          "f1_fraud": 0.565410199556541,
-          "roc_auc": 0.9589170699149007
-        }
-      },
-      "amount_jitter": {
-        "random_forest": {
-          "accuracy": 0.9402,
-          "precision_fraud": 0.5752066115702479,
-          "recall_fraud": 0.8923076923076924,
-          "f1_fraud": 0.699497487437186,
-          "roc_auc": 0.9796710050614607
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9008,
-          "precision_fraud": 0.4297082228116711,
-          "recall_fraud": 0.8307692307692308,
-          "f1_fraud": 0.5664335664335665,
-          "roc_auc": 0.9405028088325268
-        }
-      },
-      "time_shift": {
-        "random_forest": {
-          "accuracy": 0.9606,
-          "precision_fraud": 0.7455470737913485,
-          "recall_fraud": 0.7512820512820513,
-          "f1_fraud": 0.7484035759897829,
-          "roc_auc": 0.9870626842427277
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9224,
-          "precision_fraud": 0.5017421602787456,
-          "recall_fraud": 0.7384615384615385,
-          "f1_fraud": 0.5975103734439834,
-          "roc_auc": 0.9586311808220701
-        }
-      },
-      "missing_noise": {
-        "random_forest": {
-          "accuracy": 0.966,
-          "precision_fraud": 0.7511415525114156,
-          "recall_fraud": 0.8435897435897436,
-          "f1_fraud": 0.7946859903381642,
-          "roc_auc": 0.9741540130151845
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9232,
-          "precision_fraud": 0.5062761506276151,
-          "recall_fraud": 0.6205128205128205,
-          "f1_fraud": 0.5576036866359447,
-          "roc_auc": 0.9324028032704823
-        }
-      },
-      "unseen_category": {
-        "random_forest": {
-          "accuracy": 0.9656,
-          "precision_fraud": 0.746606334841629,
-          "recall_fraud": 0.8461538461538461,
-          "f1_fraud": 0.7932692307692307,
-          "roc_auc": 0.985278936537071
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9254,
-          "precision_fraud": 0.5180467091295117,
-          "recall_fraud": 0.6256410256410256,
-          "f1_fraud": 0.5667828106852497,
-          "roc_auc": 0.9446707269592303
-        }
-      },
-      "combo_shift": {
-        "random_forest": {
-          "accuracy": 0.941,
-          "precision_fraud": 0.6077097505668935,
-          "recall_fraud": 0.6871794871794872,
-          "f1_fraud": 0.6450060168471721,
-          "roc_auc": 0.9091495633794983
-        },
-        "isolation_forest_review_boundary": {
-          "accuracy": 0.9084,
-          "precision_fraud": 0.445859872611465,
-          "recall_fraud": 0.717948717948718,
-          "f1_fraud": 0.550098231827112,
-          "roc_auc": 0.8949046109349796
-        }
-      }
-    }
-  }
+    "generated_at_utc":  "2026-03-02T03:55:42.269453+00:00",
+    "notes":  "Stress test untuk robustness model terhadap noise, drift, missing values, unseen category.",
+    "domains":  {
+                    "agenusa":  {
+                                    "baseline":  {
+                                                     "isolation_forest_review_boundary":  {
+                                                                                              "accuracy":  0.9562,
+                                                                                              "precision_fraud":  0.756198347107438,
+                                                                                              "recall_fraud":  0.7837259100642399,
+                                                                                              "f1_fraud":  0.7697160883280757,
+                                                                                              "roc_auc":  0.9460978756310493
+                                                                                          }
+                                                 },
+                                    "amount_jitter":  {
+                                                          "isolation_forest_review_boundary":  {
+                                                                                                   "accuracy":  0.9558,
+                                                                                                   "precision_fraud":  0.7479838709677419,
+                                                                                                   "recall_fraud":  0.7944325481798715,
+                                                                                                   "f1_fraud":  0.770508826583593,
+                                                                                                   "roc_auc":  0.9469462816339468
+                                                                                               }
+                                                      },
+                                    "time_shift":  {
+                                                       "isolation_forest_review_boundary":  {
+                                                                                                "accuracy":  0.934,
+                                                                                                "precision_fraud":  0.7008797653958945,
+                                                                                                "recall_fraud":  0.5117773019271948,
+                                                                                                "f1_fraud":  0.5915841584158416,
+                                                                                                "roc_auc":  0.87851685781783
+                                                                                            }
+                                                   },
+                                    "missing_noise":  {
+                                                          "isolation_forest_review_boundary":  {
+                                                                                                   "accuracy":  0.9518,
+                                                                                                   "precision_fraud":  0.7383966244725738,
+                                                                                                   "recall_fraud":  0.7494646680942184,
+                                                                                                   "f1_fraud":  0.7438894792773645,
+                                                                                                   "roc_auc":  0.933912668033753
+                                                                                               }
+                                                      },
+                                    "unseen_category":  {
+                                                            "isolation_forest_review_boundary":  {
+                                                                                                     "accuracy":  0.9494,
+                                                                                                     "precision_fraud":  0.7757731958762887,
+                                                                                                     "recall_fraud":  0.6445396145610278,
+                                                                                                     "f1_fraud":  0.704093567251462,
+                                                                                                     "roc_auc":  0.9018404647148606
+                                                                                                 }
+                                                        },
+                                    "combo_shift":  {
+                                                        "isolation_forest_review_boundary":  {
+                                                                                                 "accuracy":  0.9254,
+                                                                                                 "precision_fraud":  0.6865079365079365,
+                                                                                                 "recall_fraud":  0.37044967880085655,
+                                                                                                 "f1_fraud":  0.4812239221140473,
+                                                                                                 "roc_auc":  0.8104620364294957
+                                                                                             }
+                                                    }
+                                },
+                    "nusabill":  {
+                                     "baseline":  {
+                                                      "isolation_forest_review_boundary":  {
+                                                                                               "accuracy":  0.9216,
+                                                                                               "precision_fraud":  0.498046875,
+                                                                                               "recall_fraud":  0.6538461538461539,
+                                                                                               "f1_fraud":  0.565410199556541,
+                                                                                               "roc_auc":  0.9589170699149007
+                                                                                           }
+                                                  },
+                                     "amount_jitter":  {
+                                                           "isolation_forest_review_boundary":  {
+                                                                                                    "accuracy":  0.9008,
+                                                                                                    "precision_fraud":  0.4297082228116711,
+                                                                                                    "recall_fraud":  0.8307692307692308,
+                                                                                                    "f1_fraud":  0.5664335664335665,
+                                                                                                    "roc_auc":  0.9405028088325268
+                                                                                                }
+                                                       },
+                                     "time_shift":  {
+                                                        "isolation_forest_review_boundary":  {
+                                                                                                 "accuracy":  0.9224,
+                                                                                                 "precision_fraud":  0.5017421602787456,
+                                                                                                 "recall_fraud":  0.7384615384615385,
+                                                                                                 "f1_fraud":  0.5975103734439834,
+                                                                                                 "roc_auc":  0.9586311808220701
+                                                                                             }
+                                                    },
+                                     "missing_noise":  {
+                                                           "isolation_forest_review_boundary":  {
+                                                                                                    "accuracy":  0.9232,
+                                                                                                    "precision_fraud":  0.5062761506276151,
+                                                                                                    "recall_fraud":  0.6205128205128205,
+                                                                                                    "f1_fraud":  0.5576036866359447,
+                                                                                                    "roc_auc":  0.9324028032704823
+                                                                                                }
+                                                       },
+                                     "unseen_category":  {
+                                                             "isolation_forest_review_boundary":  {
+                                                                                                      "accuracy":  0.9254,
+                                                                                                      "precision_fraud":  0.5180467091295117,
+                                                                                                      "recall_fraud":  0.6256410256410256,
+                                                                                                      "f1_fraud":  0.5667828106852497,
+                                                                                                      "roc_auc":  0.9446707269592303
+                                                                                                  }
+                                                         },
+                                     "combo_shift":  {
+                                                         "isolation_forest_review_boundary":  {
+                                                                                                  "accuracy":  0.9084,
+                                                                                                  "precision_fraud":  0.445859872611465,
+                                                                                                  "recall_fraud":  0.717948717948718,
+                                                                                                  "f1_fraud":  0.550098231827112,
+                                                                                                  "roc_auc":  0.8949046109349796
+                                                                                              }
+                                                     }
+                                 }
+                }
 }

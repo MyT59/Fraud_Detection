@@ -138,6 +138,7 @@ while len(data) < TARGET_ROWS:
 columns = ["TERMINAL_ID", "MERCHANT_ID", "ACCOUNT_NUMBER", "DEST_ACCOUNT_NUMBER", "TIMESTAMP_DB", "AMOUNT", "STAN", "PROCESSING_CODE", "RESPONSE_CODE", "MTI", "IS_FRAUD"]
 df = pd.DataFrame(data, columns=columns).sort_values(["ACCOUNT_NUMBER", "TIMESTAMP_DB"]).reset_index(drop=True)
 df["TIMESTAMP_DB"] = pd.to_datetime(df["TIMESTAMP_DB"]).dt.strftime("%Y-%m-%d %H:%M:%S")
-out = Path(__file__).resolve().parent / "agenusa_pattern_dataset.csv"
+out = Path(__file__).resolve().parents[1] / "Data" / "agenusa_isolation_dataset.csv"
+out.parent.mkdir(parents=True, exist_ok=True)
 df.to_csv(out, index=False)
 print(f"Dataset Agenusa dibuat: {len(df)} rows, fraud_rate={df['IS_FRAUD'].mean():.4f}")

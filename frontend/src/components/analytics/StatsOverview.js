@@ -109,7 +109,7 @@ const StatsOverview = ({ domainStats, modelAccuracy }) => {
       value: modelAccuracy ? `${modelAccuracy}%` : "—",
       icon: "bi-cpu",
       iconBg: "#7c3aed",
-      sub: "Random Forest avg",
+      sub: "Isolation Forest avg",
       subColor: "#7c3aed",
       wide: true,
     },

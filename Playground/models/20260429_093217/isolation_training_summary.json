@@ -1,0 +1,68 @@
+{
+  "agenusa": {
+    "domain": "agenusa",
+    "dataset": "Playground\\Data\\agenusa_isolation_dataset.csv",
+    "rows": 5000,
+    "contamination": 0.08,
+    "anomaly_rate_fit_data": 0.08,
+    "thresholds": {
+      "review_score_threshold": 0.0014,
+      "high_risk_score_threshold": -0.0053
+    },
+    "numeric_features": [
+      "AMOUNT",
+      "PROCESSING_CODE",
+      "RESPONSE_CODE",
+      "MTI",
+      "TX_HOUR",
+      "TX_DAYOFWEEK",
+      "IS_NIGHT_TX",
+      "GAP_MINUTES",
+      "TERMINAL_SWITCH_FAST",
+      "AVG_AMOUNT_5",
+      "AMOUNT_OVER_AVG_RATIO",
+      "IS_DECLINED",
+      "IS_BRUTE_PATTERN",
+      "IS_MONEY_MULE_DEST",
+      "IS_HIGH_AMOUNT_PATTERN",
+      "MIDNIGHT_AMOUNT_SPIKE",
+      "RAPID_RETRY_DECLINED"
+    ],
+    "categorical_features": [
+      "TERMINAL_ID",
+      "MERCHANT_ID",
+      "DEST_ACCOUNT_NUMBER"
+    ],
+    "model_path": "Playground\\models\\20260429_093217\\agenusa_isolation_forest.pkl"
+  },
+  "nusabill": {
+    "domain": "nusabill",
+    "dataset": "Playground\\Data\\nusabill_isolation_dataset.csv",
+    "rows": 5000,
+    "contamination": 0.1,
+    "anomaly_rate_fit_data": 0.1,
+    "thresholds": {
+      "review_score_threshold": 0.0,
+      "high_risk_score_threshold": -0.0655
+    },
+    "numeric_features": [
+      "BILL_AMOUNT",
+      "PAYMENT_AMOUNT",
+      "REFUND_FLAG",
+      "PAYMENT_DELAY_DAYS",
+      "PAYMENT_TO_BILL_RATIO",
+      "UNDERPAY_FLAG",
+      "HIGH_SPIKE_FLAG",
+      "CHANNEL_API_FLAG",
+      "PAYMENT_GAP_MINUTES",
+      "BURST_FLAG",
+      "CHANNEL_SWITCH_TO_API",
+      "EARLY_PAYMENT_ANOMALY"
+    ],
+    "categorical_features": [
+      "CHANNEL",
+      "BILL_STATUS"
+    ],
+    "model_path": "Playground\\models\\20260429_093217\\nusabill_isolation_forest.pkl"
+  }
+}

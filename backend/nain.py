@@ -6,10 +6,15 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from fds_engine import DOMAIN_CONFIG, score_history
-from isolation_engine import DOMAIN_ISO_CONFIG, score_history_isolation
+from isolation_engine import score_history_isolation
+from app.application.services.isolation_ml_service import (
+    DOMAIN_DEFAULT_THRESHOLDS,
+    get_available_domains,
+)
+from app.paths import DATA_DIR
+from app.presentation.routes.isolation_routes import router as isolation_router
 from users_router import router as users_router
 from audit_router import router as audit_router
 from alerts_router import router as alerts_router
@@ -131,6 +136,8 @@ app.include_router(users_router)
 app.include_router(audit_router)
 app.include_router(alerts_router)
 app.include_router(retrain_router)
+app.include_router(isolation_router)
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -140,34 +147,19 @@ async def global_exception_handler(request: Request, exc: Exception):
         headers={"Access-Control-Allow-Origin": "http://localhost:3000"},
     )
 
-DOMAIN_DEFAULT_THRESHOLDS = {
-    "agenusa": {"review_threshold": 0.4892, "high_risk_threshold": 0.5},
-    "nusabill": {"review_threshold": 0.5202, "high_risk_threshold": 0.9359},
-}
-
 
 @app.get("/")
 def root():
     return {
         "status": "API hidup",
-        "available_domains": list(DOMAIN_CONFIG.keys()),
+        "available_domains": get_available_domains(),
         "default_thresholds": DOMAIN_DEFAULT_THRESHOLDS,
     }
 
 
-class HistoryRequest(BaseModel):
-    records: list[dict[str, Any]] = Field(default_factory=list)
-    review_threshold: float | None = Field(default=None, gt=0, lt=1)
-    high_risk_threshold: float | None = Field(default=None, gt=0, lt=1)
-
-
-class IsolationHistoryRequest(BaseModel):
-    records: list[dict[str, Any]] = Field(default_factory=list)
-    review_score_threshold: float | None = None
-    high_risk_score_threshold: float | None = None
-
-
 BACKEND_DIR = Path(__file__).resolve().parent
+AGENUSA_DATASET_PATH = DATA_DIR / "agenusa_isolation_dataset.csv"
+NUSABILL_DATASET_PATH = DATA_DIR / "nusabill_isolation_dataset.csv"
 
 # ── Pattern metadata untuk endpoint /patterns/stats ──────────────────────────
 PATTERN_META = {
@@ -282,8 +274,8 @@ def get_pattern_stats():
     """
     from datetime import date
     try:
-        df_agenusa  = pd.read_csv(BACKEND_DIR / "agenusa_pattern_dataset.csv")
-        df_nusabill = pd.read_csv(BACKEND_DIR / "nusabill_pattern_dataset.csv")
+        df_agenusa  = pd.read_csv(AGENUSA_DATASET_PATH)
+        df_nusabill = pd.read_csv(NUSABILL_DATASET_PATH)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -294,12 +286,18 @@ def get_pattern_stats():
     thresholds_a = DOMAIN_DEFAULT_THRESHOLDS["agenusa"]
     thresholds_n = DOMAIN_DEFAULT_THRESHOLDS["nusabill"]
 
-    res_a = score_history(domain="agenusa", records=fraud_agenusa,
-                          review_threshold=thresholds_a["review_threshold"],
-                          high_risk_threshold=thresholds_a["high_risk_threshold"])
-    res_n = score_history(domain="nusabill", records=fraud_nusabill,
-                          review_threshold=thresholds_n["review_threshold"],
-                          high_risk_threshold=thresholds_n["high_risk_threshold"])
+    res_a = score_history_isolation(
+        domain="agenusa",
+        records=fraud_agenusa,
+        review_score_threshold=thresholds_a["review_threshold"],
+        high_risk_score_threshold=thresholds_a["high_risk_threshold"],
+    )
+    res_n = score_history_isolation(
+        domain="nusabill",
+        records=fraud_nusabill,
+        review_score_threshold=thresholds_n["review_threshold"],
+        high_risk_score_threshold=thresholds_n["high_risk_threshold"],
+    )
 
     # Hitung occurrences dan rata-rata amount per pattern
     from collections import defaultdict
@@ -355,8 +353,8 @@ def get_flagged_transactions(limit: int = 50):
     - limit: jumlah record per domain (default 50, total max 100)
     """
     try:
-        df_agenusa  = pd.read_csv(BACKEND_DIR / "agenusa_pattern_dataset.csv")
-        df_nusabill = pd.read_csv(BACKEND_DIR / "nusabill_pattern_dataset.csv")
+        df_agenusa  = pd.read_csv(AGENUSA_DATASET_PATH)
+        df_nusabill = pd.read_csv(NUSABILL_DATASET_PATH)
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=500, detail=f"Dataset tidak ditemukan: {exc}"
@@ -398,87 +396,6 @@ def get_flagged_transactions(limit: int = 50):
     }
 # ─────────────────────────────────────────────────────────────────────────────
 
-
-@app.get("/fds/domains")
-def list_domains():
-    return {
-        "domains": [
-            {
-                "name": "agenusa",
-                "required_fields": [
-                    "TERMINAL_ID",
-                    "MERCHANT_ID",
-                    "ACCOUNT_NUMBER",
-                    "DEST_ACCOUNT_NUMBER",
-                    "TIMESTAMP_DB",
-                    "AMOUNT",
-                    "STAN",
-                    "PROCESSING_CODE",
-                    "RESPONSE_CODE",
-                    "MTI",
-                ],
-                "notes": "Deteksi pattern kartu/transfer: midnight, brute-force, terminal switch, mule, amount spike.",
-                "default_thresholds": DOMAIN_DEFAULT_THRESHOLDS["agenusa"],
-            },
-            {
-                "name": "nusabill",
-                "required_fields": [
-                    "BILL_ID",
-                    "CUSTOMER_ID",
-                    "BILL_AMOUNT",
-                    "PAYMENT_AMOUNT",
-                    "BILL_DATE",
-                    "PAYMENT_DATE",
-                    "CHANNEL",
-                    "BILL_STATUS",
-                    "REFUND_FLAG",
-                ],
-                "notes": "Deteksi pattern billing: underpay, spike, refund abuse, burst, channel switch.",
-                "default_thresholds": DOMAIN_DEFAULT_THRESHOLDS["nusabill"],
-            },
-        ]
-    }
-
-
-@app.post("/fds/{domain}/label-history")
-def label_history(domain: str, payload: HistoryRequest):
-    if domain not in DOMAIN_CONFIG:
-        raise HTTPException(status_code=404, detail=f"Domain tidak ditemukan: {domain}")
-
-    threshold_defaults = DOMAIN_DEFAULT_THRESHOLDS.get(domain, {"review_threshold": 0.55, "high_risk_threshold": 0.8})
-    review_threshold = payload.review_threshold if payload.review_threshold is not None else threshold_defaults["review_threshold"]
-    high_risk_threshold = (
-        payload.high_risk_threshold if payload.high_risk_threshold is not None else threshold_defaults["high_risk_threshold"]
-    )
-
-    try:
-        return score_history(
-            domain=domain,
-            records=payload.records,
-            review_threshold=review_threshold,
-            high_risk_threshold=high_risk_threshold,
-        )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.post("/isolation/{domain}/score-history")
-def score_history_with_isolation(domain: str, payload: IsolationHistoryRequest):
-    if domain not in DOMAIN_ISO_CONFIG:
-        raise HTTPException(status_code=404, detail=f"Domain isolation tidak ditemukan: {domain}")
-    try:
-        return score_history_isolation(
-            domain=domain,
-            records=payload.records,
-            review_score_threshold=payload.review_score_threshold,
-            high_risk_score_threshold=payload.high_risk_score_threshold,
-        )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ── Endpoint: simpan hasil review admin (feedback loop) ──────────────────────
@@ -665,8 +582,8 @@ def get_all_transactions(limit: int = 200, offset: int = 0):
     IS_FRAUD=0  → riskScore rendah (5–45),  status approved / pending
     """
     try:
-        df_a = pd.read_csv(BACKEND_DIR / "agenusa_pattern_dataset.csv")
-        df_n = pd.read_csv(BACKEND_DIR / "nusabill_pattern_dataset.csv")
+        df_a = pd.read_csv(AGENUSA_DATASET_PATH)
+        df_n = pd.read_csv(NUSABILL_DATASET_PATH)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=f"Dataset tidak ditemukan: {exc}")
 
@@ -778,8 +695,8 @@ for _i in range(30):
 def _load_datasets() -> tuple[pd.DataFrame, pd.DataFrame]:
     """Load kedua dataset; raise HTTPException jika tidak ditemukan."""
     try:
-        df_a = pd.read_csv(BACKEND_DIR / "agenusa_pattern_dataset.csv", parse_dates=["TIMESTAMP_DB"])
-        df_n = pd.read_csv(BACKEND_DIR / "nusabill_pattern_dataset.csv", parse_dates=["PAYMENT_DATE", "BILL_DATE"])
+        df_a = pd.read_csv(AGENUSA_DATASET_PATH, parse_dates=["TIMESTAMP_DB"])
+        df_n = pd.read_csv(NUSABILL_DATASET_PATH, parse_dates=["PAYMENT_DATE", "BILL_DATE"])
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=f"Dataset tidak ditemukan: {exc}")
     return df_a, df_n
@@ -876,7 +793,7 @@ def analytics_monthly():
     return {
         "monthly":          current_data,
         "previous_monthly": previous_data,
-        "source":           "nusabill_pattern_dataset",
+        "source":           "nusabill_isolation_dataset",
         "note":             "Monthly aggregation dari dataset nusabill.",
     }
 
@@ -958,31 +875,13 @@ def analytics_location():
 @app.get("/analytics/model-performance")
 def analytics_model_performance():
     """
-    Metrik performa model dari training_metrics.json dan evaluation_report.json.
-    Dipakai untuk menampilkan model stats di Analytics page.
+    Metrik performa model Isolation Forest untuk Analytics page.
     """
     import json
-    metrics_path  = BACKEND_DIR / "models" / "training_metrics.json"
-    eval_path     = BACKEND_DIR / "models" / "evaluation_report.json"
-    iso_eval_path = BACKEND_DIR / "models" / "isolation_evaluation_report.json"
+    ROOT_DIR = BACKEND_DIR.parent
+    iso_eval_path = ROOT_DIR / "Playground" / "models" / "isolation_evaluation_report.json"
 
     result: dict = {}
-
-    if metrics_path.exists():
-        result["training_metrics"] = json.loads(metrics_path.read_text(encoding="utf-8"))
-
-    if eval_path.exists():
-        ev = json.loads(eval_path.read_text(encoding="utf-8"))
-        result["fds_evaluation"] = {
-            domain: {
-                "fraud_rate":         data.get("fraud_rate"),
-                "cv_mean":            data.get("model_comparison", {}).get("with_ids", {}).get("cross_validation", {}).get("mean"),
-                "holdout":            data.get("model_comparison", {}).get("with_ids", {}).get("holdout"),
-                "threshold":          data.get("model_comparison", {}).get("with_ids", {}).get("threshold_recommendation"),
-                "pattern_coverage":   data.get("pattern_validation", {}).get("pattern_coverage_rate"),
-            }
-            for domain, data in ev.get("domains", {}).items()
-        }
 
     if iso_eval_path.exists():
         iso = json.loads(iso_eval_path.read_text(encoding="utf-8"))
@@ -1021,11 +920,16 @@ def analytics_all():
 # DASHBOARD ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _load_training_metrics() -> dict:
-    path = BACKEND_DIR / "models" / "training_metrics.json"
+def _load_isolation_metrics() -> dict:
+    ROOT_DIR = BACKEND_DIR.parent
+    path = ROOT_DIR / "Playground" / "models" / "isolation_evaluation_report.json"
     if path.exists():
         import json
-        return json.loads(path.read_text(encoding="utf-8"))
+        report = json.loads(path.read_text(encoding="utf-8"))
+        return {
+            domain: data.get("evaluation", {}).get("review_threshold_metrics", {})
+            for domain, data in report.get("domains", {}).items()
+        }
     return {}
 
 
@@ -1041,7 +945,7 @@ def dashboard_stats():
     fraud  = int(df_a["IS_FRAUD"].sum()) + int(df_n["IS_FRAUD"].sum())
     rate   = round((fraud / total) * 100, 2) if total else 0.0
 
-    tm = _load_training_metrics()
+    tm = _load_isolation_metrics()
     acc_a = tm.get("agenusa", {}).get("accuracy", 0) * 100
     acc_n = tm.get("nusabill", {}).get("accuracy", 0) * 100
     model_accuracy = round((acc_a + acc_n) / 2, 1) if acc_a and acc_n else 0.0
@@ -1166,7 +1070,7 @@ def dashboard_recent_transactions(limit: int = 5):
     """
     import hashlib
 
-    df_a = pd.read_csv(BACKEND_DIR / "agenusa_pattern_dataset.csv")
+    df_a = pd.read_csv(AGENUSA_DATASET_PATH)
     df_a = df_a.sort_values("TIMESTAMP_DB", ascending=False).head(limit * 4)
 
     def stable_rand(seed_str: str, lo: float, hi: float) -> float:
@@ -1488,7 +1392,7 @@ def _generate_alerts_from_data(limit_fraud: int = 30) -> list[dict]:
 
     # ── 2. Agenusa fraud rows ───────────────────────────────────────────────
     try:
-        df_a = pd.read_csv(BACKEND_DIR / "agenusa_pattern_dataset.csv")
+        df_a = pd.read_csv(AGENUSA_DATASET_PATH)
         fraud_a = (
             df_a[df_a["IS_FRAUD"] == 1]
             .sort_values("TIMESTAMP_DB", ascending=False)
@@ -1550,7 +1454,7 @@ def _generate_alerts_from_data(limit_fraud: int = 30) -> list[dict]:
 
     # ── 3. Nusabill fraud rows ──────────────────────────────────────────────
     try:
-        df_n = pd.read_csv(BACKEND_DIR / "nusabill_pattern_dataset.csv")
+        df_n = pd.read_csv(NUSABILL_DATASET_PATH)
         fraud_n = (
             df_n[df_n["IS_FRAUD"] == 1]
             .sort_values("PAYMENT_DATE", ascending=False)

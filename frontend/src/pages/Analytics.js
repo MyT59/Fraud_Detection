@@ -95,9 +95,13 @@ const transformApiResponse = (apiData, modelPerf) => {
   }));
 
   let modelAccuracy = null;
-  if (modelPerf?.training_metrics) {
-    const accA = modelPerf.training_metrics.agenusa?.accuracy || 0;
-    const accN = modelPerf.training_metrics.nusabill?.accuracy || 0;
+  if (modelPerf?.isolation_evaluation) {
+    const accA =
+      modelPerf.isolation_evaluation.agenusa?.review_threshold_metrics
+        ?.accuracy || 0;
+    const accN =
+      modelPerf.isolation_evaluation.nusabill?.review_threshold_metrics
+        ?.accuracy || 0;
     if (accA && accN) modelAccuracy = (((accA + accN) / 2) * 100).toFixed(1);
     else if (accA) modelAccuracy = (accA * 100).toFixed(1);
     else if (accN) modelAccuracy = (accN * 100).toFixed(1);

@@ -94,6 +94,7 @@ while len(data) < TARGET_ROWS:
 
 columns = ["BILL_ID", "CUSTOMER_ID", "BILL_AMOUNT", "PAYMENT_AMOUNT", "BILL_DATE", "PAYMENT_DATE", "CHANNEL", "BILL_STATUS", "REFUND_FLAG", "IS_FRAUD"]
 df = pd.DataFrame(data, columns=columns)
-out = Path(__file__).resolve().parent / "nusabill_pattern_dataset.csv"
+out = Path(__file__).resolve().parents[1] / "Data" / "nusabill_isolation_dataset.csv"
+out.parent.mkdir(parents=True, exist_ok=True)
 df.to_csv(out, index=False)
 print(f"Dataset Nusabill dibuat: {len(df)} rows, fraud_rate={df['IS_FRAUD'].mean():.4f}")

@@ -1,0 +1,120 @@
+{
+  "generated_at_utc": "2026-04-28T02:09:13.062081+00:00",
+  "notes": "Evaluasi isolation memakai dataset berlabel untuk benchmarking offline.",
+  "domains": {
+    "agenusa": {
+      "data_type": "unlabeled",
+      "notes": "Dataset tidak memiliki label IS_FRAUD. Hanya report thresholds dari training.",
+      "dataset_size": 5000,
+      "anomaly_count_at_default": 400,
+      "anomaly_rate": 0.08,
+      "training_metadata": {
+        "domain": "agenusa",
+        "dataset": "Playground\\Data\\agenusa_isolation_dataset.csv",
+        "rows": 5000,
+        "contamination": 0.08,
+        "anomaly_rate_fit_data": 0.08,
+        "thresholds": {
+          "review_score_threshold": 0.001367,
+          "high_risk_score_threshold": -0.005265
+        },
+        "numeric_features": [
+          "AMOUNT",
+          "PROCESSING_CODE",
+          "RESPONSE_CODE",
+          "MTI",
+          "TX_HOUR",
+          "TX_DAYOFWEEK",
+          "IS_NIGHT_TX",
+          "GAP_MINUTES",
+          "TERMINAL_SWITCH_FAST",
+          "AVG_AMOUNT_5",
+          "AMOUNT_OVER_AVG_RATIO",
+          "IS_DECLINED",
+          "IS_BRUTE_PATTERN",
+          "IS_MONEY_MULE_DEST",
+          "IS_HIGH_AMOUNT_PATTERN",
+          "MIDNIGHT_AMOUNT_SPIKE",
+          "RAPID_RETRY_DECLINED"
+        ],
+        "categorical_features": [
+          "TERMINAL_ID",
+          "MERCHANT_ID",
+          "DEST_ACCOUNT_NUMBER"
+        ],
+        "model_path": "backend\\models\\agenusa_isolation_forest.pkl"
+      },
+      "evaluation": {
+        "default_model_boundary": {
+          "threshold": null,
+          "precision_fraud": null,
+          "recall_fraud": null,
+          "f1_fraud": null
+        },
+        "review_threshold_boundary": {
+          "threshold": 0.001367,
+          "predictions": 500
+        },
+        "tuned_threshold_on_eval_data": {
+          "notes": "Tidak bisa di-tune tanpa ground truth",
+          "threshold": null,
+          "metrics": null
+        }
+      }
+    },
+    "nusabill": {
+      "data_type": "unlabeled",
+      "notes": "Dataset tidak memiliki label IS_FRAUD. Hanya report thresholds dari training.",
+      "dataset_size": 5000,
+      "anomaly_count_at_default": 500,
+      "anomaly_rate": 0.1,
+      "training_metadata": {
+        "domain": "nusabill",
+        "dataset": "Playground\\Data\\nusabill_isolation_dataset.csv",
+        "rows": 5000,
+        "contamination": 0.1,
+        "anomaly_rate_fit_data": 0.1,
+        "thresholds": {
+          "review_score_threshold": -0.0,
+          "high_risk_score_threshold": -0.065467
+        },
+        "numeric_features": [
+          "BILL_AMOUNT",
+          "PAYMENT_AMOUNT",
+          "REFUND_FLAG",
+          "PAYMENT_DELAY_DAYS",
+          "PAYMENT_TO_BILL_RATIO",
+          "UNDERPAY_FLAG",
+          "HIGH_SPIKE_FLAG",
+          "CHANNEL_API_FLAG",
+          "PAYMENT_GAP_MINUTES",
+          "BURST_FLAG",
+          "CHANNEL_SWITCH_TO_API",
+          "EARLY_PAYMENT_ANOMALY"
+        ],
+        "categorical_features": [
+          "CHANNEL",
+          "BILL_STATUS"
+        ],
+        "model_path": "backend\\models\\nusabill_isolation_forest.pkl"
+      },
+      "evaluation": {
+        "default_model_boundary": {
+          "threshold": null,
+          "precision_fraud": null,
+          "recall_fraud": null,
+          "f1_fraud": null
+        },
+        "review_threshold_boundary": {
+          "threshold": -0.0,
+          "predictions": 500
+        },
+        "tuned_threshold_on_eval_data": {
+          "notes": "Tidak bisa di-tune tanpa ground truth",
+          "threshold": null,
+          "metrics": null
+        }
+      }
+    }
+  }
+}

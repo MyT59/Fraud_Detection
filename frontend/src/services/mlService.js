@@ -12,10 +12,10 @@ const post = async (endpoint, body) => {
 };
 
 export const labelHistory = async (domain, records, thresholds = {}) => {
-  return post(`/fds/${domain}/label-history`, {
+  return post(`/isolation/${domain}/score-history`, {
     records,
-    review_threshold: thresholds.review || null,
-    high_risk_threshold: thresholds.high_risk || null,
+    review_score_threshold: thresholds.review || null,
+    high_risk_score_threshold: thresholds.high_risk || null,
   });
 };
 

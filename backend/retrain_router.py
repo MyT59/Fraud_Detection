@@ -1,17 +1,17 @@
 """
 retrain_router.py
-─────────────────
+-----------------
 Router FastAPI untuk Retrain Schedule Management.
 
 Endpoints:
-  GET    /retrain/schedules              → list semua schedule
-  POST   /retrain/schedules              → buat schedule baru
-  PUT    /retrain/schedules/{id}         → update schedule
-  DELETE /retrain/schedules/{id}         → hapus schedule
-  PATCH  /retrain/schedules/{id}/status  → toggle active/paused
-  POST   /retrain/schedules/{id}/run     → trigger manual run
-  GET    /retrain/history                → history semua run
-  GET    /retrain/status                 → status scheduler (jobs aktif)
+  GET    /retrain/schedules              ? list semua schedule
+  POST   /retrain/schedules              ? buat schedule baru
+  PUT    /retrain/schedules/{id}         ? update schedule
+  DELETE /retrain/schedules/{id}         ? hapus schedule
+  PATCH  /retrain/schedules/{id}/status  ? toggle active/paused
+  POST   /retrain/schedules/{id}/run     ? trigger manual run
+  GET    /retrain/history                ? history semua run
+  GET    /retrain/status                 ? status scheduler (jobs aktif)
 """
 
 from __future__ import annotations
@@ -27,9 +27,11 @@ import tempfile
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
+from app.paths import DATA_DIR
 
-# ── Storage paths ─────────────────────────────────────────────────────────────
+# -- Storage paths -------------------------------------------------------------
 BASE_DIR              = Path(__file__).resolve().parent
+DATASET_DIR           = DATA_DIR
 SCHEDULES_PATH        = BASE_DIR / "retrain_schedules.json"
 RETRAIN_HISTORY_PATH  = BASE_DIR / "retrain_history.json"
 PATTERN_DISCOVERY_PATH = BASE_DIR / "pattern_discovery.json"
@@ -37,9 +39,9 @@ PATTERN_DISCOVERY_PATH = BASE_DIR / "pattern_discovery.json"
 router = APIRouter(prefix="/retrain", tags=["retrain-schedule"])
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # Storage helpers
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
 def _load_schedules() -> list[dict[str, Any]]:
     if not SCHEDULES_PATH.exists():
@@ -61,7 +63,7 @@ def _save_history(data: list[dict[str, Any]]) -> None:
     RETRAIN_HISTORY_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-# ── Pattern discovery storage ─────────────────────────────────────────────────
+# -- Pattern discovery storage -------------------------------------------------
 
 def _load_patterns() -> list[dict[str, Any]]:
     if not PATTERN_DISCOVERY_PATH.exists():
@@ -138,9 +140,9 @@ def _compute_next_run(schedule: dict[str, Any]) -> str:
     return next_run.strftime("%Y-%m-%d %H:%M")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # Pydantic schemas
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
 VALID_MODELS = [
     "FraudNet v3.2",
@@ -187,9 +189,9 @@ class StatusPatch(BaseModel):
     status: Literal["active", "paused"]
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # CRUD Endpoints
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
 @router.get("/schedules")
 def list_schedules() -> dict[str, Any]:
@@ -309,9 +311,9 @@ def toggle_status(schedule_id: str, payload: StatusPatch) -> dict[str, Any]:
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # Manual Run
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
 @router.post("/schedules/{schedule_id}/run")
 def manual_run(schedule_id: str) -> dict[str, Any]:
@@ -337,9 +339,9 @@ def manual_run(schedule_id: str) -> dict[str, Any]:
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # History
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
 @router.get("/history")
 def get_history(
@@ -358,9 +360,9 @@ def get_history(
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # Scheduler status
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
 @router.get("/status")
 def scheduler_status() -> dict[str, Any]:
@@ -372,14 +374,14 @@ def scheduler_status() -> dict[str, Any]:
         return {"running": False, "error": str(e), "jobs": []}
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # Core retrain execution
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
 def _execute_retrain(schedule: dict[str, Any], trigger: str = "scheduled") -> dict[str, Any]:
     """
     Jalankan retrain untuk model yang ada di schedule.
-    Mapping model → domain → train_fds_models / train_isolation_models.
+    Mapping model ? domain ? train_isolation_models.
     """
     import traceback
 
@@ -434,9 +436,8 @@ def _execute_retrain(schedule: dict[str, Any], trigger: str = "scheduled") -> di
 
 def _run_training(domain: str, run_id: str | None = None) -> dict[str, Any]:
     """
-    Jalankan training ulang RF + Isolation Forest untuk satu domain.
-    Setelah selesai, extract feature importances & threshold sebagai
-    pattern discovery dan simpan ke pattern_discovery.json.
+    Jalankan training ulang Isolation Forest untuk satu domain.
+    Setelah selesai, simpan threshold terbaru ke pattern_discovery.json.
     """
     from pathlib import Path as _Path
 
@@ -451,35 +452,17 @@ def _run_training(domain: str, run_id: str | None = None) -> dict[str, Any]:
         spec.loader.exec_module(module)
         return module
 
-    # ── Train Random Forest ──────────────────────────────────────────────────
-    train_fds  = _import_script(backend_dir / "train_fds_models.py", "train_fds_models")
-    fds_result = train_fds.train_one_model(
-        model_name      = domain,
-        csv_path        = backend_dir / f"{domain}_pattern_dataset.csv",
-        feature_builder = (
-            train_fds.build_agenusa_features if domain == "agenusa"
-            else train_fds.build_nusabill_features
-        ),
-        drop_cols = (
-            ["TIMESTAMP_DB", "PREV_TIMESTAMP", "PREV_TERMINAL", "ACCOUNT_NUMBER", "STAN"]
-            if domain == "agenusa"
-            else ["BILL_DATE", "PAYMENT_DATE", "BILL_ID", "CUSTOMER_ID"]
-        ),
-    )
-
-    # ── Train Isolation Forest ───────────────────────────────────────────────
+    # -- Train Isolation Forest -----------------------------------------------
     train_iso     = _import_script(backend_dir / "train_isolation_models.py", "train_isolation_models")
     contamination = 0.08 if domain == "agenusa" else 0.10
     iso_result    = train_iso.train_one(
         domain        = domain,
-        csv_path      = backend_dir / f"{domain}_isolation_dataset.csv",
+        csv_path      = DATASET_DIR / f"{domain}_isolation_dataset.csv",
         contamination = contamination,
     )
 
-    # ── Invalidate lru_cache ─────────────────────────────────────────────────
+    # -- Invalidate lru_cache -------------------------------------------------
     try:
-        from fds_engine import load_model
-        load_model.cache_clear()
         from isolation_engine import load_isolation_model, load_isolation_meta
         load_isolation_model.cache_clear()
         load_isolation_meta.cache_clear()
@@ -487,13 +470,6 @@ def _run_training(domain: str, run_id: str | None = None) -> dict[str, Any]:
         pass
 
     metrics = {
-        "random_forest": {
-            "accuracy":        fds_result.get("accuracy"),
-            "precision_fraud": fds_result.get("precision_fraud"),
-            "recall_fraud":    fds_result.get("recall_fraud"),
-            "f1_fraud":        fds_result.get("f1_fraud"),
-            "roc_auc":         fds_result.get("roc_auc"),
-        },
         "isolation_forest": {
             "contamination":       iso_result.get("contamination"),
             "anomaly_rate":        iso_result.get("anomaly_rate_fit_data"),
@@ -502,7 +478,7 @@ def _run_training(domain: str, run_id: str | None = None) -> dict[str, Any]:
         },
     }
 
-    # ── Extract & simpan pattern discovery ───────────────────────────────────
+    # -- Extract & simpan pattern discovery -----------------------------------
     try:
         _extract_and_save_patterns(
             domain     = domain,
@@ -517,11 +493,11 @@ def _run_training(domain: str, run_id: str | None = None) -> dict[str, Any]:
     return metrics
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # Pattern Discovery — Extract & Store
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
-# Mapping feature → nama pattern yang sudah dikenali
+# Mapping feature ? nama pattern yang sudah dikenali
 _FEATURE_PATTERN_MAP: dict[str, dict[str, str]] = {
     # Agenusa
     "IS_BRUTE_PATTERN":        {"key": "bruteforce_pin_pattern",              "label": "Brute Force PIN Attack",             "domain": "agenusa"},
@@ -556,100 +532,48 @@ def _extract_and_save_patterns(
     run_id:     str | None = None,
 ) -> dict[str, Any]:
     """
-    Extract feature importances dari model RF yang baru dilatih,
-    deteksi pattern signifikan, dan simpan ke pattern_discovery.json.
+    Simpan ringkasan hasil retrain Isolation Forest ke pattern_discovery.json.
 
     Format tiap entry yang disimpan sudah siap untuk di-upsert ke DB
     oleh temanmu — cukup ganti _save_patterns() dengan DB insert/upsert.
     """
-    import joblib
-
-    model_path  = BASE_DIR / "models" / f"{domain}_fds_model.pkl"
-    if not model_path.exists():
-        raise FileNotFoundError(f"Model {domain} tidak ditemukan: {model_path}")
-
-    pipeline    = joblib.load(model_path)
-    rf_model    = pipeline.named_steps["model"]
-    preprocessor = pipeline.named_steps["preprocessor"]
-
-    # ── Ambil nama feature setelah preprocessing ──────────────────────────────
-    try:
-        feature_names: list[str] = []
-        for name, transformer, cols in preprocessor.transformers_:
-            if name == "num":
-                feature_names.extend(cols)
-            elif name == "cat":
-                ohe = transformer.named_steps["onehot"]
-                feature_names.extend(ohe.get_feature_names_out(cols).tolist())
-    except Exception:
-        feature_names = [f"feature_{i}" for i in range(len(rf_model.feature_importances_))]
-
-    importances = rf_model.feature_importances_
-
-    # ── Pasangkan feature → importance ───────────────────────────────────────
-    feat_imp: dict[str, float] = {
-        name: round(float(imp), 6)
-        for name, imp in zip(feature_names, importances)
-    }
-
-    # ── Identifikasi pattern signifikan ──────────────────────────────────────
     discovered: list[dict[str, Any]] = []
-    for feat, imp in sorted(feat_imp.items(), key=lambda x: x[1], reverse=True):
-        # Ambil nama feature dasar (sebelum OHE suffix seperti _Mobile, _Web)
-        base_feat = feat.split("_")[0] if feat not in _FEATURE_PATTERN_MAP else feat
-        # Cek exact match dulu, lalu prefix match
-        meta = _FEATURE_PATTERN_MAP.get(feat) or next(
-            (v for k, v in _FEATURE_PATTERN_MAP.items() if feat.startswith(k)),
-            None
-        )
-        if imp >= _IMPORTANCE_THRESHOLD:
-            discovered.append({
-                "feature":    feat,
-                "importance": imp,
-                "pattern_key":   meta["key"]   if meta else feat.lower(),
-                "pattern_label": meta["label"] if meta else feat.replace("_", " ").title(),
-                "is_known_pattern": meta is not None,
-            })
-
-    # ── Threshold terbaru dari Isolation Forest ───────────────────────────────
     thresholds = iso_result.get("thresholds", {}) if isinstance(iso_result, dict) else {}
 
-    # ── Bangun discovery entry ────────────────────────────────────────────────
+    # -- Bangun discovery entry ------------------------------------------------
     now = _now_iso()
     entry: dict[str, Any] = {
-        # ── Identity ─────────────────────────────────────────────────────────
+        # -- Identity ---------------------------------------------------------
         "id":              f"PAT-{uuid.uuid4().hex[:8].upper()}",
         "run_id":          run_id,
         "domain":          domain,
         "trigger":         trigger,
         "discovered_at":   now,
 
-        # ── Model metrics saat ini ────────────────────────────────────────────
+        # -- Model metrics saat ini --------------------------------------------
         "model_metrics": {
-            "accuracy":        metrics.get("random_forest", {}).get("accuracy"),
-            "precision_fraud": metrics.get("random_forest", {}).get("precision_fraud"),
-            "recall_fraud":    metrics.get("random_forest", {}).get("recall_fraud"),
-            "f1_fraud":        metrics.get("random_forest", {}).get("f1_fraud"),
-            "roc_auc":         metrics.get("random_forest", {}).get("roc_auc"),
+            "accuracy":        None,
+            "precision_fraud": None,
+            "recall_fraud":    None,
+            "f1_fraud":        None,
+            "roc_auc":         None,
         },
 
-        # ── Threshold terbaru ─────────────────────────────────────────────────
+        # -- Threshold terbaru -------------------------------------------------
         "thresholds": {
             "review_score_threshold":    thresholds.get("review_score_threshold"),
             "high_risk_score_threshold": thresholds.get("high_risk_score_threshold"),
         },
 
-        # ── Top feature importances (semua) ───────────────────────────────────
-        "feature_importances": dict(
-            sorted(feat_imp.items(), key=lambda x: x[1], reverse=True)[:20]
-        ),
+        # -- Top feature importances (semua) -----------------------------------
+        "feature_importances": {},
 
-        # ── Pattern yang signifikan (importance >= threshold) ─────────────────
+        # -- Pattern yang signifikan (importance >= threshold) -----------------
         "significant_patterns": discovered,
 
-        # ── Summary ───────────────────────────────────────────────────────────
+        # -- Summary -----------------------------------------------------------
         "summary": {
-            "total_features":          len(feat_imp),
+            "total_features":          0,
             "significant_features":    len(discovered),
             "known_patterns_found":    sum(1 for d in discovered if d["is_known_pattern"]),
             "new_patterns_found":      sum(1 for d in discovered if not d["is_known_pattern"]),
@@ -657,14 +581,14 @@ def _extract_and_save_patterns(
             "top_feature_importance":  discovered[0]["importance"]    if discovered else None,
         },
 
-        # ── Placeholder untuk DB ──────────────────────────────────────────────
+        # -- Placeholder untuk DB ----------------------------------------------
         # TODO (temanmu): ganti _save_patterns() di bawah dengan DB upsert.
         # Gunakan domain + discovered_at sebagai composite key,
         # atau pattern_key + domain untuk upsert per-pattern.
         "db_status": "pending",  # pending | saved
     }
 
-    # ── Simpan ke JSON (placeholder sebelum DB tersedia) ─────────────────────
+    # -- Simpan ke JSON (placeholder sebelum DB tersedia) ---------------------
     patterns = _load_patterns()
 
     # Hanya simpan 50 entry terbaru per domain agar file tidak membesar
@@ -682,9 +606,9 @@ def _extract_and_save_patterns(
     return entry
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # Pattern Discovery Endpoints
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
 @router.get("/patterns")
 def get_patterns(
@@ -713,7 +637,7 @@ def get_patterns(
             "Data ini berasal dari pattern_discovery.json (placeholder). "
             "Sambungkan ke DB saat database pattern sudah tersedia."
         ),
-        # ── Agregasi cepat untuk frontend ────────────────────────────────────
+        # -- Agregasi cepat untuk frontend ------------------------------------
         "summary": {
             d: {
                 "latest_discovered_at": next(
@@ -745,9 +669,9 @@ def get_latest_patterns() -> dict[str, Any]:
     return {"latest": result}
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # APScheduler bridge (dipanggil dari retrain_scheduler.py)
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
 def _register_job(schedule: dict[str, Any]) -> None:
     """Daftarkan job baru ke APScheduler (jika sudah running)."""
@@ -767,9 +691,9 @@ def _unregister_job(schedule_id: str) -> None:
         print(f"[RetrainRouter] Gagal hapus job: {e}")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 # Upload CSV & Quick Retrain
-# ═══════════════════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------------------
 
 # Kolom wajib per domain untuk auto-detect
 _AGENUSA_SIGNATURE  = {"TERMINAL_ID", "MERCHANT_ID", "ACCOUNT_NUMBER", "PROCESSING_CODE", "RESPONSE_CODE", "MTI"}
@@ -788,9 +712,9 @@ def _detect_domain(columns: list[str]) -> str | None:
 
 def _run_training_from_csv(domain: str, csv_path: Path, run_id: str | None = None) -> dict[str, Any]:
     """
-    Jalankan training RF + Isolation Forest dari CSV yang diupload.
+    Jalankan training Isolation Forest dari CSV yang diupload.
     CSV dipakai sebagai dataset baru, menggantikan file lama.
-    Setelah selesai, extract pattern discovery dan simpan ke JSON.
+    Setelah selesai, simpan threshold retrain ke JSON.
     """
     import importlib.util, sys, shutil
 
@@ -803,36 +727,17 @@ def _run_training_from_csv(domain: str, csv_path: Path, run_id: str | None = Non
         spec.loader.exec_module(module)
         return module
 
-    # ── Backup dataset lama ──────────────────────────────────────────────────
-    pattern_dst   = backend_dir / f"{domain}_pattern_dataset.csv"
-    isolation_dst = backend_dir / f"{domain}_isolation_dataset.csv"
+    # -- Backup dataset lama --------------------------------------------------
+    DATASET_DIR.mkdir(parents=True, exist_ok=True)
+    isolation_dst = DATASET_DIR / f"{domain}_isolation_dataset.csv"
 
-    if pattern_dst.exists():
-        shutil.copy2(pattern_dst, pattern_dst.with_suffix(".csv.bak"))
     if isolation_dst.exists():
         shutil.copy2(isolation_dst, isolation_dst.with_suffix(".csv.bak"))
 
-    # ── Salin CSV upload ke kedua dataset ────────────────────────────────────
-    shutil.copy2(csv_path, pattern_dst)
+    # -- Salin CSV upload ke dataset Isolation Forest -------------------------
     shutil.copy2(csv_path, isolation_dst)
 
-    # ── Train Random Forest ──────────────────────────────────────────────────
-    train_fds  = _import_script(backend_dir / "train_fds_models.py", "train_fds_models_quick")
-    fds_result = train_fds.train_one_model(
-        model_name      = domain,
-        csv_path        = pattern_dst,
-        feature_builder = (
-            train_fds.build_agenusa_features if domain == "agenusa"
-            else train_fds.build_nusabill_features
-        ),
-        drop_cols = (
-            ["TIMESTAMP_DB", "PREV_TIMESTAMP", "PREV_TERMINAL", "ACCOUNT_NUMBER", "STAN"]
-            if domain == "agenusa"
-            else ["BILL_DATE", "PAYMENT_DATE", "BILL_ID", "CUSTOMER_ID"]
-        ),
-    )
-
-    # ── Train Isolation Forest ───────────────────────────────────────────────
+    # -- Train Isolation Forest -----------------------------------------------
     train_iso     = _import_script(backend_dir / "train_isolation_models.py", "train_isolation_models_quick")
     contamination = 0.08 if domain == "agenusa" else 0.10
     iso_result    = train_iso.train_one(
@@ -841,10 +746,8 @@ def _run_training_from_csv(domain: str, csv_path: Path, run_id: str | None = Non
         contamination = contamination,
     )
 
-    # ── Invalidate cache ─────────────────────────────────────────────────────
+    # -- Invalidate cache -----------------------------------------------------
     try:
-        from fds_engine import load_model
-        load_model.cache_clear()
         from isolation_engine import load_isolation_model, load_isolation_meta
         load_isolation_model.cache_clear()
         load_isolation_meta.cache_clear()
@@ -852,13 +755,6 @@ def _run_training_from_csv(domain: str, csv_path: Path, run_id: str | None = Non
         pass
 
     metrics = {
-        "random_forest": {
-            "accuracy":        round(fds_result.get("accuracy", 0), 4),
-            "precision_fraud": round(fds_result.get("precision_fraud", 0), 4),
-            "recall_fraud":    round(fds_result.get("recall_fraud", 0), 4),
-            "f1_fraud":        round(fds_result.get("f1_fraud", 0), 4),
-            "roc_auc":         round(fds_result.get("roc_auc", 0), 4),
-        },
         "isolation_forest": {
             "contamination":       iso_result.get("contamination"),
             "anomaly_rate":        round(iso_result.get("anomaly_rate_fit_data", 0), 4),
@@ -867,7 +763,7 @@ def _run_training_from_csv(domain: str, csv_path: Path, run_id: str | None = Non
         },
     }
 
-    # ── Extract & simpan pattern discovery ───────────────────────────────────
+    # -- Extract & simpan pattern discovery -----------------------------------
     try:
         _extract_and_save_patterns(
             domain     = domain,
@@ -888,7 +784,7 @@ async def upload_and_train(
     domain_override: str        = Form(default=""),
 ) -> dict[str, Any]:
     """
-    Upload CSV dataset → auto-retrain RF + Isolation Forest.
+    Upload CSV dataset untuk auto-retrain Isolation Forest.
 
     - file: CSV berisi dataset berlabel (harus ada kolom IS_FRAUD)
     - domain_override: 'agenusa' | 'nusabill' | '' (kosong = auto-detect)
@@ -896,7 +792,7 @@ async def upload_and_train(
     import pandas as pd
     import traceback
 
-    # ── Validasi file ────────────────────────────────────────────────────────
+    # -- Validasi file --------------------------------------------------------
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File harus berformat CSV (.csv).")
 
@@ -904,7 +800,7 @@ async def upload_and_train(
     if len(contents) == 0:
         raise HTTPException(status_code=400, detail="File CSV kosong.")
 
-    # ── Parse CSV ────────────────────────────────────────────────────────────
+    # -- Parse CSV ------------------------------------------------------------
     try:
         df = pd.read_csv(io.BytesIO(contents))
     except Exception as e:
@@ -919,7 +815,7 @@ async def upload_and_train(
             detail="Kolom 'IS_FRAUD' tidak ditemukan. Dataset harus sudah berlabel."
         )
 
-    # ── Tentukan domain ──────────────────────────────────────────────────────
+    # -- Tentukan domain ------------------------------------------------------
     detected_domain = _detect_domain(list(df.columns))
 
     if domain_override in ("agenusa", "nusabill"):
@@ -937,7 +833,7 @@ async def upload_and_train(
             ),
         )
 
-    # ── Simpan ke temp file & train ──────────────────────────────────────────
+    # -- Simpan ke temp file & train ------------------------------------------
     started_at = _now_iso()
     run_id     = f"RUN-QK-{uuid.uuid4().hex[:8].upper()}"
 
@@ -1012,7 +908,7 @@ async def upload_and_train(
 @router.get("/detect-domain")
 async def detect_domain_from_columns(columns: str) -> dict[str, Any]:
     """
-    Helper endpoint: kirim nama kolom (comma-separated) → dapat domain suggestion.
+    Helper endpoint: kirim nama kolom (comma-separated) ? dapat domain suggestion.
     Dipakai frontend saat user upload CSV untuk preview domain sebelum retrain.
     """
     col_list   = [c.strip() for c in columns.split(",") if c.strip()]
@@ -1052,4 +948,5 @@ def run_scheduled_retrain(schedule_id: str) -> None:
     _save_schedules(schedules)
 
     status = result.get("status", "unknown")
-    print(f"[RetrainScheduler] Selesai: {schedule['name']} → {status}")
+    print(f"[RetrainScheduler] Selesai: {schedule['name']} ? {status}")
+

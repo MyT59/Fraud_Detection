@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -16,12 +17,18 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from isolation_engine import DOMAIN_ISO_CONFIG, build_features, load_isolation_meta, load_isolation_model
-
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
+# Setup paths
+ROOT_DIR = Path(__file__).resolve().parents[2]
 BACKEND_DIR = ROOT_DIR / "backend"
-MODELS_DIR = BACKEND_DIR / "models"
+DATA_DIR = ROOT_DIR / "Playground" / "Data"
+MODELS_DIR = ROOT_DIR / "Playground" / "models"
+
+# Add backend to path so we can import isolation_engine
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+# Import from backend isolation_engine
+from isolation_engine import DOMAIN_ISO_CONFIG, build_features, load_isolation_meta, load_isolation_model  # type: ignore
 
 
 def round_floats(obj: Any, digits: int = 6) -> Any:
@@ -69,16 +76,52 @@ def tune_threshold(y_true: np.ndarray, anomaly_score: np.ndarray) -> dict[str, A
     }
 
 
-def evaluate_domain(domain: str, labeled_path: Path) -> dict[str, Any]:
+def evaluate_domain(domain: str, data_path: Path) -> dict[str, Any]:
     config = DOMAIN_ISO_CONFIG[domain]
     model = load_isolation_model(domain)
     meta = load_isolation_meta(domain)
 
-    df = pd.read_csv(labeled_path)
+    df = pd.read_csv(data_path)
     feat = build_features(domain, df)
-    y_true = feat["IS_FRAUD"].astype(int).to_numpy()
     x = feat.drop(columns=["IS_FRAUD", *config["drop_cols"]], errors="ignore")
 
+    # Check if labeled data exists
+    has_labels = "IS_FRAUD" in feat.columns and feat["IS_FRAUD"].sum() > 0
+    
+    if not has_labels:
+        # Unsupervised evaluation - just report thresholds from training
+        decision_score = model.decision_function(x)
+        anomaly_score = -decision_score
+        pred_default = (model.predict(x) == -1).astype(int)
+        
+        return {
+            "data_type": "unlabeled",
+            "notes": "Dataset tidak memiliki label IS_FRAUD. Hanya report thresholds dari training.",
+            "dataset_size": len(x),
+            "anomaly_count_at_default": int(pred_default.sum()),
+            "anomaly_rate": float(pred_default.mean()),
+            "training_metadata": meta,
+            "evaluation": {
+                "default_model_boundary": {
+                    "threshold": None,
+                    "precision_fraud": None,
+                    "recall_fraud": None,
+                    "f1_fraud": None,
+                },
+                "review_threshold_boundary": {
+                    "threshold": meta["thresholds"]["review_score_threshold"],
+                    "predictions": int((decision_score <= meta["thresholds"]["review_score_threshold"]).sum()),
+                },
+                "tuned_threshold_on_eval_data": {
+                    "notes": "Tidak bisa di-tune tanpa ground truth",
+                    "threshold": None,
+                    "metrics": None,
+                },
+            },
+        }
+    
+    # Labeled data - full evaluation
+    y_true = feat["IS_FRAUD"].astype(int).to_numpy()
     decision_score = model.decision_function(x)
     anomaly_score = -decision_score
     pred_default = (model.predict(x) == -1).astype(int)
@@ -126,7 +169,7 @@ def evaluate_domain(domain: str, labeled_path: Path) -> dict[str, Any]:
         return rows
 
     return {
-        "dataset": str(labeled_path.relative_to(ROOT_DIR)),
+        "dataset": str(data_path.relative_to(ROOT_DIR)),
         "rows": int(len(df)),
         "fraud_rate": float(y_true.mean()),
         "isolation_meta": {
@@ -161,14 +204,22 @@ def build_markdown_summary(report: dict[str, Any]) -> str:
     for domain, data in report["domains"].items():
         lines.append(f"## {domain}")
         lines.append("")
-        lines.append(f"- Dataset: `{data['dataset']}`")
-        lines.append(f"- Rows: `{data['rows']}`")
-        lines.append(f"- Fraud Rate: `{data['fraud_rate']}`")
-        lines.append(
-            f"- Contamination: `{data['isolation_meta']['contamination']}` | Fit Anomaly Rate: `{data['isolation_meta']['fit_anomaly_rate']}`"
-        )
-        lines.append("")
-
+        if "dataset" in data:
+            lines.append(f"- Dataset: `{data['dataset']}`")
+        if "rows" in data:
+            lines.append(f"- Rows: `{data['rows']}`")
+        if "fraud_rate" in data:
+            lines.append(f"- Fraud Rate: `{data['fraud_rate']}`")
+        if "isolation_meta" in data:
+            lines.append(f"- Contamination: `{data['isolation_meta']['contamination']}` | Fit Anomaly Rate: `{data['isolation_meta']['fit_anomaly_rate']}`")
+        if data.get("data_type") == "unlabeled":
+            lines.append("")
+            lines.append(f"- [UNLABELED] {data.get('notes','')}")
+            lines.append(f"- Dataset size: {data.get('dataset_size')}")
+            lines.append(f"- Anomaly rate (default): {data.get('anomaly_rate')}")
+            lines.append("")
+            continue
+        # Labeled: print metrics
         default_m = data["evaluation"]["default_model_boundary"]
         review_m = data["evaluation"]["review_threshold_boundary"]
         tuned_m = data["evaluation"]["tuned_threshold_on_eval_data"]["metrics"]
@@ -205,8 +256,8 @@ def main() -> None:
         "generated_at_utc": pd.Timestamp.now(tz="UTC").isoformat(),
         "notes": "Evaluasi isolation memakai dataset berlabel untuk benchmarking offline.",
         "domains": {
-            "agenusa": evaluate_domain("agenusa", BACKEND_DIR / "agenusa_pattern_dataset.csv"),
-            "nusabill": evaluate_domain("nusabill", BACKEND_DIR / "nusabill_pattern_dataset.csv"),
+            "agenusa": evaluate_domain("agenusa", DATA_DIR / "agenusa_isolation_dataset.csv"),
+            "nusabill": evaluate_domain("nusabill", DATA_DIR / "nusabill_isolation_dataset.csv"),
         },
     }
 
@@ -216,15 +267,20 @@ def main() -> None:
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     out_md_path.write_text(build_markdown_summary(report), encoding="utf-8")
 
-    compact = {
-        d: {
-            "default_recall": v["evaluation"]["default_model_boundary"]["recall_fraud"],
-            "review_recall": v["evaluation"]["review_threshold_boundary"]["recall_fraud"],
-            "tuned_recall": v["evaluation"]["tuned_threshold_on_eval_data"]["metrics"]["recall_fraud"],
-            "tuned_threshold": v["evaluation"]["tuned_threshold_on_eval_data"]["threshold"],
-        }
-        for d, v in report["domains"].items()
-    }
+    compact = {}
+    for d, v in report["domains"].items():
+        if v.get("data_type") == "unlabeled":
+            compact[d] = {
+                "review_threshold": v["training_metadata"]["thresholds"]["review_score_threshold"],
+                "anomaly_rate": v.get("anomaly_rate"),
+            }
+        else:
+            compact[d] = {
+                "default_recall": v["evaluation"]["default_model_boundary"]["recall_fraud"],
+                "review_recall": v["evaluation"]["review_threshold_boundary"]["recall_fraud"],
+                "tuned_recall": v["evaluation"]["tuned_threshold_on_eval_data"]["metrics"]["recall_fraud"],
+                "tuned_threshold": v["evaluation"]["tuned_threshold_on_eval_data"]["threshold"],
+            }
     print(f"Isolation evaluation report tersimpan: {out_path.relative_to(ROOT_DIR)}")
     print(f"Isolation summary tersimpan: {out_md_path.relative_to(ROOT_DIR)}")
     print(json.dumps(compact, indent=2))
