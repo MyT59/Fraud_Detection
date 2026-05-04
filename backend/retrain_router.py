@@ -439,23 +439,11 @@ def _run_training(domain: str, run_id: str | None = None) -> dict[str, Any]:
     Jalankan training ulang Isolation Forest untuk satu domain.
     Setelah selesai, simpan threshold terbaru ke pattern_discovery.json.
     """
-    from pathlib import Path as _Path
-
-    backend_dir = _Path(__file__).resolve().parent
-
-    import importlib.util, sys
-
-    def _import_script(script_path: _Path, module_name: str):
-        spec   = importlib.util.spec_from_file_location(module_name, script_path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-        return module
+    from app.infrastructure.ml.training import train_one
 
     # -- Train Isolation Forest -----------------------------------------------
-    train_iso     = _import_script(backend_dir / "train_isolation_models.py", "train_isolation_models")
     contamination = 0.08 if domain == "agenusa" else 0.10
-    iso_result    = train_iso.train_one(
+    iso_result    = train_one(
         domain        = domain,
         csv_path      = DATASET_DIR / f"{domain}_isolation_dataset.csv",
         contamination = contamination,
@@ -463,7 +451,7 @@ def _run_training(domain: str, run_id: str | None = None) -> dict[str, Any]:
 
     # -- Invalidate lru_cache -------------------------------------------------
     try:
-        from isolation_engine import load_isolation_model, load_isolation_meta
+        from app.infrastructure.ml.isolation import load_isolation_model, load_isolation_meta
         load_isolation_model.cache_clear()
         load_isolation_meta.cache_clear()
     except Exception:
@@ -716,16 +704,8 @@ def _run_training_from_csv(domain: str, csv_path: Path, run_id: str | None = Non
     CSV dipakai sebagai dataset baru, menggantikan file lama.
     Setelah selesai, simpan threshold retrain ke JSON.
     """
-    import importlib.util, sys, shutil
-
-    backend_dir = BASE_DIR
-
-    def _import_script(script_path: Path, module_name: str):
-        spec   = importlib.util.spec_from_file_location(module_name, script_path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-        return module
+    import shutil
+    from app.infrastructure.ml.training import train_one
 
     # -- Backup dataset lama --------------------------------------------------
     DATASET_DIR.mkdir(parents=True, exist_ok=True)
@@ -738,9 +718,8 @@ def _run_training_from_csv(domain: str, csv_path: Path, run_id: str | None = Non
     shutil.copy2(csv_path, isolation_dst)
 
     # -- Train Isolation Forest -----------------------------------------------
-    train_iso     = _import_script(backend_dir / "train_isolation_models.py", "train_isolation_models_quick")
     contamination = 0.08 if domain == "agenusa" else 0.10
-    iso_result    = train_iso.train_one(
+    iso_result    = train_one(
         domain        = domain,
         csv_path      = isolation_dst,
         contamination = contamination,
@@ -748,7 +727,7 @@ def _run_training_from_csv(domain: str, csv_path: Path, run_id: str | None = Non
 
     # -- Invalidate cache -----------------------------------------------------
     try:
-        from isolation_engine import load_isolation_model, load_isolation_meta
+        from app.infrastructure.ml.isolation import load_isolation_model, load_isolation_meta
         load_isolation_model.cache_clear()
         load_isolation_meta.cache_clear()
     except Exception:

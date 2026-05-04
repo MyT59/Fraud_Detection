@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from app.application.services.isolation_ml_service import (
-    get_domain_catalog,
-    score_domain_history,
-)
+from app.application.services.isolation_ml_service import get_domain_catalog
+from app.infrastructure.ml.dependencies import get_score_isolation_history_use_case
 from app.presentation.schema.isolation_schema import IsolationHistoryRequest
 
 
@@ -20,7 +18,8 @@ def list_domains() -> dict:
 @router.post("/isolation/{domain}/score-history")
 def score_history_with_isolation(domain: str, payload: IsolationHistoryRequest) -> dict:
     try:
-        return score_domain_history(
+        use_case = get_score_isolation_history_use_case()
+        return use_case.execute(
             domain=domain,
             records=payload.records,
             review_score_threshold=payload.review_score_threshold,

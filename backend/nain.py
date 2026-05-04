@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from isolation_engine import score_history_isolation
+from app.infrastructure.ml.isolation import score_history_isolation
 from app.application.services.isolation_ml_service import (
     DOMAIN_DEFAULT_THRESHOLDS,
     get_available_domains,

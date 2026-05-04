@@ -23,12 +23,11 @@ BACKEND_DIR = ROOT_DIR / "backend"
 DATA_DIR = ROOT_DIR / "Playground" / "Data"
 MODELS_DIR = ROOT_DIR / "Playground" / "models"
 
-# Add backend to path so we can import isolation_engine
+# Add backend to path so we can import app modules.
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-# Import from backend isolation_engine
-from isolation_engine import DOMAIN_ISO_CONFIG, build_features, load_isolation_meta, load_isolation_model  # type: ignore
+from app.infrastructure.ml.isolation import DOMAIN_ISO_CONFIG, build_features, load_isolation_meta, load_isolation_model  # type: ignore
 
 
 def round_floats(obj: Any, digits: int = 6) -> Any:
