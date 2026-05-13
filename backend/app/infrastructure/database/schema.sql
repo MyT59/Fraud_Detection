@@ -107,7 +107,6 @@ CREATE TABLE blacklist_items (
     hit_count INTEGER DEFAULT 0,
     status VARCHAR(20) DEFAULT 'PENDING',
     is_active BOOLEAN DEFAULT TRUE,
-    review_note TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
@@ -173,7 +172,7 @@ CREATE TABLE retrain_history (
     new_patterns_count INTEGER,
     trigger_metadata JSONB DEFAULT '{}',
     log_details JSONB,
-    model_version VARCHAR(50)
+    model_version VARCHAR(50),
 
     CONSTRAINT fk_retrain_history_dataset FOREIGN KEY (dataset_id) REFERENCES ml_datasets(id) ON DELETE SET NULL
 );
@@ -195,7 +194,6 @@ CREATE TABLE global_rules (
     severity VARCHAR(20) DEFAULT 'MEDIUM',
     priority INTEGER DEFAULT 0,
     description TEXT,
-    hit_count INTEGER DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
     created_by INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -299,8 +297,9 @@ CREATE TABLE manual_reviews (
 );
 
 -- ==========================================
--- 9. INDEXES (Optimized)
+-- 9. INDEXES (Optimized & Deduplicated)
 -- ==========================================
+
 -- Transactions & Alerts
 CREATE INDEX idx_transactions_transaction_time ON transactions_feed(transaction_time);
 CREATE INDEX idx_transactions_user ON transactions_feed(user_account_id);
@@ -338,8 +337,6 @@ CREATE INDEX idx_retrain_history_time ON retrain_history(execution_time DESC);
 CREATE INDEX idx_ml_datasets_lookup ON ml_datasets(domain, created_at DESC);
 CREATE INDEX idx_retrain_history_model_id ON retrain_history(model_id);
 CREATE INDEX idx_retrain_history_dataset_id ON retrain_history(dataset_id);
-CREATE INDEX idx_retrain_schedule_active ON retrain_schedules(is_active);
-CREATE INDEX idx_retrain_history_time ON retrain_history(execution_time DESC);
 
 -- ==========================================
 -- 10. POST-INSTALLATION CLEANUP

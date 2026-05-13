@@ -9,7 +9,7 @@ from app.infrastructure.database.enums import TransactionStatusEnum
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.infrastructure.repositories.alert_repository import AlertRepository
 from app.infrastructure.repositories.review_repository import ReviewRepository

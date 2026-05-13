@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 MIN_SAMPLE = 5
 DISABLE_THRESHOLD = 0.4
