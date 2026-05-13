@@ -1,0 +1,129 @@
+[
+  {
+    "timestamp": "2026-05-07T08:17:21.763919+00:00",
+    "trigger": "manual_upload",
+    "domain": "auto_detect",
+    "status": "SUCCESS",
+    "details": {
+      "status": "success",
+      "domain": "agenusa",
+      "total_records": 5000,
+      "anomalies_found": 250,
+      "new_patterns_discovered": 0,
+      "features_used": [
+        "AMOUNT",
+        "PROCESSING_CODE",
+        "RESPONSE_CODE",
+        "MTI",
+        "TX_HOUR",
+        "TX_DAYOFWEEK",
+        "IS_NIGHT_TX",
+        "GAP_MINUTES",
+        "TERMINAL_SWITCH_FAST",
+        "AVG_AMOUNT_5",
+        "AMOUNT_OVER_AVG_RATIO",
+        "IS_DECLINED",
+        "IS_BRUTE_PATTERN",
+        "IS_MONEY_MULE_DEST",
+        "IS_HIGH_AMOUNT_PATTERN",
+        "MIDNIGHT_AMOUNT_SPIKE",
+        "RAPID_RETRY_DECLINED"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-05-07T08:10:13.328527+00:00",
+    "trigger": "schedule_492ec84a",
+    "domain": "agenusa",
+    "status": "SUCCESS",
+    "details": {
+      "status": "success",
+      "domain": "agenusa",
+      "total_records": 5000,
+      "anomalies_found": 250,
+      "new_patterns_discovered": 2,
+      "features_used": [
+        "AMOUNT",
+        "PROCESSING_CODE",
+        "RESPONSE_CODE",
+        "MTI",
+        "TX_HOUR",
+        "TX_DAYOFWEEK",
+        "IS_NIGHT_TX",
+        "GAP_MINUTES",
+        "TERMINAL_SWITCH_FAST",
+        "AVG_AMOUNT_5",
+        "AMOUNT_OVER_AVG_RATIO",
+        "IS_DECLINED",
+        "IS_BRUTE_PATTERN",
+        "IS_MONEY_MULE_DEST",
+        "IS_HIGH_AMOUNT_PATTERN",
+        "MIDNIGHT_AMOUNT_SPIKE",
+        "RAPID_RETRY_DECLINED"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-05-07T08:01:33.974600+00:00",
+    "trigger": "schedule_492ec84a",
+    "domain": "agenusa",
+    "status": "FAILED",
+    "details": {
+      "error": "'TIMESTAMP_DB'"
+    }
+  },
+  {
+    "timestamp": "2026-05-07T08:00:00.062939+00:00",
+    "trigger": "schedule_492ec84a",
+    "domain": "agenusa",
+    "status": "FAILED",
+    "details": {
+      "error": "'TIMESTAMP_DB'"
+    }
+  },
+  {
+    "timestamp": "2026-05-07T07:50:00.491341+00:00",
+    "trigger": "schedule_492ec84a",
+    "domain": "agenusa",
+    "status": "FAILED",
+    "details": {
+      "error": "'TIMESTAMP_DB'"
+    }
+  },
+  {
+    "timestamp": "2026-05-07T07:40:00.029080+00:00",
+    "trigger": "schedule_492ec84a",
+    "domain": "agenusa",
+    "status": "FAILED",
+    "details": {
+      "error": "max() iterable argument is empty"
+    }
+  },
+  {
+    "timestamp": "2026-05-07T07:30:00.067322+00:00",
+    "trigger": "schedule_492ec84a",
+    "domain": "agenusa",
+    "status": "FAILED",
+    "details": {
+      "error": "max() iterable argument is empty"
+    }
+  },
+  {
+    "timestamp": "2026-05-07T07:21:36.695301+00:00",
+    "trigger": "schedule_492ec84a",
+    "domain": "agenusa",
+    "status": "FAILED",
+    "details": {
+      "error": "max() iterable argument is empty"
+    }
+  },
+  {
+    "timestamp": "2026-05-07T07:20:00.080326+00:00",
+    "trigger": "schedule_492ec84a",
+    "domain": "agenusa",
+    "status": "FAILED",
+    "details": {
+      "error": "max() iterable argument is empty"
+    }
+  }
+]

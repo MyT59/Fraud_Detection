@@ -27,7 +27,8 @@ MODELS_DIR = ROOT_DIR / "Playground" / "models"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.infrastructure.ml.isolation import DOMAIN_ISO_CONFIG, build_features, load_isolation_meta, load_isolation_model  # type: ignore
+from backend.app.infrastructure.ml.feature_builder import build_features
+from backend.app.infrastructure.ml.model_loader import DOMAIN_ISO_CONFIG, load_isolation_model, load_isolation_meta
 
 
 def round_floats(obj: Any, digits: int = 6) -> Any:
