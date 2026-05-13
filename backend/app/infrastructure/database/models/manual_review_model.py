@@ -2,6 +2,7 @@ from sqlalchemy import Column, BigInteger, Integer, String, Text, DateTime, Fore
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.infrastructure.database.enums import TransactionStatusEnum
+from app.infrastructure.database.enums import ReviewDecisionEnum
 from app.infrastructure.database.base import Base
 
 class ManualReview(Base):
@@ -11,8 +12,9 @@ class ManualReview(Base):
 
     transaction_id = Column(BigInteger, ForeignKey("transactions_feed.id", ondelete="CASCADE"), nullable=False)
     reviewer_id = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True)
+    alert_id = Column(BigInteger, ForeignKey("fraud_alerts.id", ondelete="CASCADE"), unique=True)
 
-    decision = Column(String(50), nullable=False)
+    decision = Column(Enum(ReviewDecisionEnum, name="review_decision_enum"), nullable=False)
     review_note = Column(Text)
 
     previous_status = Column(String(50))
@@ -21,4 +23,7 @@ class ManualReview(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     transaction = relationship("Transaction", back_populates="reviews")
+    alert = relationship("FraudAlert")
     admin = relationship("Admin")
+
+    

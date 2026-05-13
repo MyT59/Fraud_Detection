@@ -1,5 +1,25 @@
 [
   {
+    "id": "ALT-MR-63B6E55F",
+    "type": "fraud",
+    "severity": "critical",
+    "status": "unread",
+    "title": "Fraud Dikonfirmasi — AGN-000001",
+    "message": "Transaksi AGN-000001 (AGENUSA) ditolak setelah manual review. Fraud score: 93/100. Jumlah: Rp 664.602. Pattern: Rapid Retry Declined, Bruteforce Pin Pattern.",
+    "txnId": "AGN-000001",
+    "time": "2026-05-05T16:06:38.970142"
+  },
+  {
+    "id": "ALT-MR-6DDA010B",
+    "type": "fraud",
+    "severity": "critical",
+    "status": "unread",
+    "title": "Fraud Dikonfirmasi — AGN-000001",
+    "message": "Transaksi AGN-000001 (AGENUSA) ditolak setelah manual review. Fraud score: 93/100. Jumlah: Rp 664.602. Pattern: Rapid Retry Declined, Bruteforce Pin Pattern.",
+    "txnId": "AGN-000001",
+    "time": "2026-05-05T10:19:06.545828"
+  },
+  {
     "id": "ALT-MR-9D74B954",
     "type": "fraud",
     "severity": "critical",

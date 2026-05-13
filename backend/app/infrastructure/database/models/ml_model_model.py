@@ -1,5 +1,9 @@
+# app/infrastructure/database/models/ml_model_model.py
+
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, text
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import relationship
 from app.infrastructure.database.base import Base
 
 class MLModel(Base):
@@ -12,7 +16,14 @@ class MLModel(Base):
 
     file_path = Column(String(255), nullable=False)
 
-    accuracy_score = Column(Float)
+    metrics = Column(JSONB, server_default='{}')
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_active = Column(Boolean, default=True, server_default=text("true"))
+
+    # =========================
+    # RELATIONSHIPS
+    # =========================
+    # 🔥 TAMBAHAN BARU: Menerima relasi dari tabel retrain_history
+    # Ingat: Pakai string "RetrainHistory" agar tidak circular import!
+    histories = relationship("RetrainHistory", back_populates="model")

@@ -15,7 +15,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
 from ...paths import DATA_DIR, MODELS_DIR, PROJECT_ROOT
-from .isolation import DOMAIN_ISO_CONFIG, build_features
+from .feature_builder import build_features
+from .model_loader import DOMAIN_ISO_CONFIG
 
 
 def _build_pipeline(feature_df: pd.DataFrame, contamination: float) -> tuple[Pipeline, list[str], list[str]]:

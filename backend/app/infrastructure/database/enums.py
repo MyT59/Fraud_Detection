@@ -12,13 +12,36 @@ class BlacklistTypeEnum(str, enum.Enum):
     RRN = "RRN"
     PAYMENT_CODE = "PAYMENT_CODE"
     BILLER_ID = "BILLER_ID"
-    CUSTOME_PHONE = "CUSTOME_PHONE"
+    CUSTOMER_PHONE = "CUSTOMER_PHONE"
     CUSTOMER_EMAIL = "CUSTOMER_EMAIL"
     VIRTUAL_ACCOUNT_NUMBER = "VIRTUAL_ACCOUNT_NUMBER"
-
-
 class TransactionStatusEnum(str, enum.Enum):
     PENDING = "PENDING"
     REVIEW = "REVIEW"
     SAFE = "SAFE"
     FRAUD = "FRAUD"
+class RuleOperatorEnum(str, enum.Enum):
+    EQ = "="
+    GT = ">"
+    LT = "<"
+    GTE = ">="
+    LTE = "<="
+class ServiceScopeEnum(str, enum.Enum):
+    ALL = "ALL"
+    AGENUSA = "AGENUSA"
+    NUSABILL = "NUSABILL"
+class RuleActionEnum(str, enum.Enum):
+    BLOCK = "BLOCK"
+    REVIEW = "REVIEW"
+    FLAG = "FLAG"
+class RuleSeverityEnum(str, enum.Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+class ReviewDecisionEnum(str, enum.Enum):
+    SAFE = "SAFE"
+    FRAUD = "FRAUD"
+class AlertStatusEnum(str, enum.Enum):
+    OPEN = "OPEN"
+    IN_PROGRESS = "IN_PROGRESS"
+    RESOLVED = "RESOLVED"

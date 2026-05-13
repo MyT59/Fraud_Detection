@@ -1,4 +1,5 @@
-from sqlalchemy import Column, BigInteger, Integer, String, Text, DateTime, ForeignKey, text
+from sqlalchemy import Column, BigInteger, Enum, Integer, String, Text, DateTime, ForeignKey, text, Float
+from app.infrastructure.database.enums import AlertStatusEnum
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.infrastructure.database.base import Base
@@ -12,11 +13,12 @@ class FraudAlert(Base):
 
     alert_type = Column(String(100), nullable=False)
     severity = Column(String(20), nullable=False)
+    priority = Column(Float)
 
     title = Column(String(150))
     message = Column(Text)
 
-    status = Column(String(30), server_default="UNREAD")
+    status = Column(Enum(AlertStatusEnum, name="alert_status_enum"), server_default=AlertStatusEnum.OPEN)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -25,3 +27,4 @@ class FraudAlert(Base):
 
     transaction = relationship("Transaction", back_populates="alerts")
     admin = relationship("Admin")
+    reviews = relationship("ManualReview", back_populates="alert")

@@ -1,0 +1,7 @@
+class TargetType:
+    ADMIN = "ADMIN"
+    TRANSACTION = "TRANSACTION"
+    BLACKLIST = "BLACKLIST"
+    RULE = "RULE"
+    ALERT = "ALERT"
+    PATTERN = "PATTERN"

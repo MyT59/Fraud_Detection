@@ -8,7 +8,7 @@ LOCK_TIME_MINUTES = 5
 
 def is_locked(email: str):
     if email in LOCKED_USERS:
-        if datetime.utcnow() < LOCKED_USERS[email]:
+        if datetime.now(timezone.utc) < LOCKED_USERS[email]:
             return True
         else:
             del LOCKED_USERS[email]
@@ -19,7 +19,7 @@ def register_failed_attempt(email: str):
     FAILED_ATTEMPTS[email] = count
 
     if count >= MAX_ATTEMPTS:
-        LOCKED_USERS[email] = datetime.utcnow() + timedelta(minutes=LOCK_TIME_MINUTES)
+        LOCKED_USERS[email] = datetime.now(timezone.utc) + timedelta(minutes=LOCK_TIME_MINUTES)
         FAILED_ATTEMPTS[email] = 0
 
 def reset_attempts(email: str):

@@ -9,18 +9,22 @@ class BlacklistItem(Base):
 
     id = Column(Integer, primary_key=True)
 
-    value = Column(String(100), nullable=False, index=True)
+    value = Column(String(255), nullable=False, index=True)
     type = Column(Enum(BlacklistTypeEnum, name="blacklist_type_enum"), nullable=False)
 
     service_scope = Column(String(50), default="ALL", server_default="ALL")
     is_active = Column(Boolean, default=True, server_default=text("true"))
+    status = Column(String(20), default="PENDING", server_default="PENDING")
 
     reason = Column(Text, nullable=False)
-
+    review_note = Column(Text, nullable=True)
     added_by = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    source = Column(String(20), default="MANUAL", server_default="MANUAL")
+    hit_count = Column(Integer, default=0, server_default="0")
 
     __table_args__ = (
         UniqueConstraint('type', 'value', 'service_scope', name='uq_blacklist_type_value_service'),

@@ -24,6 +24,9 @@ class GlobalRule(Base):
     severity = Column(String(20), server_default="MEDIUM")
     priority = Column(Integer, server_default="0")
 
+    rule_group = Column(String(50), nullable=True)
+    hit_count = Column(Integer, default=0, server_default="0")
+
     description = Column(Text)
 
     is_active = Column(Boolean, default=True, server_default=text("true"))

@@ -1,246 +1,251 @@
 import logging
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timedelta
 
 from app.infrastructure.database.models.transaction_model import Transaction
-from app.infrastructure.database.models.blacklist_items_model import BlacklistItem
-from app.infrastructure.database.models.global_rule_model import GlobalRule
-from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
 from app.infrastructure.database.enums import TransactionStatusEnum
 
-# Setup Logger untuk standardisasi production
+from app.application.services.alert_service import create_alert
+from app.application.services.rule_engine_service import run_rule_engine
+from app.application.services.pattern_engine_service import run_pattern_engine
+from app.application.services.blacklist_service import run_blacklist_check
+from app.application.services.ensemble_engine_service import run_ensemble_engine
+from app.application.services.activity_log_service import log_activity
+from app.application.services.ml_realtime_service import (
+    enqueue_ml_processing,
+)
+from app.domain.entities.target_type import TargetType
+from app.infrastructure.repositories.transaction_repository import TransactionRepository
+from app.infrastructure.database.models.global_rule_model import GlobalRule
+
 logger = logging.getLogger(__name__)
 
-# HELPER
-def evaluate_rule(value, operator, threshold):
-    try:
-        val_float = float(value)
-        threshold_float = float(threshold)
-    except (ValueError, TypeError):
-        return False
 
-    if operator == ">":
-        return val_float > threshold_float
-    elif operator == "<":
-        return val_float < threshold_float
-    elif operator == ">=":
-        return val_float >= threshold_float
-    elif operator == "<=":
-        return val_float <= threshold_float
-    elif operator == "=":
-        return val_float == threshold_float
+# =========================
+# HELPER FUNCTIONS
+# =========================
+def normalize(value: str | None, to_lower: bool = True):
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value.lower() if to_lower else value
 
-    return False
+def _apply_hard_block(trx: Transaction, violations: list, db: Session, bl_score: float = None):
+    """
+    Helper untuk menangani eksekusi early return (Blacklist / Rule Block).
+    Mencegah duplikasi kode dan memastikan is_flagged_ml di-set sebelum commit.
+    """
+    trx.risk_score = max(100, bl_score or 100)
+    trx.final_status = TransactionStatusEnum.FRAUD
+    trx.risk_level = "CRITICAL"
 
+    if violations:
+        trx.violation_reason = " | ".join([f"{v['type']}:{v['name']}" for v in violations])
+
+    # FIX BUG #1, #3 & #4: Set flag & buat alert sebelum commit
+    trx.is_flagged_ml = True
+    create_alert(db, trx)  # Pastikan alert_service HANYA melakukan db.add(alert)
+
+    log_activity(
+        db=db,
+        admin=None,
+        action_type="FLAG_TRANSACTION",
+        target_type=TargetType.TRANSACTION,
+        target_id=trx.id,
+        details=f"Risk score={trx.risk_score}, level={trx.risk_level} (HARD BLOCK)"
+    )
+    
+    db.commit()
+
+    # =========================================================
+    # ASYNC ML RUNTIME PROCESSING
+    # =========================================================
+
+    enqueue_ml_processing(
+        db=db,
+        transaction_id=trx.id,
+    )
+    db.refresh(trx)
+    return trx
+    
+
+def _determine_risk_level(score: int) -> str:
+    """Mapping score ke risk level dengan lebih rapi"""
+    if score >= 80: return "CRITICAL"
+    if score >= 60: return "HIGH"
+    if score >= 40: return "MEDIUM"
+    if score >= 20: return "LOW"
+    return "SAFE"
+
+
+# =========================
 # MAIN PROCESS
+# =========================
 def process_transaction(data: dict, db: Session):
-
     try:
-        # IDEMPOTENCY CHECK
-        existing = db.query(Transaction).filter(
-            Transaction.service_source == data["service_source"],
-            Transaction.original_trx_id == data["original_trx_id"]
-        ).first()
-
-        if existing:
-            return existing  # skip duplicate
-        if not data.get("original_trx_id"):
-            raise ValueError("original_trx_id required")
-
-        if not data.get("service_source"):
-            raise ValueError("service_source required")
-
-        if not data.get("user_account_id"):
-            raise ValueError("user_account_id required")
-
+        # =========================
+        # 1. VALIDATION & IDEMPOTENCY
+        # =========================
+        original_trx_id = data.get("original_trx_id")
+        service_source = data.get("service_source").upper()
+        user_account_id = data.get("user_account_id")
         amount = data.get("amount")
 
+        if not original_trx_id or not service_source or not user_account_id:
+            raise ValueError("original_trx_id, service_source, and user_account_id are required")
+
         if not isinstance(amount, (int, float)):
-            raise ValueError("amount must be number")
+            raise ValueError("amount must be a number")
 
-        if amount < 0:
-            raise ValueError("amount cannot be negative")
+        repo = TransactionRepository(db)
+        existing = repo.get_by_original(service_source, original_trx_id)
 
-        # INSERT
+        if existing:
+            return existing
+
+        # =========================
+        # 2. CREATE TRANSACTION
+        # =========================
         trx = Transaction(
-            original_trx_id=data["original_trx_id"],
-            service_source=data["service_source"].upper(),
-            user_account_id=data["user_account_id"],
+            original_trx_id=original_trx_id,
+            service_source = data.get("service_source").upper(),
+            user_account_id=normalize(user_account_id),
             amount=amount,
-            transaction_time=data.get("transaction_time", datetime.utcnow()),
-            transaction_status="SUCCESS"
+            transaction_time=data.get("transaction_time") or datetime.now(timezone.utc),
+            transaction_status="SUCCESS",
+            final_status=TransactionStatusEnum.PENDING,
+            ip_address=data.get("ip_address"),
+            terminal_id=data.get("terminal_id"),
+            merchant_id=data.get("merchant_id"),
+            account_number=data.get("account_number"),
+            transaction_details=data.get("transaction_details")
         )
 
-        db.add(trx)
-        db.flush()
+        repo.create(trx)
 
-        # INIT
         violations = []
-        risk_score = 0
 
-        # BLACKLIST
-        blacklist = db.query(BlacklistItem).filter(
-            BlacklistItem.value == trx.user_account_id,
-            BlacklistItem.is_active == True
-        ).first()
+        # =========================
+        # 3. BLACKLIST ENGINE
+        # =========================
+        is_blacklisted, bl_violations, bl_score = run_blacklist_check(db, trx)
+        violations.extend(bl_violations)
 
-        if blacklist:
-            violations.append({
-                "type": "BLACKLIST",
-                "name": blacklist.reason
-            })
-            risk_score = 100
-            if v["type"] == "BLACKLIST":
-                formatted.append(f"BLACKLIST:{v['name']}")
-                
-            trx.risk_score = risk_score
-            trx.risk_level = "HIGH"
+        if is_blacklisted:
+            return _apply_hard_block(trx, violations, db, bl_score)
+
+        # =========================
+        # 4. RULE ENGINE
+        # =========================
+        rule_violations, rule_score, rule_actions = run_rule_engine(db, trx)
+        violations.extend(rule_violations)
+        trx.violation_rule_ids = [
+            v["rule_id"] for v in rule_violations
+            if "rule_id" in v
+        ]   
+
+        if isinstance(rule_actions, str): 
+            rule_actions = [rule_actions]
+
+        if "BLOCK" in rule_actions:
+            return _apply_hard_block(trx, violations, db, bl_score)
+
+        # =========================
+        # 5. PATTERN ENGINE
+        # =========================
+        pattern_violations, pattern_ids, pattern_score, pattern_actions = run_pattern_engine(db, trx)
+        violations.extend(pattern_violations)
+
+        if isinstance(pattern_actions, str): 
+            pattern_actions = [pattern_actions]
+
+        # =========================
+        # 6. ENSEMBLE ENGINE
+        # =========================
+        ml_score = 0
+        ensemble = run_ensemble_engine(
+            rule_score, rule_actions, pattern_score, pattern_actions, ml_score
+        )
+
+        trx.risk_score = ensemble.get("final_score", 0)
+        trx.final_status = ensemble.get("final_status", TransactionStatusEnum.REVIEW)
+        trx.score_breakdown = {
+            "rule_score": rule_score,
+            "pattern_score": pattern_score,
+            "ml_score": ml_score,
+            "final_score": trx.risk_score
+        }
+
+        # =========================
+        # 7. RISK ESCALATION
+        # =========================
+        if len(pattern_ids) >= 2:
+            trx.risk_score = min(100, trx.risk_score + 10)
+
+        if any("Super" in v["name"] or "Decline + Velocity" in v["name"] for v in violations):
+             trx.risk_score = min(100, trx.risk_score + 20)
+
+        if trx.risk_score >= 90:
             trx.final_status = TransactionStatusEnum.FRAUD
-            formatted = []
-            for v in violations:
-                if v["type"] == "RULE":
-                    formatted.append(f"RULE:{v['name']}")
-                elif v["type"] == "PATTERN":
-                    formatted.append(f"PATTERN:{v['name']}({v.get('value','')})")
-            trx.violation_reason = " | ".join(formatted)
 
-            db.commit()
-            db.refresh(trx)
-            return trx 
-
-        # RULE ENGINE
-        rules = db.query(GlobalRule).filter(
-            GlobalRule.is_active == True
-        ).order_by(GlobalRule.priority.desc()).limit(50).all()
-
-        for rule in rules:
-
-            # service scope
-            if rule.service_scope != "ALL" and rule.service_scope != trx.service_source:
-                continue
-
-            value = getattr(trx, rule.condition_field, None)
-
-            if value is None:
-                continue
-
-            if evaluate_rule(value, rule.operator, rule.threshold_value):
-
-                violations.append({"type": "RULE","name": rule.rule_name})
-                trx.violation_rule_id = rule.id
-
-                if rule.severity == "HIGH":
-                    risk_score += 50
-                elif rule.severity == "MEDIUM":
-                    risk_score += 30
-                else:
-                    risk_score += 10
-
-        # PATTERN ENGINE
-        patterns = db.query(FraudPattern).filter(
-            FraudPattern.is_active == True
-        ).limit(50).all()
-        pattern_ids = []
-
-        for pattern in patterns:
-
-            # service filter
-            if pattern.service_source != "ALL" and pattern.service_source != trx.service_source:
-                continue
-
-            rules = pattern.pattern_rules
-
-            time_window = rules.get("time_window_minutes", 5)
-            time_threshold = trx.transaction_time - timedelta(minutes=time_window)
-
-            # Cegah Memory Leak/OOM
-            recent_stats = db.query(
-                func.count(Transaction.id).label("tx_count"),
-                func.sum(Transaction.amount).label("total_amount")
-            ).filter(
-                Transaction.user_account_id == trx.user_account_id,
-                Transaction.transaction_time >= time_threshold
-            ).first()
-
-            # Mapping hasil dari Database ke variabel asli
-            tx_count = recent_stats.tx_count or 0
-            total_amount = recent_stats.total_amount or 0
-
-
-            # VELOCITY
-            if rules.get("type") == "VELOCITY":
-                if tx_count >= rules.get("min_tx_count", 3):
-                    violations.append({
-                        "type": "PATTERN",
-                        "name": pattern.pattern_name,
-                        "value": tx_count
-                    })
-                    risk_score += rules.get("risk_score", 40)
-                    pattern_ids.append(pattern.id)
-
-
-
-            # BURST
-            elif rules.get("type") == "BURST":
-                if total_amount >= rules.get("min_total_amount", 0):
-                    violations.append({
-                        "type": "PATTERN",
-                        "name": pattern.pattern_name,
-                        "value": int(total_amount)
-                    })
-                    risk_score += rules.get("risk_score", 40)
-                    pattern_ids.append(pattern.id)
-
-
-        # FINAL DECISION
-        trx.risk_score = risk_score
-
-        if risk_score >= 100:
-            trx.risk_level = "HIGH"
-            trx.final_status = TransactionStatusEnum.FRAUD
-        elif risk_score >= 50:
-            trx.risk_level = "MEDIUM"
-            trx.final_status = TransactionStatusEnum.REVIEW
-        elif risk_score > 0:
-            trx.risk_level = "LOW"
-            trx.final_status = TransactionStatusEnum.REVIEW
-        else:
-            trx.risk_level = "SAFE"
-            trx.final_status = TransactionStatusEnum.SAFE
-
+        # =========================
+        # 8. FINALIZE TRANSACTION DATA
+        # =========================
+        trx.risk_level = _determine_risk_level(trx.risk_score)
+        trx.violation_pattern_ids = pattern_ids
+        
         if violations:
-            formatted = []
-            for v in violations:
-                if v["type"] == "RULE":
-                    formatted.append(f"RULE:{v['name']}")
-                elif v["type"] == "PATTERN":
-                    formatted.append(f"PATTERN:{v['name']}({v.get('value','')})")
-            trx.violation_reason = " | ".join(formatted)
+            trx.violation_reason = " | ".join([f"{v['type']}:{v['name']}" for v in violations])
 
-        if pattern_ids:
-             trx.violation_pattern_id = pattern_ids[0]  
+        # =========================
+        # 9. ALERT & COMMIT (FINAL STATE)
+        # =========================
+        # FIX BUG #1 & #2: Siapkan state dengan utuh, alert tanpa commit, baru final commit
+        if trx.final_status in [TransactionStatusEnum.REVIEW, TransactionStatusEnum.FRAUD]:
+            trx.is_flagged_ml = True
+            create_alert(db, trx)
+            
+            # 🔥 TAMBAHKAN DI SINI (Normal ML/Rule Flagging)
+            log_activity(
+                db=db,
+                admin=None,
+                action_type="FLAG_TRANSACTION",
+                target_type=TargetType.TRANSACTION,
+                target_id=trx.id,
+                details=f"Risk score={trx.risk_score}, level={trx.risk_level}"
+            )
 
-        # COMMIT (ATOMIC)
-        db.commit()
-        db.refresh(trx)
+        repo.commit()
+        repo.refresh(trx)
 
         return trx
 
+    # =========================
+    # ERROR HANDLING
+    # =========================
     except IntegrityError:
         db.rollback()
-
-        # fallback kalau race condition duplicate
         return db.query(Transaction).filter(
-            Transaction.service_source == data["service_source"],
-            Transaction.original_trx_id == data["original_trx_id"]
+            Transaction.service_source == data.get("service_source"),
+            Transaction.original_trx_id == data.get("original_trx_id")
         ).first()
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Error processing transaction {data.get('original_trx_id')}: {str(e)}", exc_info=True)
-        logger.info(
-    f"[FDS] trx_id={trx.id} | score={trx.risk_score} | level={trx.risk_level} | status={trx.final_status}"
-)
+        logger.error(
+            f"Error processing transaction {data.get('original_trx_id', 'UNKNOWN')}: {str(e)}",
+            exc_info=True
+        )
+
+        if 'trx' in locals() and getattr(trx, 'id', None):
+            logger.info(
+                f"[FDS] trx_id={trx.id} | score={getattr(trx, 'risk_score', 'N/A')} "
+                f"| level={getattr(trx, 'risk_level', 'N/A')} "
+                f"| status={getattr(trx, 'final_status', 'N/A')}"
+            )
+        else:
+            logger.info("[FDS] Failed before transaction creation")
+
         return None

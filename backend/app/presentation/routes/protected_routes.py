@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from app.core.security import get_current_user
-from app.core.rbac import require_role
+from app.core.rbac import require_roles
 
 router = APIRouter()
 
@@ -15,5 +15,5 @@ def get_me(admin=Depends(get_current_user)):
 
 # 🔐 RBAC test
 @router.get("/admin-only")
-def admin_only(admin=Depends(require_role("SUPER_ADMIN"))):
+def admin_only(admin=Depends(require_roles("SUPER_ADMIN"))):
     return {"message": "Only admin can access"}

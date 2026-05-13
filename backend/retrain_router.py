@@ -14,6 +14,10 @@ Endpoints:
   GET    /retrain/status                 ? status scheduler (jobs aktif)
 """
 
+# NOTE:
+# Router ini masih mengandung sebagian business logic retrain & pattern discovery.
+# Akan dipisahkan ke service layer pada tahap berikutnya.
+
 from __future__ import annotations
 
 import json
@@ -451,7 +455,7 @@ def _run_training(domain: str, run_id: str | None = None) -> dict[str, Any]:
 
     # -- Invalidate lru_cache -------------------------------------------------
     try:
-        from app.infrastructure.ml.isolation import load_isolation_model, load_isolation_meta
+        from app.infrastructure.ml.model_loader import load_isolation_model, load_isolation_meta
         load_isolation_model.cache_clear()
         load_isolation_meta.cache_clear()
     except Exception:
@@ -727,7 +731,7 @@ def _run_training_from_csv(domain: str, csv_path: Path, run_id: str | None = Non
 
     # -- Invalidate cache -----------------------------------------------------
     try:
-        from app.infrastructure.ml.isolation import load_isolation_model, load_isolation_meta
+        from app.infrastructure.ml.model_loader import load_isolation_model, load_isolation_meta
         load_isolation_model.cache_clear()
         load_isolation_meta.cache_clear()
     except Exception:

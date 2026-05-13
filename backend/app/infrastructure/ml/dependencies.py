@@ -8,4 +8,5 @@ from app.infrastructure.ml.isolation_scoring_repository import SklearnIsolationS
 
 @lru_cache(maxsize=1)
 def get_score_isolation_history_use_case() -> ScoreIsolationHistoryUseCase:
-    return ScoreIsolationHistoryUseCase(SklearnIsolationScoringRepository())
+    repo = SklearnIsolationScoringRepository()
+    return ScoreIsolationHistoryUseCase(repo)

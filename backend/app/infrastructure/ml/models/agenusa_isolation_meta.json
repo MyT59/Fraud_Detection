@@ -1,14 +1,8 @@
 {
+  "last_retrain": "2026-05-07T08:17:21.687198+00:00",
   "domain": "agenusa",
-  "dataset": "backend\\agenusa_isolation_dataset.csv",
-  "rows": 5000,
-  "contamination": 0.08,
-  "anomaly_rate_fit_data": 0.08,
-  "thresholds": {
-    "review_score_threshold": 0.0013669213365814284,
-    "high_risk_score_threshold": -0.005264531101156511
-  },
-  "numeric_features": [
+  "dataset_rows": 5000,
+  "features_used": [
     "AMOUNT",
     "PROCESSING_CODE",
     "RESPONSE_CODE",
@@ -27,10 +21,8 @@
     "MIDNIGHT_AMOUNT_SPIKE",
     "RAPID_RETRY_DECLINED"
   ],
-  "categorical_features": [
-    "TERMINAL_ID",
-    "MERCHANT_ID",
-    "DEST_ACCOUNT_NUMBER"
-  ],
-  "model_path": "backend\\models\\agenusa_isolation_forest.pkl"
+  "thresholds": {
+    "high_risk_score_threshold": -0.15,
+    "review_score_threshold": 0.0
+  }
 }

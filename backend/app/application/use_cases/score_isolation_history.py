@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.domain.repositories.isolation_scoring_repository import IsolationScoringRepository
+from app.application.services.isolation_ml_service import process_history_isolation
 
 
 class ScoreIsolationHistoryUseCase:
@@ -16,13 +17,10 @@ class ScoreIsolationHistoryUseCase:
         review_score_threshold: float | None = None,
         high_risk_score_threshold: float | None = None,
     ) -> dict[str, Any]:
+
+        # tetap pakai repository untuk validasi domain (biar aman)
         if domain not in self._scoring_repository.available_domains():
             raise ValueError(f"Domain isolation tidak ditemukan: {domain}")
 
-        result = self._scoring_repository.score_history(
-            domain=domain,
-            records=records,
-            review_score_threshold=review_score_threshold,
-            high_risk_score_threshold=high_risk_score_threshold,
-        )
-        return result.to_dict()
+        # 🔥 pakai clean flow (bukan repository lagi)
+        return process_history_isolation(domain, records)

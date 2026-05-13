@@ -8,13 +8,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.infrastructure.ml.isolation import score_history_isolation
+from app.presentation.routes.analytics_routes import (
+    router as analytics_router
+)
+from app.infrastructure.ml.scoring import score_history_isolation
 from app.application.services.isolation_ml_service import (
     DOMAIN_DEFAULT_THRESHOLDS,
     get_available_domains,
 )
 from app.paths import DATA_DIR
 from app.presentation.routes.isolation_routes import router as isolation_router
+from app.infrastructure.ml.evaluation_loader import EvaluationLoader
 from users_router import router as users_router
 from audit_router import router as audit_router
 from alerts_router import router as alerts_router
@@ -137,6 +141,7 @@ app.include_router(audit_router)
 app.include_router(alerts_router)
 app.include_router(retrain_router)
 app.include_router(isolation_router)
+app.include_router(analytics_router)
 
 
 @app.exception_handler(Exception)
@@ -872,27 +877,6 @@ def analytics_location():
     return {"locations": locations}
 
 
-@app.get("/analytics/model-performance")
-def analytics_model_performance():
-    """
-    Metrik performa model Isolation Forest untuk Analytics page.
-    """
-    import json
-    ROOT_DIR = BACKEND_DIR.parent
-    iso_eval_path = ROOT_DIR / "Playground" / "models" / "isolation_evaluation_report.json"
-
-    result: dict = {}
-
-    if iso_eval_path.exists():
-        iso = json.loads(iso_eval_path.read_text(encoding="utf-8"))
-        result["isolation_evaluation"] = {
-            domain: data.get("evaluation", {})
-            for domain, data in iso.get("domains", {}).items()
-        }
-
-    return result
-
-
 @app.get("/analytics/all")
 def analytics_all():
     """
@@ -920,18 +904,6 @@ def analytics_all():
 # DASHBOARD ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _load_isolation_metrics() -> dict:
-    ROOT_DIR = BACKEND_DIR.parent
-    path = ROOT_DIR / "Playground" / "models" / "isolation_evaluation_report.json"
-    if path.exists():
-        import json
-        report = json.loads(path.read_text(encoding="utf-8"))
-        return {
-            domain: data.get("evaluation", {}).get("review_threshold_metrics", {})
-            for domain, data in report.get("domains", {}).items()
-        }
-    return {}
-
 
 @app.get("/dashboard/stats")
 def dashboard_stats():
@@ -945,7 +917,7 @@ def dashboard_stats():
     fraud  = int(df_a["IS_FRAUD"].sum()) + int(df_n["IS_FRAUD"].sum())
     rate   = round((fraud / total) * 100, 2) if total else 0.0
 
-    tm = _load_isolation_metrics()
+    tm = (EvaluationLoader.load_review_threshold_metrics())
     acc_a = tm.get("agenusa", {}).get("accuracy", 0) * 100
     acc_n = tm.get("nusabill", {}).get("accuracy", 0) * 100
     model_accuracy = round((acc_a + acc_n) / 2, 1) if acc_a and acc_n else 0.0

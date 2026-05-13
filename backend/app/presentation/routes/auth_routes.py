@@ -10,10 +10,9 @@ from main import limiter
 from app.infrastructure.database.session import get_db
 from app.application.services.auth_service import login, refresh_access_token
 from app.infrastructure.database.models.activity_log_model import ActivityLog
+from app.infrastructure.repositories.user_session_repository import UserSessionRepository
 
 security = HTTPBearer()
-router = APIRouter()
-
 router = APIRouter()
 
 @router.post("/login")
@@ -24,30 +23,35 @@ def login_route(
     password: str,
     db: Session = Depends(get_db)
 ):
-    result = login(db, email, password)
-
-    # 🔥 tambahin IP ke log
-    if result:
-        ip = request.client.host
-
-        log = ActivityLog(
-            admin_id=result["user"]["id"],
-            action_type="LOGIN",
-            target_type="ADMIN",
-            target_id=str(result["user"]["id"]),
-            details=f"Login from IP {ip}"
-        )
-        db.add(log)
-        db.commit()
-
+    # 🔥 KIRIM IP DAN USER AGENT KE SERVICE
+    result = login(
+        db, 
+        email, 
+        password, 
+        ip=request.client.host,
+        user_agent=request.headers.get("user-agent")
+    )
     return result
 
 @router.post("/refresh")
-def refresh_token_route(refresh_token: str):
-    return refresh_access_token(refresh_token)
+def refresh_token_route(
+    refresh_token: str,
+    db: Session = Depends(get_db)
+):
+    return refresh_access_token(db, refresh_token)
 
 @router.post("/logout")
-def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
+def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
     token = credentials.credentials
-    blacklist_token(token)
+    blacklist_token(token)  # Tetap pertahankan kalau masih dipakai
+    
+    # 🔥 Nonaktifkan sesi di database
+    repo = UserSessionRepository(db)
+    session = repo.get_by_token(token)
+    if session:
+        repo.revoke(session.id, session.admin_id)
+        
     return {"message": "Logged out successfully"}
