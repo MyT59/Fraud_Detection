@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, Boolean, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from app.infrastructure.database.base import Base
+from sqlalchemy.orm import relationship
 
 class NotificationPreference(Base):
     __tablename__ = "notification_preferences"
@@ -12,3 +13,5 @@ class NotificationPreference(Base):
     push_notifications_enabled = Column(Boolean, default=True)
 
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    admin = relationship("Admin", back_populates="notification_preference")

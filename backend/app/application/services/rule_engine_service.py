@@ -1,3 +1,5 @@
+from ast import operator
+from dataclasses import field
 import logging
 
 from app.infrastructure.database.models.global_rule_model import GlobalRule
@@ -13,10 +15,13 @@ def evaluate_simple_rule(value, operator, threshold):
     if operator == "=":
         return str(value).strip() == str(threshold).strip()
 
+    elif operator == "!=":
+        return str(value).strip() != str(threshold).strip()
+
     try:
         val = float(value)
         th = float(threshold)
-        
+
         if operator == ">":
             return val > th
         elif operator == "<":
@@ -25,6 +30,7 @@ def evaluate_simple_rule(value, operator, threshold):
             return val >= th
         elif operator == "<=":
             return val <= th
+
     except (ValueError, TypeError):
         return False
 
@@ -34,7 +40,6 @@ def evaluate_simple_rule(value, operator, threshold):
 # =========================
 # JSON RULE (NEW ENGINE)
 # =========================
-
 def evaluate_json_rule(config, trx):
     if not config:
         return False
@@ -49,32 +54,39 @@ def evaluate_json_rule(config, trx):
 
     # leaf
     field = config["field"]
-    operator = config["operator"] # Sekarang konsisten menggunakan simbol: >, <, =, >=, <=
+    operator = config["operator"] 
     value = config["value"]
 
     trx_value = getattr(trx, field, None)
+
     if trx_value is None:
         return False
 
-    # Handle Equality (String/Universal)
+    # Handle Equality / Non-Equality (Universal)
     if operator == "=":
         return str(trx_value).strip() == str(value).strip()
 
-    # Handle Numeric Comparisons dengan Type Safety
+    if operator == "!=":
+        return str(trx_value).strip() != str(value).strip()
+
+    # Handle Numeric Comparisons
     try:
         val = float(trx_value)
         th = float(value)
-        
+
         if operator == ">":
             return val > th
+
         if operator == "<":
             return val < th
+
         if operator == ">=":
             return val >= th
+
         if operator == "<=":
             return val <= th
+
     except (ValueError, TypeError):
-        # Jika bukan angka tapi pakai operator pembanding, anggap tidak match (aman)
         return False
 
     return False
@@ -114,7 +126,7 @@ def run_rule_engine(db, trx):
 
     rules = db.query(GlobalRule).filter(
         GlobalRule.is_active == True
-    ).order_by(GlobalRule.priority.desc()).limit(50).all()
+    ).order_by(GlobalRule.priority.desc()).all()
     seen_groups = set()
     for rule in rules:
         logger.info(f"Evaluating RULE: {rule.rule_name} | GROUP: {rule.rule_group}")
@@ -142,7 +154,6 @@ def run_rule_engine(db, trx):
         if is_match:
             group = rule.rule_group if rule.rule_group else rule.condition_field or "GENERAL"
 
-            # ❌ skip kalau group sudah pernah kena
             if group in seen_groups:
                 continue
 

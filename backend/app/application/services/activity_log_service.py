@@ -2,6 +2,20 @@ from app.infrastructure.repositories.activity_log_repository import ActivityLogR
 from app.presentation.schemas.activity_log_schema import ActivityLogResponse
 from app.infrastructure.database.models.activity_log_model import ActivityLog
 
+def log_activity(db, admin, action_type, target_type, target_id=None, details=None):
+    repo = ActivityLogRepository(db)
+    
+    log = ActivityLog(
+        admin_id=admin.id if admin else None,
+        action_type=action_type,
+        target_type=target_type,
+        target_id=str(target_id) if target_id else None,
+        details=details
+    )
+    
+  
+    repo.create(log)
+
 def get_activity_logs(
     db,
     current_admin,
@@ -43,14 +57,3 @@ def get_activity_logs(
         )
         for log in logs
     ]
-
-def log_activity(db, admin, action_type, target_type, target_id=None, details=None):
-    log = ActivityLog(
-        admin_id=admin.id if admin else None,
-        action_type=action_type,
-        target_type=target_type,
-        target_id=str(target_id) if target_id else None,
-        details=details
-    )
-    db.add(log)
-    db.commit()

@@ -89,7 +89,7 @@ def run_blacklist_check(db, trx):
 
     # loop semua account
     for acc in account_numbers:
-        acc_value = normalize(acc)
+        acc_value = normalize(acc, to_lower=False)
 
         conditions.append(and_(
             BlacklistItem.type == BlacklistTypeEnum.ACCOUNT_NUMBER,
@@ -115,7 +115,6 @@ def run_blacklist_check(db, trx):
     # RESULT
     # =========================
     if blacklist_hit:
-        # 🔥 TAMBAHKAN LOGIKA INI
         blacklist_hit.hit_count += 1
         db.commit() # Simpan perubahan ke database
         

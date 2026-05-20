@@ -1,7 +1,6 @@
-from unittest import skip
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.application.services.activity_log_service import log_activity
 from app.domain.entities.target_type import TargetType
@@ -18,11 +17,17 @@ from app.presentation.schemas.blacklist_schema import (
 
 router = APIRouter(prefix="/blacklist", tags=["Blacklist"])
 
+from sqlalchemy.exc import IntegrityError
+
 # =========================
 # ADD BLACKLIST
 # =========================
 @router.post("/", response_model=BlacklistResponse)
-def add_blacklist(data: BlacklistCreateRequest, db: Session = Depends(get_db), current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))):
+def add_blacklist(
+    data: BlacklistCreateRequest,
+    db: Session = Depends(get_db),
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
+):
     item = BlacklistItem(
         value=data.value.strip().lower(),
         type=data.type,
@@ -30,12 +35,22 @@ def add_blacklist(data: BlacklistCreateRequest, db: Session = Depends(get_db), c
         reason=data.reason,
         source="MANUAL",
         status="PENDING",
-        is_active=False  # 🔥 Set sumber data dari admin
+        is_active=False
     )
 
     db.add(item)
-    db.commit()
-    db.refresh(item)
+
+    try:
+        db.commit()
+        db.refresh(item)
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=409,
+            detail="Blacklist already exists"
+        )
 
     # Log Activity
     log_activity(
@@ -46,7 +61,6 @@ def add_blacklist(data: BlacklistCreateRequest, db: Session = Depends(get_db), c
         target_id=item.id,
         details=f"Added {item.type}={item.value}"
     )
-    db.commit() # Pastikan log tersimpan
 
     return item
 
@@ -78,8 +92,6 @@ def approve_blacklist(
         details=f"Approved blacklist: {payload.review_note}"
     )
 
-    db.commit()
-
     return {"message": "Blacklist approved"}
 
 @router.patch("/{item_id}/reject")
@@ -110,8 +122,6 @@ def reject_blacklist(
         details=f"Rejected blacklist: {payload.review_note}"
     )
 
-    db.commit()
-
     return {"message": "Blacklist rejected"}
 
 # =========================
@@ -129,6 +139,9 @@ def update_blacklist(item_id: int, data: BlacklistCreateRequest, db: Session = D
     item.type = data.type
     item.service_scope = data.service_scope.upper()
     item.reason = data.reason
+    item.status = "PENDING"
+    item.is_active = False
+    item.review_note = None
 
     db.commit()
     db.refresh(item)
@@ -142,7 +155,6 @@ def update_blacklist(item_id: int, data: BlacklistCreateRequest, db: Session = D
         target_id=item.id,
         details=f"Updated {item.type}={item.value}"
     )
-    db.commit()
 
     return item
 
@@ -241,7 +253,6 @@ def deactivate_blacklist(item_id: int, db: Session = Depends(get_db), current_ad
         target_id=item.id,
         details="Deactivated blacklist"
     )
-    db.commit()
 
     return {"message": "Blacklist deactivated"}
 
@@ -256,6 +267,7 @@ def activate_blacklist(item_id: int, db: Session = Depends(get_db), current_admi
         raise HTTPException(status_code=404, detail="Blacklist not found")
 
     item.is_active = True
+    item.status = "APPROVED"
 
     # Log Activity
     log_activity(
@@ -266,7 +278,6 @@ def activate_blacklist(item_id: int, db: Session = Depends(get_db), current_admi
         target_id=item.id,
         details="Activated blacklist"
     )
-    db.commit()
 
     return {"message": "Blacklist activated"}
 
@@ -294,6 +305,5 @@ def delete_blacklist(item_id: int, db: Session = Depends(get_db), current_admin=
         target_id=target_id,
         details="Deleted blacklist"
     )
-    db.commit()
 
     return {"message": "Blacklist deleted"}

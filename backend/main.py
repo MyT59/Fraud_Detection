@@ -41,6 +41,7 @@ from app.application.services.isolation_ml_service import (
     DOMAIN_DEFAULT_THRESHOLDS,
     get_available_domains,
 )
+from app.application.services.scheduler_service import run_sla_escalation_task
 
 # INFRASTRUCTURE & MODELS
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
@@ -56,12 +57,34 @@ from app.presentation.websocket.connection_manager import manager
 async def lifespan(app: FastAPI):
     """
     Lifespan manager untuk menangani startup dan shutdown aplikasi.
-    Sekarang melakukan restorasi jadwal retrain langsung dari Database.
+    Sekarang melakukan restorasi jadwal retrain langsung dari Database & SLA Engine.
     """
     # 1. Start APScheduler
     start_scheduler()
     
+    # Ambil instance scheduler service yang sedang berjalan
+    scheduler_service = get_scheduler_service()
+    
+    # ==========================================
+    # REGISTRASI SLA ESCALATION ENGINE
+    # ==========================================
+    try:
+        scheduler_service.scheduler.add_job(
+            func=run_sla_escalation_task,
+            trigger="interval",
+            minutes=5,  # ⏱️ Mesin akan otomatis menyapu database setiap 5 menit
+            id="sla_escalation_job",
+            replace_existing=True,
+            name="SLA Alert Escalation Patrol"
+        )
+        print("🚀 [System] SLA Escalation Engine aktif (Patroli setiap 5 menit). ✅")
+    except Exception as e:
+        print(f"❌ [System] Gagal mendaftarkan SLA Escalation Engine: {e}")
+
+
+    # ==========================================
     # 2. RESTORE SCHEDULES FROM DATABASE
+    # ==========================================
     db = SessionLocal()
     try:
         # Ambil jadwal yang statusnya aktif
@@ -71,9 +94,7 @@ async def lifespan(app: FastAPI):
             .all()
         )
 
-        scheduler_service = get_scheduler_service()
         count = 0
-
         for s in schedules:
             # Menggunakan .to_dict() agar kompatibel dengan register_job
             scheduler_service.register_job(s.to_dict())

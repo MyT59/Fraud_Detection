@@ -1,14 +1,66 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import logging
 from typing import Dict, Any, List
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.infrastructure.database.session import SessionLocal
 from app.application.services.retrain_service import RetrainService
+from app.infrastructure.database.models.fraud_alert_model import FraudAlert
+from app.application.services.activity_log_service import log_activity
+from app.domain.entities.target_type import TargetType
 from app.infrastructure.database.models.retrain_schedule_model import RetrainSchedule
 
 logger = logging.getLogger(__name__)
+
+def run_sla_escalation_task():
+    """
+    Background worker yang berjalan periodik untuk mencari alert HIGH/CRITICAL 
+    yang terlantar di antrean OPEN > 10 menit, lalu mendongkrak prioritasnya.
+    """
+    db = SessionLocal()
+    try:
+        # Tentukan ambang batas waktu SLA (10 menit yang lalu)
+        sla_threshold = datetime.now(timezone.utc) - timedelta(minutes=10)
+        
+        # Cari alert OPEN, HIGH/CRITICAL, yang dibuat sebelum waktu batas, dan belum dieskalasi
+        overdue_alerts = db.query(FraudAlert).filter(
+            FraudAlert.status == "OPEN",
+            FraudAlert.severity.in_(["HIGH", "CRITICAL"]),
+            FraudAlert.created_at <= sla_threshold,
+            FraudAlert.is_escalated == False
+        ).all()
+        
+        if not overdue_alerts:
+            return
+
+        for alert in overdue_alerts:
+            old_priority = alert.priority or 0.0
+            
+            # Eksekusi Eskalasi: Berikan penalti +20 poin agar melesat ke atas antrean
+            alert.priority = old_priority + 20.0  
+            alert.is_escalated = True
+            alert.title = f"[ESCALATED] {alert.title or 'Fraud Detected'}"
+            
+            # Catat log aktivitas sistem (Aktor: None / System Engine)
+            log_activity(
+                db=db,
+                admin=None, 
+                action_type="SLA_ESCALATION",
+                target_type=TargetType.ALERT,
+                target_id=alert.id,
+                details=f"Alert breached 10m SLA. Priority bumped from {old_priority} to {alert.priority}"
+            )
+            
+        db.commit()
+        logger.info(f"⚡ [SLA Engine] Berhasil mengeksalasi {len(overdue_alerts)} alert yang terlantar ke puncak antrean.")
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ [SLA Engine] Kebobolan error saat mengeksalasi SLA: {e}")
+    finally:
+        db.close()
 
 def scheduled_retrain_task(schedule_dict: Dict[str, Any]):
     db = SessionLocal()

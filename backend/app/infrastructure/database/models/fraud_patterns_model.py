@@ -19,13 +19,15 @@ class FraudPattern(Base):
     pattern_rules = Column(JSONB, nullable=False)
     rules_hash = Column(String)
 
-    # 🚀 NEW: DECISION CONTROL
+    # NEW: DECISION CONTROL
     action = Column(String(20), server_default="FLAG")  # FLAG | REVIEW | BLOCK
     risk_score = Column(Integer, server_default="50")
     priority = Column(Integer, server_default="1")
 
-    # 📊 ANALYTICS
+    # ANALYTICS
     hit_count = Column(Integer, server_default="0")
+    true_positive = Column(Integer, server_default="0") 
+    false_positive = Column(Integer, server_default="0")
     accuracy_score = Column(Float)
     false_positive_rate = Column(Float)
 

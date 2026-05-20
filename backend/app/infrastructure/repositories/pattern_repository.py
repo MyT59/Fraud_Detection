@@ -6,3 +6,10 @@ class PatternRepository:
 
     def get_by_id(self, pattern_id):
         return self.db.query(FraudPattern).filter(FraudPattern.id == pattern_id).first()
+    
+    def get_all_patterns(self):
+        """
+        Mengambil semua daftar fraud pattern untuk dianalisis efektivitasnya.
+        Diurutkan berdasarkan akurasi terendah agar pola bermasalah terlihat duluan.
+        """
+        return self.db.query(FraudPattern).order_by(FraudPattern.accuracy_score.asc()).all()

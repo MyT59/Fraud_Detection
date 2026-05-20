@@ -18,7 +18,7 @@ def list_domains() -> dict:
     return {"domains": get_domain_catalog()}
 
 
-# 🔥 sekarang endpoint utama sudah clean
+# endpoint untuk mendapatkan history isolation score dengan isolation ml
 @router.post("/isolation/{domain}/score-history")
 def score_history_with_isolation(domain: str, payload: IsolationHistoryRequest) -> dict:
     try:

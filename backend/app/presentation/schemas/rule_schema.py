@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 from typing import Optional
 from typing import List, Union, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+
 
 from app.infrastructure.database.enums import (
     RuleOperatorEnum,
@@ -66,7 +67,11 @@ class ConditionGroup(BaseModel):
     AND: Optional[List[Union["Condition", "ConditionGroup"]]] = None
     OR: Optional[List[Union["Condition", "ConditionGroup"]]] = None
 
-ConditionGroup.model_rebuild()
+    @model_validator(mode="after")
+    def validate_group(self):
+        if not self.AND and not self.OR:
+            raise ValueError("ConditionGroup must contain AND or OR")
+        return self
 
 
 class RuleBuilderRequest(BaseModel):

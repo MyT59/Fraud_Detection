@@ -9,13 +9,13 @@ from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 BACKEND_DIR = ROOT_DIR / "backend"
-DATA_DIR = ROOT_DIR / "Playground" / "Data"
+DATA_DIR = ROOT_DIR / "Playground" / "Data" / "datasets"
 MODELS_DIR = ROOT_DIR / "Playground" / "models"
 
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-from app.infrastructure.ml.training import train_one  # noqa: E402
+from backend.app.infrastructure.ml.training import train_one  # noqa: E402
 
 
 def main() -> None:

@@ -217,8 +217,8 @@ def process_transaction(data: dict, db: Session):
                 details=f"Risk score={trx.risk_score}, level={trx.risk_level}"
             )
 
-        repo.commit()
-        repo.refresh(trx)
+        db.commit()
+        db.refresh(trx)
 
         return trx
 

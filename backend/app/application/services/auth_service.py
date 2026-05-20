@@ -47,19 +47,19 @@ def login(db: Session, email: str, password: str, ip: str = None, user_agent: st
     db.add(log)
     db.commit() 
 
-    # Buat Token Dulu
+    # Buat Token 
     access_token = create_access_token({
         "sub": str(admin.id),
         "role": admin.role.role_name
     })
     refresh_token = create_refresh_token({"sub": str(admin.id)})
 
-    # 🔥 NONAKTIFKAN session lama
+    # NONAKTIFKAN session lama
     db.query(UserSession)\
       .filter(UserSession.admin_id == admin.id, UserSession.is_current == True)\
       .update({"is_current": False})
 
-    # 🔥 CREATE session baru dengan device & user_agent
+    # CREATE session baru dengan device & user_agent
     device_name = parse_device(user_agent)
 
     session = UserSession(

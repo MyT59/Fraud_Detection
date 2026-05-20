@@ -1,15 +1,27 @@
 from sqlalchemy.orm import Session
 from app.infrastructure.database.models.global_rule_model import GlobalRule
 from app.application.services.activity_log_service import log_activity
+from sqlalchemy.exc import IntegrityError
+from fastapi import HTTPException
 # Menggunakan path sesuai instruksi terbaru
 from app.domain.entities.target_type import TargetType 
 
 
 def create_rule(db: Session, data, admin):
     rule = GlobalRule(**data.dict())
+    rule.created_by = admin.id 
+    
     db.add(rule)
-    db.commit()
-    db.refresh(rule)
+
+    try:
+        db.flush()
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Rule key already exists"
+        )
 
     log_activity(
         db,
@@ -20,7 +32,9 @@ def create_rule(db: Session, data, admin):
         details=f"Created rule: {rule.rule_name}"
     )
 
-    db.commit()
+    db.commit() 
+    db.refresh(rule)
+    
     return rule
 
 
@@ -75,20 +89,26 @@ def create_rule_builder_service(db, data, admin):
         rule_name=data.rule_name,
         rule_key=data.rule_key,
         service_scope=data.service_scope,
-
-        # 🔥 IMPORTANT
         rule_config=data.rule_config.dict(),
-
         action=data.action,
         severity=data.severity,
         priority=data.priority,
         rule_group=data.rule_group,
-        description=data.description
+        description=data.description,
+        created_by=admin.id
     )
 
     db.add(rule)
-    db.commit()
-    db.refresh(rule)
+
+    try:
+        db.flush()
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Rule key already exists"
+        )
 
     log_activity(
         db,
@@ -98,7 +118,9 @@ def create_rule_builder_service(db, data, admin):
         target_id=rule.id,
         details=f"Created builder rule: {rule.rule_name}"
     )
+    
     db.commit()
+    db.refresh(rule)
 
     return rule
 

@@ -1,6 +1,10 @@
 import asyncio
 import json
+import logging
 import redis.asyncio as redis
+
+# 🔥 1. Siapkan logger untuk mencetak pesan di terminal Uvicorn
+logger = logging.getLogger(__name__)
 
 REDIS_URL = "redis://localhost:6379"
 
@@ -10,14 +14,23 @@ class RedisPubSub:
         self.pubsub = self.redis.pubsub()
 
     async def publish(self, channel: str, message: dict):
-        await self.redis.publish(channel, json.dumps(message))
+        try:
+            await self.redis.publish(channel, json.dumps(message))
+        except Exception as e:
+            logger.warning(f"⚠️ [Redis Bypassed] Gagal kirim ke '{channel}'. Redis belum menyala/terkoneksi.")
 
     async def subscribe(self, channel: str):
-        await self.pubsub.subscribe(channel)
-
-        async for msg in self.pubsub.listen():
-            if msg["type"] == "message":
-                yield json.loads(msg["data"])
+        try:
+            await self.pubsub.subscribe(channel)
+            logger.info(f"🎧 [Redis] Berhasil subscribe ke channel '{channel}'")
+            
+            async for msg in self.pubsub.listen():
+                if msg["type"] == "message":
+                    yield json.loads(msg["data"])
+                    
+        except Exception as e:
+            logger.error(f"❌ [Redis Error] Gagal listen ke channel '{channel}': {e}")
+            await asyncio.sleep(5) 
 
 
 redis_service = RedisPubSub()

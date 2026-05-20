@@ -25,15 +25,6 @@ class TransactionRepository:
 
     def update(self, trx: Transaction):
         self.db.add(trx)
-
-    def commit(self):
-        self.db.commit()
-    
-    def refresh(self, obj):
-        self.db.refresh(obj)
-
-    def rollback(self):
-        self.db.rollback()
     
     def get_recent_fraud(self, limit=5):
         return self.db.query(Transaction)\
@@ -262,26 +253,13 @@ class TransactionRepository:
             .all()
         )
 
-    def get_recent_transactions_by_device(
-        self,
-        device_id: str,
-        limit: int = 10,
-    ):
-        """
-        Retrieve recent transactions by device ID.
-        """
-
-        if not device_id:
-            return []
-
-        if not hasattr(Transaction, "device_id"):
+    def get_recent_transactions_by_terminal(self, terminal_id: str, limit: int = 10):
+        if not terminal_id:
             return []
 
         return (
             self.db.query(Transaction)
-            .filter(
-                Transaction.device_id == device_id
-            )
+            .filter(Transaction.terminal_id == terminal_id)
             .order_by(Transaction.transaction_time.desc())
             .limit(limit)
             .all()

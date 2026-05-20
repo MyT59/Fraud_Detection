@@ -17,11 +17,12 @@ class BlacklistTypeEnum(str, enum.Enum):
     VIRTUAL_ACCOUNT_NUMBER = "VIRTUAL_ACCOUNT_NUMBER"
 class TransactionStatusEnum(str, enum.Enum):
     PENDING = "PENDING"
-    REVIEW = "REVIEW"
+    UNDER_REVIEW = "UNDER_REVIEW"
     SAFE = "SAFE"
     FRAUD = "FRAUD"
 class RuleOperatorEnum(str, enum.Enum):
     EQ = "="
+    NEQ = "!="
     GT = ">"
     LT = "<"
     GTE = ">="
@@ -38,6 +39,7 @@ class RuleSeverityEnum(str, enum.Enum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 class ReviewDecisionEnum(str, enum.Enum):
     SAFE = "SAFE"
     FRAUD = "FRAUD"
@@ -45,3 +47,5 @@ class AlertStatusEnum(str, enum.Enum):
     OPEN = "OPEN"
     IN_PROGRESS = "IN_PROGRESS"
     RESOLVED = "RESOLVED"
+    REOPENED = "REOPENED"
+    OVERRIDDEN = "OVERRIDDEN"

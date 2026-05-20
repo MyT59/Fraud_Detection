@@ -14,11 +14,11 @@ CREATE TYPE blacklist_type_enum AS ENUM (
 );
 
 CREATE TYPE transaction_status_enum AS ENUM (
-    'PENDING', 'REVIEW', 'SAFE', 'FRAUD'
+    'PENDING', 'UNDER_REVIEW', 'SAFE', 'FRAUD'
 );
 
 CREATE TYPE alert_status_enum AS ENUM (
-    'OPEN', 'IN_PROGRESS', 'RESOLVED'
+    'OPEN', 'IN_PROGRESS', 'RESOLVED', 'REOPENED', 'OVERRIDDEN'
 );
 
 CREATE TYPE review_decision_enum AS ENUM (
@@ -185,6 +185,7 @@ CREATE TABLE global_rules (
     rule_name VARCHAR(100) NOT NULL,
     rule_key VARCHAR(100) UNIQUE NOT NULL,
     rule_group VARCHAR(50),
+    hit_count INTEGER DEFAULT 0,
     service_scope VARCHAR(50) DEFAULT 'ALL',
     condition_field VARCHAR(100),
     operator VARCHAR(20),
@@ -274,6 +275,9 @@ CREATE TABLE fraud_alerts (
     resolved_at TIMESTAMP WITH TIME ZONE,
     resolved_by INTEGER,
     priority FLOAT,
+    claimed_by INTEGER REFERENCES admins(id) ON DELETE SET NULL,
+    claimed_at TIMESTAMP WITH TIME ZONE,
+    version_id INTEGER DEFAULT 1 NOT NULL,
 
     CONSTRAINT fk_alert_transaction FOREIGN KEY (transaction_id) REFERENCES transactions_feed(id) ON DELETE CASCADE,
     CONSTRAINT fk_alert_resolved_by FOREIGN KEY (resolved_by) REFERENCES admins(id) ON DELETE SET NULL
@@ -286,9 +290,21 @@ CREATE TABLE manual_reviews (
     reviewer_id INTEGER,
     decision review_decision_enum NOT NULL,
     review_note TEXT,
-    previous_status VARCHAR(50),
+    previous_status transaction_status_enum,
     final_status transaction_status_enum NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    review_started_at TIMESTAMP WITH TIME ZONE,
+    review_completed_at TIMESTAMP WITH TIME ZONE,
+    transaction_snapshot JSONB,
+    decision_confidence VARCHAR(20),
+    version_id INTEGER DEFAULT 1 NOT NULL,
+    is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
+    deleted_by INTEGER REFERENCES admins(id) ON DELETE SET NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    is_overridden BOOLEAN DEFAULT FALSE NOT NULL,
+    overridden_by INTEGER REFERENCES admins(id) ON DELETE SET NULL,
+    overridden_at TIMESTAMP WITH TIME ZONE,
+    override_reason TEXT,
 
     CONSTRAINT fk_review_transaction FOREIGN KEY (transaction_id) REFERENCES transactions_feed(id) ON DELETE CASCADE,
     CONSTRAINT fk_review_admin FOREIGN KEY (reviewer_id) REFERENCES admins(id) ON DELETE SET NULL,
@@ -297,7 +313,49 @@ CREATE TABLE manual_reviews (
 );
 
 -- ==========================================
--- 9. INDEXES (Optimized & Deduplicated)
+-- 9. ML FEEDBACK & RETRAINING LOGS
+-- ==========================================
+CREATE TABLE ml_feedback_logs (
+    id BIGSERIAL PRIMARY KEY,
+    review_id BIGINT,                   
+    transaction_id BIGINT NOT NULL,       
+ 
+    -- MIRRORING KOLOM FITUR DARI TRANSACTIONS_FEED
+    original_trx_id VARCHAR(100) NOT NULL,
+    service_source VARCHAR(50) NOT NULL,
+    user_account_id VARCHAR(100) NOT NULL,
+    amount DECIMAL(15,2) NOT NULL,
+    transaction_time TIMESTAMP WITH TIME ZONE NOT NULL, 
+    transaction_status VARCHAR(100),
+    terminal_id VARCHAR(100),
+    account_number VARCHAR(100),
+    merchant_id VARCHAR(100),
+    ip_address VARCHAR(50),
+    city VARCHAR(50),
+    country VARCHAR(50),
+    transaction_details JSONB,
+    anomaly_score FLOAT,
+    risk_score FLOAT,
+    risk_level VARCHAR(50),
+    score_breakdown JSONB DEFAULT '{}'::jsonb,
+    is_flagged_ml BOOLEAN DEFAULT FALSE,
+    violation_reason TEXT,
+    violation_rule_ids JSONB DEFAULT '[]'::jsonb,
+    violation_pattern_ids JSONB DEFAULT '[]'::jsonb,
+
+    -- TARGET LABELS DARI ANALYST WORKFLOW
+    analyst_decision VARCHAR(20) NOT NULL,    -- SAFE | FRAUD
+    decision_confidence VARCHAR(20),          -- LOW | MEDIUM | HIGH
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    -- Foreign Key Constraints
+    CONSTRAINT fk_feedback_review FOREIGN KEY (review_id) REFERENCES manual_reviews(id) ON DELETE CASCADE,
+    CONSTRAINT fk_feedback_transaction FOREIGN KEY (transaction_id) REFERENCES transactions_feed(id) ON DELETE CASCADE
+);
+
+-- ==========================================
+-- 10. INDEXES (Optimized & Deduplicated)
 -- ==========================================
 
 -- Transactions & Alerts
@@ -306,7 +364,6 @@ CREATE INDEX idx_transactions_user ON transactions_feed(user_account_id);
 CREATE INDEX idx_transactions_status ON transactions_feed(final_status);
 CREATE INDEX idx_trx_final_status ON transactions_feed(final_status);
 CREATE INDEX idx_trx_service_time ON transactions_feed(service_source, transaction_time DESC);
-CREATE INDEX idx_manual_reviews_alert_id ON manual_reviews(alert_id);
 CREATE INDEX idx_alerts_transaction_id ON fraud_alerts(transaction_id);
 CREATE INDEX idx_alerts_status ON fraud_alerts(status);
 CREATE INDEX idx_manual_reviews_transaction_id ON manual_reviews(transaction_id);
@@ -338,8 +395,13 @@ CREATE INDEX idx_ml_datasets_lookup ON ml_datasets(domain, created_at DESC);
 CREATE INDEX idx_retrain_history_model_id ON retrain_history(model_id);
 CREATE INDEX idx_retrain_history_dataset_id ON retrain_history(dataset_id);
 
+-- ML Feedback Indexes (Retraining Engine Pipeline)
+CREATE INDEX idx_ml_feedback_review_id ON ml_feedback_logs(review_id);
+CREATE INDEX idx_ml_feedback_trx_id ON ml_feedback_logs(transaction_id);
+CREATE INDEX idx_ml_feedback_created_time ON ml_feedback_logs(created_at DESC);
+
 -- ==========================================
--- 10. POST-INSTALLATION CLEANUP
+-- 11. POST-INSTALLATION CLEANUP
 -- ==========================================
 -- Ensure only one active model per service
 UPDATE ml_models

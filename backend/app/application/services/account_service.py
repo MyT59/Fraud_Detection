@@ -1,7 +1,7 @@
 from app.infrastructure.repositories.admin_repository import AdminRepository
 from app.infrastructure.database.models.admin_model import Admin
 from app.infrastructure.database.models.role_model import Role
-from app.presentation.schemas.admin_schema import AdminResponse
+from app.presentation.schemas.admin_schema import AdminResponse, ProfileUpdateRequest
 from app.core.security import verify_password, hash_password
 from app.application.services.activity_log_service import log_activity
 from fastapi import HTTPException
@@ -80,7 +80,14 @@ def create_account(db, full_name, email, password, confirm_password, role_id, cr
         full_name=new_admin.full_name,
         email=new_admin.email,
         is_active=new_admin.is_active,
-        role=new_admin.role.role_name
+        role=new_admin.role.role_name,
+
+        department=new_admin.department,
+        phone_number=new_admin.phone_number,
+        notes=new_admin.notes,
+
+        created_at=new_admin.created_at,
+        last_login_at=new_admin.last_login_at
     )
 
 
@@ -90,16 +97,72 @@ def get_all_accounts(db):
     admins = repo.get_all()
 
     return [
-        AdminResponse(
-            id=a.id,
-            full_name=a.full_name,
-            email=a.email,
-            is_active=a.is_active,
-            role=a.role.role_name
-        )
-        for a in admins
-    ]
+    AdminResponse(
+        id=a.id,
+        full_name=a.full_name,
+        email=a.email,
+        is_active=a.is_active,
+        role=a.role.role_name,
 
+        department=a.department,
+        phone_number=a.phone_number,
+        notes=a.notes,
+
+        created_at=a.created_at,
+        last_login_at=a.last_login_at
+    )
+    for a in admins
+]
+
+def get_my_profile(current_admin):
+    return AdminResponse(
+        id=current_admin.id,
+        full_name=current_admin.full_name,
+        email=current_admin.email,
+        is_active=current_admin.is_active,
+        role=current_admin.role.role_name,
+
+        department=current_admin.department,
+        phone_number=current_admin.phone_number,
+        notes=current_admin.notes,
+
+        created_at=current_admin.created_at,
+        last_login_at=current_admin.last_login_at
+    )
+
+def update_my_profile(
+    db,
+    current_admin,
+    full_name=None,
+    phone_number=None,
+    department=None
+):
+    if full_name is not None:
+        current_admin.full_name = full_name
+
+    if phone_number is not None:
+        current_admin.phone_number = phone_number
+
+    if department is not None:
+        current_admin.department = department
+
+    db.commit()
+    db.refresh(current_admin)
+
+    return AdminResponse(
+        id=current_admin.id,
+        full_name=current_admin.full_name,
+        email=current_admin.email,
+        is_active=current_admin.is_active,
+        role=current_admin.role.role_name,
+
+        department=current_admin.department,
+        phone_number=current_admin.phone_number,
+        notes=current_admin.notes,
+
+        created_at=current_admin.created_at,
+        last_login_at=current_admin.last_login_at
+    )
 
 # ✅ CHANGE PASSWORD
 def change_password(db, current_admin, old_password, new_password):
@@ -205,7 +268,14 @@ def update_account(db, admin_id, full_name=None, role_id=None, department=None, 
         full_name=admin.full_name,
         email=admin.email,
         is_active=admin.is_active,
-        role=admin.role.role_name
+        role=admin.role.role_name,
+
+        department=admin.department,
+        phone_number=admin.phone_number,
+        notes=admin.notes,
+
+        created_at=admin.created_at,
+        last_login_at=admin.last_login_at
     )
 
 
@@ -242,9 +312,15 @@ def set_account_status(db, admin_id, is_active: bool, performed_by):
         full_name=admin.full_name,
         email=admin.email,
         is_active=admin.is_active,
-        role=admin.role.role_name
-    )
+        role=admin.role.role_name,
 
+        department=admin.department,
+        phone_number=admin.phone_number,
+        notes=admin.notes,
+
+        created_at=admin.created_at,
+        last_login_at=admin.last_login_at
+    )
 
 # 🗑️ DELETE ACCOUNT
 def delete_account(db, admin_id, performed_by):

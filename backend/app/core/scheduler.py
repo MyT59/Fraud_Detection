@@ -2,16 +2,10 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.application.services.scheduler_service import SchedulerService
 
-# 1. Inisialisasi instance APScheduler secara global di modul ini
-# Ini memastikan kita hanya punya SATU scheduler yang berjalan (Singleton)
 _scheduler = BackgroundScheduler()
 SCHEDULER_STARTED_AT = None
 
 def get_scheduler_service() -> SchedulerService:
-    """
-    Dependency provider untuk FastAPI.
-    Fungsi ini yang kamu panggil di Depends(get_scheduler_service) pada Router.
-    """
     return SchedulerService(_scheduler)
 
 def start_scheduler():
@@ -19,12 +13,22 @@ def start_scheduler():
     if not _scheduler.running:
         global SCHEDULER_STARTED_AT
 
+        # 🔥 FIX: Daftarkan Worker Eskalasi SLA otomatis setiap 1 menit
+        from app.application.services.scheduler_service import run_sla_escalation_task
+        _scheduler.add_job(
+            func=run_sla_escalation_task,
+            trigger="interval",
+            minutes=1,  # Interval pengecekan berkala (1 Menit sekali)
+            id="sla_escalation_engine_worker",
+            replace_existing=True,
+            name="SLA Escalation Engine Worker"
+        )
+
         _scheduler.start()
         SCHEDULER_STARTED_AT = datetime.now()
-        print("[System] Background Scheduler Started. 🚀")
+        print("[System] Background Scheduler Started. 🚀 (SLA Escalation Active)")
 
 def shutdown_scheduler():
-    """Fungsi untuk mematikan mesin scheduler (dipanggil di main.py)"""
     if _scheduler.running:
         _scheduler.shutdown()
         print("[System] Background Scheduler Shutdown. 🛑")

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
+from typing import List
 
 from app.infrastructure.database.session import get_db
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
@@ -9,11 +10,14 @@ from app.application.services.pattern_learning_service import (
     save_generated_patterns
 )
 from app.application.services.pattern_analytics_service import (
+    get_pattern_diagnostics_service,
+    get_pattern_effectiveness_service,
     get_pattern_statistics
 )
 # Assuming this is your import path for log_activity
 from app.application.services.activity_log_service import log_activity 
-from app.core.rbac import is_risk_manager
+from app.core.rbac import is_risk_manager, require_roles
+from app.presentation.schemas.pattern_schema import PatternEffectivenessResponse, PatternDiagnosticsResponse
 
 router = APIRouter(prefix="/patterns", tags=["Pattern Management"])
 
@@ -88,6 +92,20 @@ def get_candidates(db: Session = Depends(get_db)):
         }
         for p in patterns
     ]
+
+@router.get("/diagnostics", response_model=PatternDiagnosticsResponse)
+def get_pattern_diagnostics(
+    db: Session = Depends(get_db),
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))  # 🔒 Proteksi Makro Manajemen
+):
+    return get_pattern_diagnostics_service(db)
+
+@router.get("/effectiveness", response_model=List[PatternEffectivenessResponse])
+def get_patterns_effectiveness(
+    db: Session = Depends(get_db),
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))  # 🔒 Proteksi RBAC khusus Risk Manager
+):
+    return get_pattern_effectiveness_service(db)
 
 
 # =========================
@@ -176,7 +194,6 @@ def update_pattern(
     if not pattern:
         raise HTTPException(status_code=404, detail="Pattern not found")
 
-    # update fields (partial update)
     pattern.pattern_name = payload.get("pattern_name", pattern.pattern_name)
     pattern.pattern_category = payload.get("pattern_category", pattern.pattern_category)
     pattern.pattern_rules = payload.get("pattern_rules", pattern.pattern_rules)

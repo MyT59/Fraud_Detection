@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 
@@ -28,5 +30,16 @@ class AdminResponse(BaseModel):
     id: int
     full_name: str
     email: str
+    role: str
     is_active: bool
-    role: str  # Memakai string karena di service kamu passing "new_admin.role.role_name"
+
+    department: Optional[str] = None
+    phone_number: Optional[str] = None
+    notes: Optional[str] = None
+
+    created_at: Optional[datetime] = None
+    last_login_at: Optional[datetime] = None
+class ProfileUpdateRequest(BaseModel):
+    full_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    department: Optional[str] = None

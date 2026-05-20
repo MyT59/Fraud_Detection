@@ -38,7 +38,7 @@ class MLRealtimeService:
         Future options:
         - FastAPI BackgroundTasks
         - Celery
-        - Redis Queue
+        - Redis Queue (later replaced by proper async task queue)
         - Kafka
         - RabbitMQ
         """

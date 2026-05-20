@@ -11,9 +11,8 @@ class NotificationRepository:
 
     def create(self, pref):
         self.db.add(pref)
-        self.db.commit()
-        self.db.refresh(pref)
+        self.db.flush()  # Gunakan flush agar instance mendapatkan ID (jika butuh) tanpa commit
         return pref
-
-    def update(self):
-        self.db.commit()
+    
+    # Fungsi update() dihapus karena SQLAlchemy otomatis men-track perubahan (Dirty Tracking)
+    # pada object yang sudah di-query dari db. Cukup query, ubah atributnya, lalu commit di service layer.

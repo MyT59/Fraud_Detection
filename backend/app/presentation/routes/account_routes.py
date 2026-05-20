@@ -10,10 +10,12 @@ from app.application.services.account_service import (
     reset_password,
     update_account,
     set_account_status,
-    delete_account
+    delete_account,
+    get_my_profile,
+    update_my_profile
 )
 from app.core.rbac import require_roles
-from app.presentation.schemas.admin_schema import AdminCreateRequest, AdminUpdateRequest, AdminResponse
+from app.presentation.schemas.admin_schema import AdminCreateRequest, AdminUpdateRequest, AdminResponse, ProfileUpdateRequest
 
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
 
@@ -45,6 +47,40 @@ def get_all(
     current_admin=Depends(require_roles("SUPER_ADMIN"))
 ):
     return get_all_accounts(db)
+
+# GET MY PROFILE
+@router.get("/me", response_model=AdminResponse)
+def get_my_profile_route(
+    current_admin=Depends(
+        require_roles(
+            "SUPER_ADMIN",
+            "RISK_MANAGER",
+            "FRAUD_ANALYST"
+        )
+    )
+):
+    return get_my_profile(current_admin)
+
+# UPDATE MY PROFILE
+@router.patch("/me", response_model=AdminResponse)
+def update_my_profile_route(
+    request: ProfileUpdateRequest,
+    db: Session = Depends(get_db),
+    current_admin=Depends(
+        require_roles(
+            "SUPER_ADMIN",
+            "RISK_MANAGER",
+            "FRAUD_ANALYST"
+        )
+    )
+):
+    return update_my_profile(
+        db=db,
+        current_admin=current_admin,
+        full_name=request.full_name,
+        phone_number=request.phone_number,
+        department=request.department
+    )
 
 @router.post("/change-password")
 def change_password_route(
