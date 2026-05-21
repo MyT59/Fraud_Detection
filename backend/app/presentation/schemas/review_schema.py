@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from enum import Enum
-
+from datetime import datetime
 
 class ReviewDecision(str, Enum):
     FRAUD = "FRAUD"
@@ -69,3 +69,28 @@ class ReviewTimelineAnalyticsResponse(BaseModel):
     reviews_per_hour_24h: List[HourlyReviewMetric]
     fraud_per_day_7d: List[DailyFraudMetric]
     queue_growth_7d: List[DailyQueueGrowthMetric]
+
+
+# =========================================================
+# 🎯 TARUHAN BARU POIN 3: METADATA PAGINASI REVIEWS HISTORY 
+# =========================================================
+class ReviewHistoryItem(BaseModel):
+    id: int
+    transaction_id: int
+    alert_id: Optional[int]
+    decision: str
+    review_note: Optional[str]
+    previous_status: Optional[str]
+    final_status: str
+    reviewed_by: Optional[int]
+    created_at: datetime
+
+    class Config:
+        orm_mode = True  # Mendukung konversi otomatis dari objek SQLAlchemy ORM
+
+
+class ReviewHistoryPaginatedResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    items: List[ReviewHistoryItem]  # Kontainer utama pembungkus list data riwayat review [cite: 118]

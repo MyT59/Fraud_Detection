@@ -1,8 +1,9 @@
 from ast import operator
 from dataclasses import field
 import logging
-
+from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 from app.infrastructure.database.models.global_rule_model import GlobalRule
+from app.application.services.activity_log_service import log_activity
 
 logger = logging.getLogger(__name__)
 
@@ -127,29 +128,21 @@ def run_rule_engine(db, trx):
     rules = db.query(GlobalRule).filter(
         GlobalRule.is_active == True
     ).order_by(GlobalRule.priority.desc()).all()
+    
     seen_groups = set()
     for rule in rules:
         logger.info(f"Evaluating RULE: {rule.rule_name} | GROUP: {rule.rule_group}")
 
-        # Filter service
         if rule.service_scope != "ALL" and rule.service_scope != trx.service_source:
             continue
 
-        # PRIORITY 1 → JSON RULE
         if rule.rule_config:
             is_match = evaluate_json_rule(rule.rule_config, trx)
-
-        # PRIORITY 2 → SIMPLE RULE
         else:
             value = getattr(trx, rule.condition_field, None)
             if value is None:
                 continue
-
-            is_match = evaluate_simple_rule(
-                value,
-                rule.operator,
-                rule.threshold_value
-            )
+            is_match = evaluate_simple_rule(value, rule.operator, rule.threshold_value)
 
         if is_match:
             group = rule.rule_group if rule.rule_group else rule.condition_field or "GENERAL"
@@ -158,7 +151,6 @@ def run_rule_engine(db, trx):
                 continue
 
             seen_groups.add(group)
-
             rule.hit_count += 1
 
             violations.append({
@@ -166,42 +158,53 @@ def run_rule_engine(db, trx):
                 "name": rule.rule_name,
                 "rule_id": rule.id
             })
-
             rule_actions.append(rule.action)
-
             rule_hit_count += 1
             rule_groups.add(group)
 
+            # Map Rule Severity DB string ke SeverityLevelEnum log
+            log_severity = {
+                "CRITICAL": SeverityLevelEnum.CRITICAL,
+                "HIGH": SeverityLevelEnum.HIGH,
+                "MEDIUM": SeverityLevelEnum.WARNING,
+                "LOW": SeverityLevelEnum.INFO
+            }.get(rule.severity, SeverityLevelEnum.WARNING)
+
+           
+            log_activity(
+                db=db,
+                admin=None, # Sistem Otomatis / Autonomous Decision
+                action_type=ActivityActionEnum.RULE_TRIGGERED,
+                module_source=EventSourceEnum.RULE_ENGINE,
+                severity=log_severity,
+                target_type="TRANSACTION",
+                target_id=str(trx.original_trx_id),
+                ip_address=getattr(trx, "ip_address", None),
+                details={
+                    "rule_id": rule.id,
+                    "rule_name": rule.rule_name,
+                    "action_taken": rule.action,
+                    "amount": float(trx.amount) if hasattr(trx, "amount") else None
+                }
+            )
+
             base_score = calculate_rule_score(rule)
             weighted_score = int(base_score * get_rule_weight(rule))
-
             risk_score += weighted_score
 
-            # 🔥 TRACK REVIEW
             if rule.action == "REVIEW":
                 review_count += 1
 
-            # 🔥 HARD STOP
             if rule.action == "BLOCK":
+                db.commit() # Simpan perubahan hit_count dan log pemicu sebelum di-block
                 return violations, risk_score, rule_actions
 
-    # =========================
-    # ADVANCED CHAINING
-    # =========================
-
     rule_score_total = risk_score
+    if rule_hit_count >= 2: risk_score += 10
+    if rule_hit_count >= 3: risk_score += 20
+    if len(rule_groups) >= 2: risk_score += 10
 
-    if rule_hit_count >= 2:
-        risk_score += 10
-
-    if rule_hit_count >= 3:
-        risk_score += 20
-
-    # GROUP ESCALATION (lebih kecil)
-    if len(rule_groups) >= 2:
-        risk_score += 10
-
-    # optional cap
     risk_score = min(risk_score, 100)
-
+    db.commit() # Commit akumulasi hit_count aturan
+    
     return violations, risk_score, rule_actions

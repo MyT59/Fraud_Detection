@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.infrastructure.database.session import get_db
@@ -14,7 +14,7 @@ from app.application.services.review_service import (
     soft_delete_review_service
 )
 
-from app.presentation.schemas.review_schema import ReviewRequest, ReviewMetricsResponse, AnalystPerformanceResponse, ReviewTimelineAnalyticsResponse, ReviewOverrideRequest, FalseNegativeReportRequest
+from app.presentation.schemas.review_schema import ReviewRequest, ReviewMetricsResponse, AnalystPerformanceResponse, ReviewTimelineAnalyticsResponse, ReviewOverrideRequest, FalseNegativeReportRequest, ReviewHistoryPaginatedResponse
 
 from app.core.rbac import require_roles
 
@@ -58,10 +58,10 @@ def get_analyst_performance(
 ):
     return get_analyst_performance_service(db)
 
-@router.get("/history")
+@router.get("/history", response_model=ReviewHistoryPaginatedResponse)
 def get_review_history_route(
-    page: int = 1,
-    limit: int = 10,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1),
     db: Session = Depends(get_db),
     current_admin = Depends(require_roles("FRAUD_ANALYST", "RISK_MANAGER", "SUPER_ADMIN"))
 ):

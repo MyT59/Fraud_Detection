@@ -3,6 +3,9 @@ from app.infrastructure.database.models.blacklist_items_model import BlacklistIt
 from app.infrastructure.database.enums import BlacklistTypeEnum
 from app.infrastructure.repositories.blacklist_repository import BlacklistRepository
 
+# 🔥 IMPORT SERVICE LOG UTAMA & ENUM
+from app.application.services.activity_log_service import log_activity
+from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 
 def normalize(value: str | None, to_lower: bool = True) -> str | None:
     if value is None:
@@ -74,11 +77,9 @@ def run_blacklist_check(db, trx):
     # =========================
     account_numbers = []
 
-    # dari field utama (kalau ada)
     if getattr(trx, "account_number", None):
         account_numbers.append(trx.account_number)
 
-    # dari transaction_details
     details = trx.transaction_details or {}
 
     if details.get("issuer_account_number"):
@@ -87,7 +88,6 @@ def run_blacklist_check(db, trx):
     if details.get("dest_account_number"):
         account_numbers.append(details.get("dest_account_number"))
 
-    # loop semua account
     for acc in account_numbers:
         acc_value = normalize(acc, to_lower=False)
 
@@ -102,7 +102,7 @@ def run_blacklist_check(db, trx):
     if not conditions:
         return False, [], 0
 
-# =========================
+    # =========================
     # QUERY BLACKLIST
     # =========================
     blacklist_hit = BlacklistRepository.find_match(
@@ -116,7 +116,29 @@ def run_blacklist_check(db, trx):
     # =========================
     if blacklist_hit:
         blacklist_hit.hit_count += 1
-        db.commit() # Simpan perubahan ke database
+        
+        # 🔥 REKOMENDASI AUDIT WAJIB: Catat insiden Blacklist Hit ke Activity Log 
+        log_activity(
+            db=db,
+            admin=None,  # Sistem Otomatis / Autonomous Decision 
+            action_type=ActivityActionEnum.BLACKLIST_HIT,
+            module_source=EventSourceEnum.BLACKLIST,
+            severity=SeverityLevelEnum.CRITICAL,  # Terkena Blacklist bernilai Critical karena langsung memblokir [cite: 251]
+            target_type="TRANSACTION",
+            target_id=str(trx.original_trx_id),
+            ip_address=getattr(trx, "ip_address", None),
+            details={
+                "blacklist_id": blacklist_hit.id,
+                "triggered_by_type": blacklist_hit.type.value,
+                "matched_value": blacklist_hit.value,
+                "reason_in_blacklist": blacklist_hit.reason,
+                "service_scope": blacklist_hit.service_scope,
+                "amount": float(trx.amount) if hasattr(trx, "amount") else None
+            }
+        )
+        
+        # Sinkronisasi satu kali transaksi untuk perubahan hit_count dan penulisan log 
+        db.commit() 
         
         return True, [{
             "type": "BLACKLIST",

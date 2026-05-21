@@ -1,5 +1,9 @@
 from datetime import datetime, timedelta, timezone
 
+# 🔥 IMPORT SERVICE LOG UTAMA & ENUM
+from app.application.services.activity_log_service import log_activity
+from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
+
 MIN_SAMPLE = 5
 DISABLE_THRESHOLD = 0.4
 PROMOTE_THRESHOLD = 0.85
@@ -12,12 +16,12 @@ COOLDOWN_DAYS = 7
 
 
 def apply_pattern_lifecycle(db, pattern):
-
     tp = pattern.true_positive or 0
     fp = pattern.false_positive or 0
 
     if pattern.risk_score is None:
         pattern.risk_score = 40
+
     # =========================
     # DECAY (SAFE)
     # =========================
@@ -30,7 +34,7 @@ def apply_pattern_lifecycle(db, pattern):
     total = tp + fp
 
     # =========================
-    # UPDATE ACCURACY (FIX BUG)
+    # UPDATE ACCURACY
     # =========================
     if total > 0:
         accuracy = tp / total
@@ -51,21 +55,59 @@ def apply_pattern_lifecycle(db, pattern):
         if now - pattern.disabled_at > timedelta(days=COOLDOWN_DAYS):
             pattern.is_active = True
             pattern.disabled_at = None
+            
+            # 🔥 LOG RE-ACTIVATE OLEH SISTEM [cite: 256]
+            log_activity(
+                db=db, admin=None,
+                action_type=ActivityActionEnum.PATTERN_REACTIVATED,
+                module_source=EventSourceEnum.PATTERN_ENGINE,
+                severity=SeverityLevelEnum.INFO,
+                target_type="PATTERN", target_id=str(pattern.id),
+                details={"pattern_name": pattern.pattern_name, "msg": "Pattern re-activated after cooling down"}
+            )
 
     # =========================
-    # AUTO DISABLE
+    # AUTO DISABLE (Kinerja Buruk)
     # =========================
     if total >= DISABLE_MIN_SAMPLE and accuracy < DISABLE_THRESHOLD:
         pattern.is_active = False
         pattern.action = "FLAG"
         pattern.disabled_at = now
+        
+        # 🔥 LOG AUTO DISABLE [cite: 173, 254]
+        log_activity(
+            db=db, admin=None,
+            action_type=ActivityActionEnum.PATTERN_AUTO_DISABLE,
+            module_source=EventSourceEnum.PATTERN_ENGINE,
+            severity=SeverityLevelEnum.HIGH, # Status mati otomatis bernilai penting
+            target_type="PATTERN", target_id=str(pattern.id),
+            details={
+                "pattern_name": pattern.pattern_name,
+                "accuracy_score": round(accuracy, 2),
+                "reason": f"Accuracy dropped below critical threshold ({round(accuracy, 2)} < {DISABLE_THRESHOLD})"
+            }
+        )
 
     # =========================
-    # AUTO PROMOTE
+    # AUTO PROMOTE (Kinerja Sangat Akurat)
     # =========================
     elif total >= PROMOTE_MIN_SAMPLE and accuracy >= PROMOTE_THRESHOLD:
         pattern.action = "BLOCK"
-        pattern.is_active = True  # 🔥 penting
+        pattern.is_active = True
+        
+        # 🔥 LOG AUTO PROMOTE [cite: 172, 255]
+        log_activity(
+            db=db, admin=None,
+            action_type=ActivityActionEnum.PATTERN_AUTO_PROMOTE,
+            module_source=EventSourceEnum.PATTERN_ENGINE,
+            severity=SeverityLevelEnum.HIGH,
+            target_type="PATTERN", target_id=str(pattern.id),
+            details={
+                "pattern_name": pattern.pattern_name,
+                "accuracy_score": round(accuracy, 2),
+                "reason": f"High accuracy performance promoted to automated BLOCK ({round(accuracy, 2)} >= {PROMOTE_THRESHOLD})"
+            }
+        )
 
     # =========================
     # RESET ACTION (ANTI STUCK)

@@ -6,6 +6,10 @@ from app.application.services.pattern_lifecycle_service import apply_pattern_lif
 from app.application.services.activity_log_service import log_activity
 from app.domain.entities.target_type import TargetType
 from app.infrastructure.database.enums import TransactionStatusEnum
+
+# 🔥 IMPORT ENUM STANDAR V1
+from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
+
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from sqlalchemy.orm.exc import StaleDataError
@@ -17,12 +21,10 @@ from app.infrastructure.repositories.review_repository import ReviewRepository
 from app.infrastructure.repositories.transaction_repository import TransactionRepository
 from app.infrastructure.repositories.pattern_repository import PatternRepository
 from app.infrastructure.database.models.ml_feedback_log_model import MLFeedbackLog
-
 # Inisialisasi logger untuk memantau error di terminal
 logger = logging.getLogger(__name__)
 
 def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note: str, confidence: str): 
-    # 1. VALIDASI INPUT DI AWAL
     allowed = ["SAFE", "FRAUD"]
     decision = decision.upper()
     if decision not in allowed:
@@ -42,42 +44,27 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
         if alert.status == "RESOLVED":
             raise HTTPException(400, "Alert already resolved")
             
-        # 🔥 PENGAMANAN BARU: ENFORCE OWNERSHIP
         if alert.status == "OPEN":
-            # Jika masih OPEN, tidak bisa di-review langsung. Harus diklaim dulu!
-            raise HTTPException(
-                status_code=400, 
-                detail="Alert must be claimed before submitting a review. Please claim it first."
-            )
+            raise HTTPException(status_code=400, detail="Alert must be claimed before submitting a review. Please claim it first.")
             
         if alert.claimed_by != reviewer_id:
-            # Jika di-claim orang lain, tolak mentah-mentah!
-            raise HTTPException(
-                status_code=403, 
-                detail=f"Access Denied: This alert is currently claimed by Analyst ID {alert.claimed_by}"
-            )
+            raise HTTPException(status_code=403, detail=f"Access Denied: This alert is currently claimed by Analyst ID {alert.claimed_by}")
 
-        # ❗ CEK DUPLICATE REVIEW
         review_repo = ReviewRepository(db)
         existing_review = review_repo.get_by_alert_id(alert_id)
-
         if existing_review:
             raise HTTPException(status_code=400, detail="Alert already reviewed")
 
-        # 3. AMBIL DATA TRANSAKSI
         trx_repo = TransactionRepository(db)
         trx = trx_repo.get_by_id(alert.transaction_id)
         if not trx:
             raise HTTPException(status_code=404, detail="Transaction not found")
 
-        # 4. KONVERSI STRING KE ENUM OBJECT
         try:
             target_status = TransactionStatusEnum(decision)
         except ValueError:
             raise HTTPException(status_code=400, detail="Decision does not match database Enum values")
 
-        # 🔥 FIX 1: BUAT TRANSACTION SNAPSHOT
-        # Mengubah data transaksi saat ini menjadi dictionary untuk disimpan permanen
         transaction_snapshot = {
             "id": trx.id,
             "original_trx_id": trx.original_trx_id,
@@ -92,11 +79,11 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
             "ip_address": trx.ip_address,
             "city": trx.city,
             "country": trx.country,
-            "transaction_details": trx.transaction_details,  # 🌟 SANGAT KRUSIAL! Menyimpan payload asli JSONB
+            "transaction_details": trx.transaction_details,
             "anomaly_score": trx.anomaly_score,
             "risk_score": trx.risk_score,
             "risk_level": trx.risk_level,
-            "score_breakdown": trx.score_breakdown,           # Menyimpan breakdown pengetatan skor
+            "score_breakdown": trx.score_breakdown,
             "is_flagged_ml": trx.is_flagged_ml,
             "violation_reason": trx.violation_reason,
             "violation_rule_ids": trx.violation_rule_ids,
@@ -104,10 +91,8 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
             "final_status": str(trx.final_status.value) if trx.final_status else None
         }
 
-        # Waktu penyelesaian review
         now_utc = datetime.now(timezone.utc)
 
-        # 5. SIMPAN KE TABEL manual_reviews 
         review = ManualReview(
             transaction_id=trx.id,
             alert_id=alert.id,
@@ -118,12 +103,11 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
             previous_status=str(trx.final_status.value), 
             final_status=target_status,
             transaction_snapshot=transaction_snapshot,
-            review_started_at=alert.created_at, # Menggunakan waktu alert dibuat sebagai patokan mulai (atau bisa dinamis nanti)
+            review_started_at=alert.created_at,
             review_completed_at=now_utc
         )
         review_repo.create(review)
         
-        # Handle Race Condition via flush & IntegrityError
         try:
             db.flush()
         except IntegrityError:
@@ -133,8 +117,6 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
         feedback_log = MLFeedbackLog(
             review_id=None,
             transaction_id=trx.id,
-            
-            # Mirroring data transaksi
             original_trx_id=trx.original_trx_id,
             service_source=trx.service_source,
             user_account_id=trx.user_account_id,
@@ -156,14 +138,11 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
             violation_reason=trx.violation_reason,
             violation_rule_ids=trx.violation_rule_ids,
             violation_pattern_ids=trx.violation_pattern_ids,
-            
-            # Melampirkan label dari analis
             analyst_decision=decision,
             decision_confidence=confidence
         )
         db.add(feedback_log)
 
-        # 6. UPDATE STATUS TRANSAKSI 
         trx.final_status = target_status
 
         if decision == "FRAUD":
@@ -171,25 +150,27 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
         else:
             update_pattern_accuracy(db, trx, False)
 
-        # 7. UPDATE ALERT 
         alert.status = "RESOLVED"
         alert.resolved_by = reviewer_id
         alert.resolved_at = now_utc
 
-        # 8. LOG ACTIVITY (Tanpa db.commit() di dalamnya)
+        # 🚨 FIX: Gunakan Enum Standar V1 untuk resolusi review manual [cite: 146]
+        action_enum = ActivityActionEnum.REVIEW_REJECTED if decision == "FRAUD" else ActivityActionEnum.REVIEW_APPROVED
+
         log_activity(
             db=db,
             admin=type("obj", (object,), {"id": reviewer_id})(),
-            action_type="REVIEW_ALERT",
+            action_type=action_enum,
+            module_source=EventSourceEnum.MANUAL_REVIEW,
+            severity=SeverityLevelEnum.INFO,
             target_type=TargetType.TRANSACTION,
             target_id=trx.id,
-            details=f"Decision={decision}, AlertID={alert.id}"
+            ip_address=getattr(trx, "ip_address", None),
+            details={"decision": decision, "alert_id": alert.id, "confidence": confidence}
         )
 
-        # 🔥 FIX 3: COMMIT SEMUA PERUBAHAN DI AKHIR (Unit of Work)
         db.commit()
         db.refresh(review)
-
         return review
 
     except HTTPException as http_exc:
@@ -197,25 +178,14 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
         raise http_exc
     except StaleDataError:
         db.rollback()
-        raise HTTPException(
-            status_code=409, 
-            detail="Race Condition Detected: Kasus ini baru saja diperbarui atau diselesaikan oleh analis lain. Mohon refresh halaman antrean Anda."
-        )
+        raise HTTPException(status_code=409, detail="Race Condition Detected: Kasus ini baru saja diperbarui atau diselesaikan oleh analis lain.")
     except Exception as e:
         db.rollback()
-        logger.error(
-            f"[REVIEW ERROR] alert_id={alert_id} reviewer_id={reviewer_id} error={str(e)}",
-            exc_info=True
-        )
-        raise HTTPException(status_code=500, detail="Internal Server Error: Check database constraints (Admin ID existence or Enum mismatch)")
+        logger.error(f"[REVIEW ERROR] alert_id={alert_id} reviewer_id={reviewer_id} error={str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
-def get_review_history(
-    db,
-    page: int = 1,
-    limit: int = 10
-):
+def get_review_history(db, page: int = 1, limit: int = 10):
     query = db.query(ManualReview).join(Transaction).filter(ManualReview.is_deleted == False)
-
     total = query.count()
 
     reviews = query.order_by(ManualReview.created_at.desc()) \
@@ -224,10 +194,10 @@ def get_review_history(
         .all()
 
     return {
+        "total": total,
         "page": page,
         "limit": limit,
-        "total": total,
-        "data": [
+        "items": [  # 🎯 FIX: Mengubah dari "data" menjadi "items" agar konsisten di semua API 
             {
                 "id": r.id,
                 "transaction_id": r.transaction_id,
@@ -362,7 +332,6 @@ def soft_delete_review_service(db, review_id: int, admin_id: int):
     db.commit()
     return {"status": "success", "message": "Review history successfully soft deleted for compliance tracking."}
 
-
 # 🔥 TAMBAHAN BARU POIN 15: Review Reopen & Override Mechanism
 def override_review_decision_service(db, review_id: int, admin_id: int, new_decision: str, reason: str):
     review = db.query(ManualReview).filter(ManualReview.id == review_id, ManualReview.is_deleted == False).first()
@@ -377,7 +346,12 @@ def override_review_decision_service(db, review_id: int, admin_id: int, new_deci
         trx = db.query(Transaction).filter(Transaction.id == review.transaction_id).first()
         alert = db.query(FraudAlert).filter(FraudAlert.id == review.alert_id).first()
         
-        # 1. Jalankan Pipa Koreksi Akurasi Feedback Loop
+        # 🚨 SNAPSHOT KEPUTUSAN SEBELUMNYA (Sebelum di-mutate) 
+        snapshot_before = {
+            "decision": review.decision,
+            "final_status": str(review.final_status.value) if review.final_status else None
+        }
+
         if new_decision == "FRAUD":
             update_pattern_accuracy(db, trx, is_fraud=True) 
             target_status = TransactionStatusEnum.FRAUD
@@ -385,7 +359,6 @@ def override_review_decision_service(db, review_id: int, admin_id: int, new_deci
             update_pattern_accuracy(db, trx, is_fraud=False)
             target_status = TransactionStatusEnum.SAFE
 
-        # 2. Rekam Jejak Audit Override
         review.is_overridden = True
         review.overridden_by = admin_id
         review.overridden_at = datetime.now(timezone.utc)
@@ -396,21 +369,33 @@ def override_review_decision_service(db, review_id: int, admin_id: int, new_deci
         if trx:
             trx.final_status = target_status
             
-        # 3. 🔥 FIX POIN 15: Ubah State Lifecycle Alert Menjadi REOPENED / OVERRIDDEN
         if alert:
-            # Mengubah status makro alert secara fisik di database sesuai standarisasi state machine
-            alert.status = "REOPENED" 
+            alert.status = "OVERRIDDEN" # Menandai siklus state machine ke status OVERRIDDEN
 
+        # 🚨 SNAPSHOT KEPUTUSAN SESUDAH (After Snapshot)
+        snapshot_after = {
+            "decision": review.decision,
+            "final_status": str(review.final_status.value) if review.final_status else None
+        }
+
+        # Catat ke Log Aktivitas dengan snapshot lengkap forensik v1
         log_activity(
             db=db,
             admin=type("obj", (object,), {"id": admin_id})(),
-            action_type="OVERRIDE_REVIEW_DECISION",
+            action_type=ActivityActionEnum.REVIEW_OVERRIDDEN,
+            module_source=EventSourceEnum.MANUAL_REVIEW,
+            severity=SeverityLevelEnum.HIGH, # Override peninjauan bernilai tinggi (HIGH)
             target_type=TargetType.TRANSACTION,
             target_id=trx.id,
-            details=f"Decision overridden to {new_decision}. Alert status escalated to REOPENED by Manager ID {admin_id}."
+            ip_address=getattr(trx, "ip_address", None),
+            details={
+                "before": snapshot_before,
+                "after": snapshot_after,
+                "reason": reason
+            }
         )
         db.commit()
-        return {"status": "success", "message": f"Decision successfully overridden to {new_decision} and alert state set to REOPENED."}
+        return {"status": "success", "message": f"Decision successfully overridden to {new_decision}."}
         
     except StaleDataError:
         db.rollback()

@@ -47,7 +47,3 @@ class ManualReview(Base):
     override_admin = relationship("Admin", foreign_keys=[overridden_by])
     deleted_by_admin = relationship("Admin", foreign_keys=[deleted_by])
 
-
-
-
-    

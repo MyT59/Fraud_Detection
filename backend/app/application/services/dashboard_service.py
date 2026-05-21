@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import case, func
 from datetime import datetime, timedelta, timezone
 
@@ -8,12 +8,16 @@ from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
 from app.infrastructure.database.models.ml_model_model import MLModel
 from app.infrastructure.database.models.manual_review_model import ManualReview
 from app.infrastructure.database.models.activity_log_model import ActivityLog
+from app.infrastructure.database.models.admin_model import Admin # Tambahan untuk resolusi nama aktor
+
 from app.infrastructure.repositories.transaction_repository import TransactionRepository
 from app.infrastructure.repositories.alert_repository import AlertRepository
 from app.infrastructure.repositories.review_repository import ReviewRepository
 from app.infrastructure.repositories.activity_log_repository import ActivityLogRepository
 from app.application.services.health_check_service import HealthCheckService
-from app.application import services
+
+# 🔥 IMPORT ENUM STANDAR V1
+from app.infrastructure.database.enums import TimelineTypeEnum, SeverityLevelEnum, EventSourceEnum
 
 def format_badge(severity: str):
     return severity
@@ -22,83 +26,77 @@ def format_color(severity: str):
     return {
         "CRITICAL": "dark-red",
         "HIGH": "red",
+        "WARNING": "yellow",
         "MEDIUM": "yellow",
-        "LOW": "blue"
+        "LOW": "blue",
+        "INFO": "blue"
     }.get(severity, "gray")
 
 def format_time(dt):
     if not dt:
         return "unknown"
-
-    # 🔥 Fix: Normalize ke UTC
     if dt.tzinfo is None:
-        # Jika naive (dari SQLAlchemy), anggap sebagai UTC
         dt = dt.replace(tzinfo=timezone.utc)
     else:
-        # Jika aware, konversi ke UTC secara aman
         dt = dt.astimezone(timezone.utc)
 
     now = datetime.now(timezone.utc)
     diff = now - dt
-
     minutes = int(diff.total_seconds() / 60)
 
-    if minutes < 1:
-        return "just now"
-    if minutes < 60:
-        return f"{minutes} minutes ago"
-
+    if minutes < 1: return "just now"
+    if minutes < 60: return f"{minutes} minutes ago"
     hours = minutes // 60
-    if hours < 24:
-        return f"{hours} hours ago"
-
+    if hours < 24: return f"{hours} hours ago"
     days = hours // 24
     return f"{days} days ago"
+
 
 class DashboardService:
 
     @staticmethod
     def get_kpi(db: Session):
-        # =========================
-        # TOTAL PER SERVICE
-        # =========================
-        agenusa = db.query(func.count(Transaction.id)).filter(
-            Transaction.service_source == "AGENUSA"
-        ).scalar()
+        # Kueri KPI dasar dipertahankan untuk Capstone v1
+        agenusa = db.query(func.count(Transaction.id)).filter(Transaction.service_source == "AGENUSA").scalar()
+        nusabill = db.query(func.count(Transaction.id)).filter(Transaction.service_source == "NUSABILL").scalar()
 
-        nusabill = db.query(func.count(Transaction.id)).filter(
-            Transaction.service_source == "NUSABILL"
-        ).scalar()
-
-        # =========================
-        # FRAUD PER SERVICE
-        # =========================
         fraud_agenusa = db.query(func.count(Transaction.id)).filter(
-            Transaction.service_source == "AGENUSA",
-            Transaction.final_status == "FRAUD"
+            Transaction.service_source == "AGENUSA", Transaction.final_status == "FRAUD"
         ).scalar()
 
         fraud_nusabill = db.query(func.count(Transaction.id)).filter(
-            Transaction.service_source == "NUSABILL",
-            Transaction.final_status == "FRAUD"
+            Transaction.service_source == "NUSABILL", Transaction.final_status == "FRAUD"
         ).scalar()
 
-        # =========================
-        # TOTAL GLOBAL
-        # =========================
         total_tx = (agenusa or 0) + (nusabill or 0)
         total_fraud = (fraud_agenusa or 0) + (fraud_nusabill or 0)
-
         fraud_rate = (total_fraud / total_tx * 100) if total_tx else 0
 
-        # =========================
-        # MODEL ACCURACY
-        # =========================
-        accuracy = db.query(MLModel.accuracy_score)\
+        # 1. Tarik baris model yang berstatus aktif dan paling baru dibuat
+        latest_active_model = db.query(MLModel)\
             .filter(MLModel.is_active == True)\
             .order_by(MLModel.created_at.desc())\
-            .limit(1)\
-            .scalar()
+            .first()
+
+        accuracy = None
+        
+        # 2. Bongkar dictionary JSONB secara aman jika datanya tersedia
+        if latest_active_model and latest_active_model.metrics:
+            # Fallback toleransi pencarian key JSON (bisa berupa 'accuracy' atau 'accuracy_score')
+            raw_accuracy = latest_active_model.metrics.get("accuracy") or latest_active_model.metrics.get("accuracy_score")
+            
+            if raw_accuracy is not None:
+                try:
+                    accuracy = float(raw_accuracy)
+                    # Jika model menyimpan format desimal ML standar (misal 0.945 -> jadikan 94.50%)
+                    if accuracy < 1.0:
+                        accuracy = accuracy * 100
+                except (ValueError, TypeError):
+                    accuracy = None
+
+        # 3. Guard Fallback Default jika database kosong / belum pernah melakukan retraining model
+        if accuracy is None:
+            accuracy = 94.20
 
         return {
             "total_agenusa": agenusa or 0,
@@ -106,39 +104,22 @@ class DashboardService:
             "fraud_agenusa": fraud_agenusa or 0,
             "fraud_nusabill": fraud_nusabill or 0,
             "fraud_rate": round(fraud_rate, 2),
-            "model_accuracy": round(accuracy or 94.2, 2)
+            "model_accuracy": round(accuracy, 2)
         }
     
     @staticmethod
     def get_transaction_trend(db: Session):
-        """Memanggil query trend per jam dari TransactionRepository."""
-        trx_repo = TransactionRepository(db)
-        return trx_repo.get_today_hourly_trend()
+        return TransactionRepository(db).get_today_hourly_trend()
 
     @staticmethod
     def get_fraud_distribution(db: Session):
-        fraud = db.query(func.count(Transaction.id)).filter(
-            Transaction.final_status == "FRAUD"
-        ).scalar()
-
-        legit = db.query(func.count(Transaction.id)).filter(
-            Transaction.final_status != "FRAUD"
-        ).scalar()
-
-        return {
-            "total": (fraud or 0) + (legit or 0),
-            "fraud": fraud or 0,
-            "legit": legit or 0
-        }
+        fraud = db.query(func.count(Transaction.id)).filter(Transaction.final_status == "FRAUD").scalar()
+        legit = db.query(func.count(Transaction.id)).filter(Transaction.final_status != "FRAUD").scalar()
+        return {"total": (fraud or 0) + (legit or 0), "fraud": fraud or 0, "legit": legit or 0}
 
     @staticmethod
-    def get_recent_alerts(db: Session): # 🔥 Tambahkan @staticmethod
-        alert_repo = AlertRepository(db)
-        alerts = db.query(FraudAlert)\
-            .filter(FraudAlert.status == "OPEN")\
-            .order_by(FraudAlert.created_at.desc())\
-            .limit(5)\
-            .all()
+    def get_recent_alerts(db: Session):
+        alerts = db.query(FraudAlert).filter(FraudAlert.status == "OPEN").order_by(FraudAlert.created_at.desc()).limit(5).all()
         result = []
         for a in alerts:
             service = getattr(a.transaction, "service_source", "UNK")
@@ -152,10 +133,10 @@ class DashboardService:
                 "created_at": a.created_at,
                 "title": a.title or "Fraud Detected",
                 "description": a.message,
-                "badge": format_badge(a.severity), # Bebas panggil langsung
-                "color": format_color(a.severity), # Bebas panggil langsung
+                "badge": format_badge(a.severity),
+                "color": format_color(a.severity),
                 "trx_id": f"{prefix}-{str(a.transaction_id).zfill(6)}",
-                "time": format_time(a.created_at), # Bebas panggil langsung
+                "time": format_time(a.created_at),
                 "type": a.alert_type,
                 "icon": "fraud" if a.severity in ["CRITICAL", "HIGH"] else "warning"
             })
@@ -163,286 +144,161 @@ class DashboardService:
 
     @staticmethod
     def get_top_patterns(db: Session):
-        data = db.query(
+        # 🎯 FIX POIN 6: RESOLVE RAW ARRAY MENJADI OBJEK MANUSIAWI 
+        raw_data = db.query(
             Transaction.violation_pattern_ids,
             func.count(Transaction.id)
-        ).filter(
-            Transaction.violation_pattern_ids.isnot(None)
-        ).group_by(
-            Transaction.violation_pattern_ids
-        ).order_by(
-            func.count(Transaction.id).desc()
-        ).limit(5).all()
+        ).filter(Transaction.violation_pattern_ids.isnot(None))\
+         .group_by(Transaction.violation_pattern_ids)\
+         .order_by(func.count(Transaction.id).desc()).limit(5).all()
 
-        return [
-            {
-                "pattern": str(d[0]),
-                "count": d[1]
-            }
-            for d in data
-        ]
+        resolved_results = []
+        # Ambil semua profil master pattern untuk dicocokkan di memori agar cepat
+        pattern_master = {p.id: p for p in db.query(FraudPattern).all()}
+
+        for row in raw_data:
+            pattern_ids = row[0]
+            count = row[1]
+            
+            # Jika violation_pattern_ids berupa list/array, ambil ID pertamanya
+            if isinstance(pattern_ids, list) and len(pattern_ids) > 0:
+                pid = pattern_ids[0]
+                pattern_obj = pattern_master.get(pid)
+                
+                if pattern_obj:
+                    resolved_results.append({
+                        "pattern_id": pattern_obj.id,
+                        "pattern_name": pattern_obj.pattern_name,
+                        "category": pattern_obj.pattern_category,
+                        "risk_score": pattern_obj.risk_score,
+                        "count": count
+                    })
+                    continue
+            
+            # Fallback aman jika data korup/tidak ditemukan relasinya
+            resolved_results.append({
+                "pattern_id": None,
+                "pattern_name": f"Unknown Discovered Pattern {str(pattern_ids)}",
+                "category": "UNKNOWN",
+                "risk_score": 50,
+                "count": count
+            })
+
+        return resolved_results
     
     @staticmethod
     def get_alert_trend(db: Session):
         last_7_days = datetime.now(timezone.utc) - timedelta(days=7)
-
         data = db.query(
-            func.date(FraudAlert.created_at).label("date"),
-            func.count(FraudAlert.id)
-        ).filter(
-            FraudAlert.created_at >= last_7_days
-        ).group_by("date").order_by("date").all()
-
-        return {
-            "labels": [str(d[0]) for d in data],
-            "datasets": [{"label": "Alerts", "data": [d[1] for d in data]}]
-        }
+            func.date(FraudAlert.created_at).label("date"), func.count(FraudAlert.id)
+        ).filter(FraudAlert.created_at >= last_7_days).group_by("date").order_by("date").all()
+        return {"labels": [str(d[0]) for d in data], "datasets": [{"label": "Alerts", "data": [d[1] for d in data]}]}
 
     @staticmethod
     def get_system_health(db: Session):
-        base_url = "http://127.0.0.1:8000"
-
         services = HealthCheckService.get_all_services(db)
-
-        # =========================
-        # SUMMARY
-        # =========================
         total = len(services)
         operational = len([s for s in services if s["status"] == "OPERATIONAL"])
         degraded = len([s for s in services if s["status"] == "DEGRADED"])
         down = len([s for s in services if s["status"] == "DOWN"])
 
-        if down > 0:
-            overall = "DOWN"
-        elif degraded > 0:
-            overall = "DEGRADED"
-        else:
-            overall = "OPERATIONAL"
-
-        avg_latency = int(
-            sum([s["latency"] or 0 for s in services]) / total
-        ) if total > 0 else 0
+        overall = "DOWN" if down > 0 else "DEGRADED" if degraded > 0 else "OPERATIONAL"
+        avg_latency = int(sum([s["latency"] or 0 for s in services]) / total) if total > 0 else 0
 
         return {
-            "summary": {
-                "status": overall,
-                "uptime": 99.98,
-                "avg_latency": avg_latency
-            },
-            "counts": {   # 🔥 tambah ini
-                "operational": operational,
-                "degraded": degraded,
-                "down": down
-            },
+            "summary": {"status": overall, "uptime": 99.98, "avg_latency": avg_latency},
+            "counts": {"operational": operational, "degraded": degraded, "down": down},
             "updated_at": datetime.now(timezone.utc),
             "services": services
-        }
-    
-    @staticmethod
-    def get_transaction_trend_detail(db, range="today", start=None, end=None):
-        import calendar
-
-        repo = TransactionRepository(db)
-        now = datetime.now(timezone.utc)
-
-        # ================= RANGE =================
-        if range == "7d":
-            start_date = now - timedelta(days=7)
-            end_date = now
-            granularity = "daily"
-            label_type = "weekday"
-
-        elif range == "30d":
-            start_date = now - timedelta(days=30)
-            end_date = now
-            granularity = "daily"
-            label_type = "date"
-
-        elif range == "1y":
-            start_date = now - timedelta(days=365)
-            end_date = now
-            granularity = "monthly"
-            label_type = "month"
-
-        elif range == "custom" and start and end:
-            start_date = datetime.fromisoformat(start)
-            end_date = datetime.fromisoformat(end)
-
-            days = (end_date - start_date).days
-
-            if days <= 1:
-                granularity = "hourly"
-                label_type = "hour"
-            else:
-                granularity = "daily"
-                label_type = "date"
-
-        else:
-            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date = now
-            granularity = "hourly"
-            label_type = "hour"
-
-        # ================= PREVIOUS =================
-        delta = end_date - start_date
-        prev_start = start_date - delta
-        prev_end = start_date
-
-        # ================= FETCH =================
-        if granularity == "hourly":
-            cur_raw = repo.get_trend_hourly(start_date, end_date)
-            prev_raw = repo.get_trend_hourly(prev_start, prev_end)
-
-        elif granularity == "daily":
-            cur_raw = repo.get_trend_daily(start_date, end_date)
-            prev_raw = repo.get_trend_daily(prev_start, prev_end)
-
-        else:  # monthly
-            cur_raw = repo.get_trend_monthly(start_date, end_date)
-            prev_raw = repo.get_trend_monthly(prev_start, prev_end)
-
-        # ================= FORMAT LABEL =================
-        def format_label(d):
-            if label_type == "hour":
-                return f"{str(d['hour']).zfill(2)}:00"
-
-            if label_type == "weekday":
-                dt = datetime.fromisoformat(d["date"])
-                return calendar.day_abbr[dt.weekday()]  # Mon
-
-            if label_type == "date":
-                dt = datetime.fromisoformat(d["date"])
-                return dt.strftime("%d")  # 01, 02
-
-            if label_type == "month":
-                return calendar.month_abbr[int(d["month"])]  # Jan
-
-        # ================= FORMAT DATA =================
-        def format_data(raw):
-            result = []
-            for d in raw:
-                total = d["total"]
-                fraud = d["fraud"]
-                legit = total - fraud
-
-                result.append({
-                    "label": format_label(d),
-                    "transactions": total,
-                    "fraud": fraud,
-                    "legitimate": legit,
-                    "fraud_rate": round((fraud / total * 100) if total else 0, 1)
-                })
-            return result
-
-        current = format_data(cur_raw)
-        previous = format_data(prev_raw)
-
-        # ================= AGGREGATE =================
-        def aggregate(data):
-            total_tx = sum(d["transactions"] for d in data)
-            total_fraud = sum(d["fraud"] for d in data)
-            fraud_rate = (total_fraud / total_tx * 100) if total_tx else 0
-            return total_tx, total_fraud, fraud_rate
-
-        cur_tx, cur_fraud, cur_rate = aggregate(current)
-        prev_tx, prev_fraud, prev_rate = aggregate(previous)
-
-        def growth(cur, prev):
-            if prev == 0:
-                return 100.0 if cur > 0 else 0.0
-            return round((cur - prev) / prev * 100, 2)
-
-        return {
-            "granularity": granularity,
-            "current": current,
-            "previous": previous,
-            "growth": {
-                "transactions": growth(cur_tx, prev_tx),
-                "fraud": growth(cur_fraud, prev_fraud),
-                "fraud_rate": growth(cur_rate, prev_rate)
-            }
         }
     
     @staticmethod
     def get_activity_timeline(db: Session, type: str = None):
         timeline = []
 
-        trx_repo = TransactionRepository(db)
-        alert_repo = AlertRepository(db)
-        review_repo = ReviewRepository(db)
-        log_repo = ActivityLogRepository(db)
+        # Gunakan pemanggilan gabungan repositori dengan optimalisasi join admin
+        fraud_trx = TransactionRepository(db).get_recent_fraud()
+        
+        alerts = db.query(FraudAlert).filter(FraudAlert.status == "OPEN")\
+                   .order_by(FraudAlert.created_at.desc()).limit(5).all()
+        
+        # Poin 10: Lakukan kueri join ke tabel admin agar full_name langsung terisi rapi 
+        reviews = db.query(ManualReview).options(joinedload(ManualReview.admin))\
+                    .order_by(ManualReview.created_at.desc()).limit(5).all()
+        
+        logs = db.query(ActivityLog).options(joinedload(ActivityLog.admin))\
+                 .order_by(ActivityLog.created_at.desc()).limit(10).all()
 
-        fraud_trx = trx_repo.get_recent_fraud()
-        alerts = db.query(FraudAlert)\
-            .filter(FraudAlert.status == "OPEN")\
-            .order_by(FraudAlert.created_at.desc())\
-            .limit(5)\
-            .all()
-        reviews = review_repo.get_recent()
-        logs = log_repo.get_recent()
-
-        # ================= FRAUD =================
+        # 🎯 1. MAP DATA TRANSAKSI FRAUD OTOMATIS
         for t in fraud_trx:
             timeline.append({
-                "type": "FRAUD",
+                "type": TimelineTypeEnum.TIMELINE_FRAUD.value, # Menggunakan Enum Terstandardisasi [cite: 322-323]
                 "title": "High-Risk Transaction Blocked",
-                "description": f"{t.original_trx_id} automatically blocked by system",
+                "description": f"Transaction {t.original_trx_id} automatically blocked by system",
                 "created_at": t.created_at,
                 "time": format_time(t.created_at),
                 "actor": "System",
-                "metadata": {
-                    "amount": f"Rp {t.amount}" if t.amount else "-",
-                    "user": t.user_account_id or "-"
-                }
+                "severity": SeverityLevelEnum.CRITICAL.value,  # Suntik nilai Keparahan [cite: 338, 350]
+                "source": EventSourceEnum.PATTERN_ENGINE.value, # Suntik nilai Sumber Event [cite: 351, 359]
+                "metadata": {"amount": f"Rp {t.amount}" if t.amount else "-", "user": t.user_account_id or "-"}
             })
 
-        # ================= ALERT =================
+        # 🎯 2. MAP DATA FRUAD ALERT (WARNING TRIGGER)
         for a in alerts:
             timeline.append({
-                "type": "FRAUD",
-                "title": a.title or "Fraud Detected",
+                "type": TimelineTypeEnum.TIMELINE_ALERT.value, # [cite: 324]
+                "title": a.title or "Fraud Alert Triggered",
                 "description": a.message,
                 "created_at": a.created_at,
                 "time": format_time(a.created_at),
                 "actor": "System",
-                "metadata": {}
+                "severity": a.severity if a.severity else SeverityLevelEnum.HIGH.value, # [cite: 349]
+                "source": EventSourceEnum.RULE_ENGINE.value, # [cite: 358]
+                "metadata": {"alert_id": a.id}
             })
 
-        # ================= REVIEWS =================
+        # 🎯 3. MAP DATA MANUAL REVIEW HISTORY
         for r in reviews:
+            # Tentukan nilai keparahan dinamis berdasarkan vonis analis
+            rev_severity = SeverityLevelEnum.HIGH.value if r.decision == "FRAUD" else SeverityLevelEnum.INFO.value
             timeline.append({
-                "type": "REVIEWS",
-                "title": "Transaction Approved",
-                "description": f"{r.transaction_id} approved after manual review",
+                "type": TimelineTypeEnum.TIMELINE_REVIEW.value, # [cite: 325]
+                "title": f"Transaction Marked as {r.decision.capitalize()}",
+                "description": f"Trx ID {r.transaction_id} resolved by investigator",
                 "created_at": r.created_at,
                 "time": format_time(r.created_at),
-                "actor": "Admin User",
-                "metadata": {
-                    "decision": r.decision
-                }
+                # 🎯 FIX POIN 10: Tampilkan Nama Asli Analis, bukan "Admin User" 
+                "actor": r.admin.full_name if r.admin else f"Analyst ID {r.reviewer_id}", 
+                "severity": rev_severity,
+                "source": EventSourceEnum.MANUAL_REVIEW.value, # [cite: 360]
+                "metadata": {"decision": r.decision, "note": r.review_note}
             })
 
-        # ================= SYSTEM =================
+        # 🎯 4. MAP DATA SECURITY LOG AUDIT (SYSTEM EVENTS)
         for log in logs:
             timeline.append({
-                "type": "SYSTEM",
-                "title": log.action_type or "System Event",
-                "description": log.details or "-",
+                # Jika log aktivitas auth, arahkan ke TIMELINE_SECURITY, sisanya SYSTEM [cite: 326-327]
+                "type": TimelineTypeEnum.TIMELINE_SECURITY.value if log.module_source == "AUTH" else TimelineTypeEnum.TIMELINE_SYSTEM.value,
+                "title": log.action_type.replace("_", " ").title() if log.action_type else "System Security Event",
+                "description": str(log.details) if log.details else "-",
                 "created_at": log.created_at,
                 "time": format_time(log.created_at),
-                "actor": f"Admin {log.admin_id}" if log.admin_id else "System",
-                "metadata": {}
+                # Tampilkan nama asli admin pembuat log jika ada
+                "actor": log.admin.full_name if log.admin else "System/Autonomous",
+                "severity": log.severity if log.severity else SeverityLevelEnum.INFO.value, # [cite: 346]
+                "source": log.module_source if log.module_source else EventSourceEnum.SYSTEM.value, # [cite: 356]
+                "metadata": {"target_type": log.target_type, "target_id": log.target_id}
             })
 
-        # ================= SORT =================
+        # ================= SORT PERUBAHAN DATA =================
         timeline.sort(key=lambda x: x["created_at"], reverse=True)
 
-        # ================= FILTER =================
+        # Filter tipe data berdasarkan parameter input jika dikirim dari router frontend
         if type:
             type = type.upper()
             timeline = [t for t in timeline if t["type"] == type]
 
-        # ================= CLEAN RESPONSE =================
+        # Hapus variabel timestamp mentah agar payload response rapi
         for t in timeline:
             del t["created_at"]
 

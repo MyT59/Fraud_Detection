@@ -49,9 +49,13 @@ CREATE TABLE admins (
     last_login_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    deleted_by INTEGER,
 
     CONSTRAINT fk_admin_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_created_by FOREIGN KEY (created_by) REFERENCES admins(id) ON DELETE SET NULL
+    CONSTRAINT fk_created_by FOREIGN KEY (created_by) REFERENCES admins(id) ON DELETE SET NULL,
+    CONSTRAINT fk_deleted_by_admin FOREIGN KEY (deleted_by) REFERENCES admins(id) ON DELETE SET NULL
 );
 
 CREATE TABLE user_sessions (
@@ -87,13 +91,20 @@ CREATE TABLE notification_preferences (
 CREATE TABLE activity_logs (
     id BIGSERIAL PRIMARY KEY,
     admin_id INTEGER,
-    action_type VARCHAR(100) NOT NULL,
+    action_type VARCHAR(50) NOT NULL,
     target_type VARCHAR(100),
     target_id VARCHAR(100),
-    details TEXT,
+    details JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    session_id INTEGER,
+    module_source VARCHAR(50) DEFAULT 'SYSTEM',
+    severity VARCHAR(20) DEFAULT 'INFO',
+    ip_address VARCHAR(50),
+    device VARCHAR(100),
+    browser VARCHAR(100),
 
-    CONSTRAINT fk_activity_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL
+    CONSTRAINT fk_activity_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL,
+    CONSTRAINT fk_activity_session FOREIGN KEY (session_id) REFERENCES user_sessions(id) ON DELETE SET NULL
 );
 
 CREATE TABLE blacklist_items (
@@ -373,6 +384,12 @@ CREATE INDEX idx_trx_original_id ON transactions_feed(original_trx_id);
 CREATE INDEX idx_activity_logs_target ON activity_logs(target_type, target_id);
 CREATE INDEX idx_activity_logs_time ON activity_logs(created_at DESC);
 CREATE INDEX idx_activity_logs_admin ON activity_logs(admin_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_severity ON activity_logs(severity);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_module ON activity_logs(module_source);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_session ON activity_logs(session_id);
+
+-- Admins Optimization
+CREATE INDEX IF NOT EXISTS idx_admins_soft_delete ON admins(is_deleted);
 
 -- JSONB GIN Indexes
 CREATE INDEX idx_trx_pattern_ids ON transactions_feed USING GIN (violation_pattern_ids);

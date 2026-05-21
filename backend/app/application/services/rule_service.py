@@ -4,7 +4,8 @@ from app.application.services.activity_log_service import log_activity
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 # Menggunakan path sesuai instruksi terbaru
-from app.domain.entities.target_type import TargetType 
+from app.domain.entities.target_type import TargetType
+from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 
 
 def create_rule(db: Session, data, admin):
@@ -12,29 +13,35 @@ def create_rule(db: Session, data, admin):
     rule.created_by = admin.id 
     
     db.add(rule)
-
     try:
-        db.flush()
-
+        db.flush()  # Ambil ID tanpa commit dulu
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="Rule key already exists"
-        )
+        raise HTTPException(status_code=409, detail="Rule key already exists")
+
+    # Capture state awal (After)
+    snapshot_after = {
+        "rule_name": rule.rule_name,
+        "rule_key": rule.rule_key,
+        "action": rule.action,
+        "severity": rule.severity,
+        "is_active": rule.is_active,
+        "rule_config": rule.rule_config
+    }
 
     log_activity(
-        db,
-        admin,
-        action_type="CREATE_RULE",
+        db=db,
+        admin=admin,
+        action_type=ActivityActionEnum.RULE_CREATED,
+        module_source=EventSourceEnum.RULE_ENGINE,
+        severity=SeverityLevelEnum.INFO,
         target_type=TargetType.RULE,
         target_id=rule.id,
-        details=f"Created rule: {rule.rule_name}"
+        details={"before": {}, "after": snapshot_after, "reason": "Initial rule creation"}
     )
 
-    db.commit() 
+    db.commit()  # Single transaction commit untuk rule + activity log
     db.refresh(rule)
-    
     return rule
 
 
@@ -65,23 +72,48 @@ def update_rule(db: Session, rule_id: int, data, admin):
     if not rule:
         return None
 
+    # 1. Simpan State SEBELUM Perubahan (Before Snapshot)
+    snapshot_before = {
+        "rule_name": rule.rule_name,
+        "action": rule.action,
+        "severity": rule.severity,
+        "is_active": rule.is_active,
+        "rule_config": rule.rule_config
+    }
+
+    # 2. Lakukan Mutasi Data
     for key, value in data.dict(exclude_unset=True).items():
         setattr(rule, key, value)
+    
+    db.flush()
 
-    db.commit()
-    db.refresh(rule)
+    # 3. Simpan State SESUDAH Perubahan (After Snapshot)
+    snapshot_after = {
+        "rule_name": rule.rule_name,
+        "action": rule.action,
+        "severity": rule.severity,
+        "is_active": rule.is_active,
+        "rule_config": rule.rule_config
+    }
 
-    # Log Update
+    # 4. Catat ke Log dengan format terstruktur
     log_activity(
-        db,
-        admin,
-        action_type="UPDATE_RULE",
+        db=db,
+        admin=admin,
+        action_type=ActivityActionEnum.RULE_UPDATED,
+        module_source=EventSourceEnum.RULE_ENGINE,
+        severity=SeverityLevelEnum.WARNING,  # Modifikasi rule bernilai sensitif
         target_type=TargetType.RULE,
         target_id=rule.id,
-        details=f"Updated rule: {rule.rule_name}"
+        details={
+            "before": snapshot_before,
+            "after": snapshot_after,
+            "reason": data.dict().get("update_reason", "Manual configuration update via dashboard")
+        }
     )
-    db.commit()
     
+    db.commit()  # Commit tunggal mencegah partial failure
+    db.refresh(rule)
     return rule
 
 def create_rule_builder_service(db, data, admin):
@@ -130,21 +162,30 @@ def toggle_rule(db: Session, rule_id: int, admin):
     if not rule:
         return None
 
+    snapshot_before = {"is_active": rule.is_active}
+    
     rule.is_active = not rule.is_active
-    db.commit()
-    db.refresh(rule)
+    db.flush()
 
-    # Log Toggle
+    snapshot_after = {"is_active": rule.is_active}
+
     log_activity(
-        db,
-        admin,
-        action_type="TOGGLE_RULE",
+        db=db,
+        admin=admin,
+        action_type=ActivityActionEnum.RULE_UPDATED,
+        module_source=EventSourceEnum.RULE_ENGINE,
+        severity=SeverityLevelEnum.WARNING,
         target_type=TargetType.RULE,
         target_id=rule.id,
-        details=f"{'Activated' if rule.is_active else 'Deactivated'} rule: {rule.rule_name}"
+        details={
+            "before": snapshot_before,
+            "after": snapshot_after,
+            "reason": f"Rule status toggled to {rule.is_active}"
+        }
     )
+    
     db.commit()
-
+    db.refresh(rule)
     return rule
 
 
@@ -153,17 +194,27 @@ def delete_rule(db: Session, rule_id: int, admin):
     if not rule:
         return None
 
-    # soft delete
-    rule.is_active = False
+    snapshot_before = {"is_active": rule.is_active}
     
-    # Log Delete (Soft)
+    # Soft delete sesuai standar enterprise FDS
+    rule.is_active = False
+    db.flush()
+    
+    snapshot_after = {"is_active": rule.is_active}
+
     log_activity(
-        db,
-        admin,
-        action_type="DELETE_RULE",
+        db=db,
+        admin=admin,
+        action_type=ActivityActionEnum.RULE_DELETED,
+        module_source=EventSourceEnum.RULE_ENGINE,
+        severity=SeverityLevelEnum.HIGH,  
         target_type=TargetType.RULE,
         target_id=rule.id,
-        details=f"Deactivated rule: {rule.rule_name}"
+        details={
+            "before": snapshot_before,
+            "after": snapshot_after,
+            "reason": "Soft deleted by administrator"
+        }
     )
     
     db.commit()
