@@ -28,7 +28,7 @@ router = APIRouter(prefix="/patterns", tags=["Pattern Management"])
 @router.post("/generate")
 def generate_patterns(
     db: Session = Depends(get_db), 
-    current_admin = Depends(is_risk_manager)
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     patterns = generate_patterns_from_reviews(db)
     count = save_generated_patterns(db, patterns)
@@ -51,7 +51,7 @@ def generate_patterns(
 # =========================
 # GET ACTIVE PATTERNS
 # =========================
-@router.get("/", dependencies=[Depends(is_risk_manager)])
+@router.get("/", dependencies=[Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))])
 def get_active_patterns(db: Session = Depends(get_db)):
     patterns = db.query(FraudPattern).filter(
         FraudPattern.is_active == True
@@ -74,7 +74,7 @@ def get_active_patterns(db: Session = Depends(get_db)):
 # =========================
 # GET CANDIDATE PATTERNS
 # =========================
-@router.get("/candidates", dependencies=[Depends(is_risk_manager)])
+@router.get("/candidates", dependencies=[Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))])
 def get_candidates(db: Session = Depends(get_db)):
     patterns = db.query(FraudPattern).filter(
         FraudPattern.is_active == False
@@ -96,14 +96,14 @@ def get_candidates(db: Session = Depends(get_db)):
 @router.get("/diagnostics", response_model=PatternDiagnosticsResponse)
 def get_pattern_diagnostics(
     db: Session = Depends(get_db),
-    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))  # 🔒 Proteksi Makro Manajemen
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))  
 ):
     return get_pattern_diagnostics_service(db)
 
 @router.get("/effectiveness", response_model=List[PatternEffectivenessResponse])
 def get_patterns_effectiveness(
     db: Session = Depends(get_db),
-    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))  # 🔒 Proteksi RBAC khusus Risk Manager
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")) 
 ):
     return get_pattern_effectiveness_service(db)
 
@@ -115,7 +115,7 @@ def get_patterns_effectiveness(
 def activate_pattern(
     pattern_id: int, 
     db: Session = Depends(get_db), 
-    current_admin = Depends(is_risk_manager)
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     pattern = db.query(FraudPattern).filter(
         FraudPattern.id == pattern_id
@@ -145,7 +145,7 @@ def activate_pattern(
 def create_pattern_manual(
     payload: dict = Body(...),
     db: Session = Depends(get_db),
-    current_admin = Depends(is_risk_manager)
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     try:
         new_pattern = FraudPattern(
@@ -185,7 +185,7 @@ def update_pattern(
     pattern_id: int,
     payload: dict = Body(...),
     db: Session = Depends(get_db),
-    current_admin = Depends(is_risk_manager)
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     pattern = db.query(FraudPattern).filter(
         FraudPattern.id == pattern_id
@@ -221,7 +221,7 @@ def update_pattern(
 @router.get("/stats")
 def pattern_stats(
     db: Session = Depends(get_db),
-    current_admin = Depends(is_risk_manager)
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     return get_pattern_statistics(db)
 
@@ -232,7 +232,7 @@ def pattern_stats(
 def delete_pattern(
     pattern_id: int, 
     db: Session = Depends(get_db),
-    current_admin = Depends(is_risk_manager)
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     pattern = db.query(FraudPattern).filter(
         FraudPattern.id == pattern_id
@@ -263,7 +263,7 @@ def delete_pattern(
 def deactivate_pattern(
     pattern_id: int, 
     db: Session = Depends(get_db),
-    current_admin = Depends(is_risk_manager)
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     pattern = db.query(FraudPattern).filter(
         FraudPattern.id == pattern_id
