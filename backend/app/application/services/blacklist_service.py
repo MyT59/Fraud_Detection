@@ -148,4 +148,4 @@ def run_blacklist_check(db, trx):
             "value": blacklist_hit.value
         }], 100
 
-    return False, [], 0
+    return False, [], 0 

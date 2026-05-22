@@ -54,8 +54,6 @@ class RetrainHistoryResponse(BaseModel):
     new_patterns_count: int
     log_details: Optional[Dict[str, Any]] = None
     model_version: Optional[str] = None
-    
-    # 🔥 TAMBAHAN BARU
     dataset_id: Optional[int] = None
     model_id: Optional[int] = None
     trigger_metadata: Optional[Dict[str, Any]] = None

@@ -449,7 +449,7 @@ def log_false_negative_service(db, transaction_id: int, admin_id: int, reason: s
     )
     db.add(feedback_log)
 
-    # 4. Update counter akurasi rule engine (karena kecurangan ini lolos, rule/pattern bernilai salah)
+    # 4. Update counter akurasi pattern engine (karena kecurangan ini lolos, pattern bernilai salah)
     update_pattern_accuracy(db, trx, is_fraud=True)
 
     # 5. Catat log audit aktivitas sistem

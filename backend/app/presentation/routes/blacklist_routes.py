@@ -128,13 +128,27 @@ def reject_blacklist(
 # UPDATE BLACKLIST
 # =========================
 @router.put("/{item_id}", response_model=BlacklistResponse)
-def update_blacklist(item_id: int, data: BlacklistCreateRequest, db: Session = Depends(get_db), current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))):
+def update_blacklist(
+    item_id: int, 
+    data: BlacklistCreateRequest, 
+    db: Session = Depends(get_db), 
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
+):
 
     item = db.query(BlacklistItem).filter(BlacklistItem.id == item_id).first()
 
     if not item:
         raise HTTPException(status_code=404, detail="Blacklist not found")
 
+    # Ambil snapshot data lama sebelum diubah untuk kebutuhan audit trail (Before Snapshot)
+    snapshot_before = {
+        "value": item.value,
+        "type": item.type,
+        "service_scope": item.service_scope,
+        "reason": item.reason
+    }
+
+    # Isi data baru
     item.value = data.value.strip().lower()
     item.type = data.type
     item.service_scope = data.service_scope.upper()
@@ -143,17 +157,33 @@ def update_blacklist(item_id: int, data: BlacklistCreateRequest, db: Session = D
     item.is_active = False
     item.review_note = None
 
-    db.commit()
-    db.refresh(item)
+    # 🎯 FIX DI SINI: Bungkus dengan try-except untuk menangkap UniqueConstraint Violation
+    try:
+        db.commit()
+        db.refresh(item)
+    except IntegrityError:
+        db.rollback()  # Batalkan transaksi yang gagal agar koneksi database tidak mengunci
+        raise HTTPException(
+            status_code=409,
+            detail="Kombinasi Tipe, Nilai, dan Scope Blacklist ini sudah terdaftar di data lain!"
+        )
 
-    # Log Activity
+    # Log Activity (Sudah disesuaikan ke standar JSONB & Before/After Snapshot)
     log_activity(
-        db,
-        current_admin,
+        db=db,
+        admin=current_admin,
         action_type="UPDATE_BLACKLIST",
         target_type=TargetType.BLACKLIST,
         target_id=item.id,
-        details=f"Updated {item.type}={item.value}"
+        details={
+            "before": snapshot_before,
+            "after": {
+                "value": item.value,
+                "type": item.type,
+                "service_scope": item.service_scope,
+                "reason": item.reason
+            }
+        }
     )
 
     return item

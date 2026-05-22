@@ -78,15 +78,18 @@ def get_alert_detail(alert_id: int, db: Session = Depends(get_db)):
 @router.patch("/{alert_id}/status")
 def update_alert_status(
     alert_id: int,
-    request: AlertStatusUpdate,  # 🔥 FIX: Menggunakan schema untuk validasi JSON Body
+    status: str,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")),
+    background_tasks: BackgroundTasks = BackgroundTasks() # 🎯 1. Suntikkan BackgroundTasks di sini
 ):
+    # 🎯 2. Teruskan variabel background_tasks ke dalam service
     return update_alert_status_service(
-        db,
-        alert_id,
-        request.status.value,  # 🔥 Ambil value string dari Enum (.value)
-        user.id
+        db=db,
+        alert_id=alert_id,
+        status=status,
+        user_id=current_admin.id, 
+        background_tasks=background_tasks 
     )
 
 @router.patch("/{alert_id}/resolve")
