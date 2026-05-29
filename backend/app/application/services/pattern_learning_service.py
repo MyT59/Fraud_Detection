@@ -220,7 +220,8 @@ def generate_patterns_from_reviews(db):
                     "pattern_rules": {
                         "logic": "AND",
                         "time_window_minutes": TIME_WINDOW,
-                        "conditions": [{"field": "distinct_account_count", "operator": ">=", "value": threshold}]
+                        "conditions": [{"field": "distinct_account_count", "operator": ">=", 
+                                        "value": threshold}]
                     },
                     "risk_score": 80,
                     "action": "BLOCK",
@@ -233,7 +234,8 @@ def generate_patterns_from_reviews(db):
                     "pattern_rules": {
                         "logic": "AND",
                         "time_window_minutes": TIME_WINDOW,
-                        "conditions": [{"field": "distinct_customer_count", "operator": ">=", "value": threshold}]
+                        "conditions": [{"field": "distinct_customer_count", "operator": ">=", 
+                                        "value": threshold}]
                     },
                     "risk_score": 70,
                     "action": "BLOCK",
