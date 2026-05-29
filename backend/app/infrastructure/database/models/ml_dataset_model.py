@@ -13,10 +13,8 @@ class MLDataset(Base):
     file_name = Column(String(255), nullable=False)        
     file_path = Column(String(255), nullable=False)        
     
-    # Keamanan & Integritas
     checksum_sha256 = Column(String(64), unique=True, nullable=False)
     
-    # Metrik Tambahan
     file_size_bytes = Column(BigInteger)
     row_count = Column(Integer)
     is_archived = Column(Boolean, default=False)

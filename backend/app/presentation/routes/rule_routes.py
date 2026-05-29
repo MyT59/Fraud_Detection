@@ -25,7 +25,8 @@ router = APIRouter(prefix="/rules", tags=["Rule Management"])
 
 
 @router.post("/", response_model=RuleResponse)
-def create_rule_api(data: RuleCreate, db: Session = Depends(get_db), current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))):
+def create_rule_api(data: RuleCreate, db: Session = Depends(get_db), 
+                    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))):
     return create_rule(db, data, current_admin)
 
 

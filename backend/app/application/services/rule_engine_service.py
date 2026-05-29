@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 # SIMPLE RULE (LEGACY)
 # =========================
 def evaluate_simple_rule(value, operator, threshold):
-    # Equality check pertama untuk menangani string non-numeric
     if operator == "=":
         return str(value).strip() == str(threshold).strip()
 
@@ -162,7 +161,6 @@ def run_rule_engine(db, trx):
             rule_hit_count += 1
             rule_groups.add(group)
 
-            # Map Rule Severity DB string ke SeverityLevelEnum log
             log_severity = {
                 "CRITICAL": SeverityLevelEnum.CRITICAL,
                 "HIGH": SeverityLevelEnum.HIGH,
@@ -173,7 +171,7 @@ def run_rule_engine(db, trx):
            
             log_activity(
                 db=db,
-                admin=None, # Sistem Otomatis / Autonomous Decision
+                admin=None, 
                 action_type=ActivityActionEnum.RULE_TRIGGERED,
                 module_source=EventSourceEnum.RULE_ENGINE,
                 severity=log_severity,
@@ -196,7 +194,7 @@ def run_rule_engine(db, trx):
                 review_count += 1
 
             if rule.action == "BLOCK":
-                db.commit() # Simpan perubahan hit_count dan log pemicu sebelum di-block
+                db.commit() 
                 return violations, risk_score, rule_actions
 
     rule_score_total = risk_score
@@ -205,6 +203,6 @@ def run_rule_engine(db, trx):
     if len(rule_groups) >= 2: risk_score += 10
 
     risk_score = min(risk_score, 100)
-    db.commit() # Commit akumulasi hit_count aturan
+    db.commit()
     
     return violations, risk_score, rule_actions

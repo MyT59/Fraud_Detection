@@ -3,7 +3,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 
 # ==========================================
-# 1. SCHEMAS UNTUK REQUEST (INPUT FRONTEND)
+# 1. SCHEMAS REQUEST 
 # ==========================================
 class AdminCreateRequest(BaseModel):
     full_name: str
@@ -24,7 +24,7 @@ class AdminUpdateRequest(BaseModel):
 
 
 # ==========================================
-# 2. SCHEMA UNTUK RESPONSE (OUTPUT API)
+# 2. SCHEMA RESPONSE 
 # ==========================================
 class AdminResponse(BaseModel):
     id: int
@@ -38,8 +38,6 @@ class AdminResponse(BaseModel):
     notes: Optional[str] = None
     created_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
-
-
 class ProfileUpdateRequest(BaseModel):
     full_name: Optional[str] = None
     phone_number: Optional[str] = None

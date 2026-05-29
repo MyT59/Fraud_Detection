@@ -21,9 +21,4 @@ class MLModel(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_active = Column(Boolean, default=True, server_default=text("true"))
 
-    # =========================
-    # RELATIONSHIPS
-    # =========================
-    # 🔥 TAMBAHAN BARU: Menerima relasi dari tabel retrain_history
-    # Ingat: Pakai string "RetrainHistory" agar tidak circular import!
     histories = relationship("RetrainHistory", back_populates="model")

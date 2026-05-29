@@ -25,16 +25,10 @@ class RetrainHistory(Base):
     log_details = Column(JSONB)
     model_version = Column(String(50))
 
-    # =========================
-    # RELATIONSHIPS (Cukup pakai String)
-    # =========================
     schedule = relationship("RetrainSchedule", back_populates="history_logs")
     dataset = relationship("MLDataset", back_populates="retrain_histories")
     model = relationship("MLModel", back_populates="histories")
 
-    # =========================
-    # INDEXES
-    # =========================
     __table_args__ = (
         Index('idx_retrain_history_time', execution_time.desc()),
         Index('idx_retrain_history_dataset_id', 'dataset_id'),

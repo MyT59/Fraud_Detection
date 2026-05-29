@@ -63,7 +63,7 @@ class HealthCheckService:
                 "check": lambda: get_open_alert_count(db),
                 "description": "Fraud & rule engine connection"
             },
-            # Contoh jika kamu pakai Third Party:
+            # Contoh jika pakai Third Party:
             # {
             #     "name": "Payment Gateway API",
             #     "type": "external",

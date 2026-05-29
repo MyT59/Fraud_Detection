@@ -33,7 +33,7 @@ def create_session(db, admin, access_token, refresh_token, ip, user_agent):
         oldest = sorted(sessions, key=lambda x: x.created_at)[0]
         oldest.is_active = False
         oldest.is_current = False
-        db.flush() # Menggunakan flush untuk mendukung single transaction di level pemanggil
+        db.flush() 
 
     return repo.create(session)
 
@@ -57,21 +57,20 @@ def get_sessions(db, current_admin):
 def revoke_session(db, session_id, current_admin):
     repo = UserSessionRepository(db)
     
-    # 🚨 FIX: Ambil metadata sesi terlebih dahulu untuk kebutuhan forensik log sebelum dicabut
+    # Ambil metadata sesi terlebih dahulu untuk kebutuhan forensik log sebelum dicabut
     session_record = db.query(UserSession).filter(UserSession.id == session_id).first()
     
-    # Jalankan fungsi revoke bawaan
     repo.revoke(session_id, current_admin.id)
     db.flush()
 
     if session_record:
-        # 🚨 REKOMENDASI AUDIT WAJIB: Catat administrative forced logout ke log 
+        # AUDIT: Catat administrative forced logout ke log 
         log_activity(
             db=db,
-            admin=current_admin, # Admin/Manager yang mengeksekusi tombol revoke
+            admin=current_admin, 
             action_type=ActivityActionEnum.SESSION_REVOKED,
             module_source=EventSourceEnum.AUTH,
-            severity=SeverityLevelEnum.WARNING, # Pencabutan sesi paksa bernilai Warning
+            severity=SeverityLevelEnum.WARNING, 
             target_type="SESSION",
             target_id=str(session_id),
             ip_address=session_record.ip_address,
@@ -84,6 +83,6 @@ def revoke_session(db, session_id, current_admin):
             }
         )
     
-    # 🔥 SINGLE TRANSACTION COMMIT
+    # SINGLE TRANSACTION COMMIT
     db.commit()
     return {"message": "Session revoked successfully"}

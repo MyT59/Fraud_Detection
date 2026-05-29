@@ -12,7 +12,7 @@ class NoisyPatternItem(BaseModel):
     name: str
     false_positives: int
 
-class WorstAccuracyRuleItem(BaseModel):
+class WorstAccuracyPatternItem(BaseModel):
     id: int
     name: str
     accuracy: float
@@ -26,5 +26,5 @@ class SystemSuggestionItem(BaseModel):
 # Skema utama penampung data diagnostik makro
 class PatternDiagnosticsResponse(BaseModel):
     noisy_patterns: List[NoisyPatternItem]
-    worst_accuracy_rules: List[WorstAccuracyRuleItem]
+    worst_accuracy_patterns: List[WorstAccuracyPatternItem]
     system_suggestions: List[SystemSuggestionItem]

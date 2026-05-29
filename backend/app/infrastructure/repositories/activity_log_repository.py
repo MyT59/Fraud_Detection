@@ -11,7 +11,8 @@ class ActivityLogRepository:
         self.db.add(log)
         # db.commit() dilakukan di level service (Single Transaction Commit)
 
-    def get_filtered(self, skip=0, limit=50, action_type=None, severity=None, start_date=None, end_date=None, email=None):
+    def get_filtered(self, skip=0, limit=50, action_type=None, severity=None, start_date=None,
+                      end_date=None, email=None):
         query = self.db.query(ActivityLog).outerjoin(Admin, ActivityLog.admin_id == Admin.id).options(joinedload(ActivityLog.admin))
 
         if action_type:

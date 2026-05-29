@@ -16,7 +16,7 @@ from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 
 
-# 🔐 PASSWORD VALIDATION
+# PASSWORD VALIDATION
 def validate_password(password: str):
     if len(password) < 8:
         raise HTTPException(400, "Password must be at least 8 characters")
@@ -30,7 +30,7 @@ def validate_password(password: str):
         raise HTTPException(400, "Password must contain special character")
 
 
-# 🔍 HELPER: COUNT ACTIVE SUPER ADMIN
+# HELPER: COUNT ACTIVE SUPER ADMIN
 def count_active_super_admins(repo):
     # Hanya hitung SUPER_ADMIN yang aktif secara fisik dan belum di-soft delete
     return len([
@@ -39,8 +39,9 @@ def count_active_super_admins(repo):
     ])
 
 
-# ✅ CREATE ACCOUNT
-def create_account(db, full_name, email, password, confirm_password, role_id, created_by, department=None, phone_number=None, notes=None):
+# CREATE ACCOUNT
+def create_account(db, full_name, email, password, confirm_password, role_id, created_by, department=None,
+                    phone_number=None, notes=None):
     repo = AdminRepository(db)
     existing = repo.get_by_email(email)
     if existing: raise HTTPException(400, "Email already registered")
@@ -162,8 +163,9 @@ def reset_password(db, admin_id, performed_by):
     return {"message": "Temporary password generated", "temporary_password": temp_password}
 
 
-# ✅ UPDATE ACCOUNT
-def update_account(db, admin_id, full_name=None, role_id=None, department=None, phone_number=None, notes=None, updated_by=None):
+# UPDATE ACCOUNT
+def update_account(db, admin_id, full_name=None, role_id=None, department=None, phone_number=None, 
+                   notes=None, updated_by=None):
     repo = AdminRepository(db)
     admin = repo.get_by_id(admin_id)
     if not admin or admin.is_deleted: raise HTTPException(404, "User not found")
@@ -188,20 +190,32 @@ def update_account(db, admin_id, full_name=None, role_id=None, department=None, 
     actor_admin = db.query(Admin).filter(Admin.id == updated_by).first()
 
     log_activity(
-        db=db, admin=actor_admin, action_type=ActivityActionEnum.ACCOUNT_ROLE_CHANGED if role_id else ActivityActionEnum.RULE_UPDATED,
-        module_source=EventSourceEnum.AUTH, severity=SeverityLevelEnum.WARNING, target_type=TargetType.ADMIN, target_id=admin.id,
+        db=db, 
+        admin=actor_admin, 
+        action_type=ActivityActionEnum.ACCOUNT_ROLE_CHANGED if role_id else ActivityActionEnum.RULE_UPDATED,
+        module_source=EventSourceEnum.AUTH, 
+        severity=SeverityLevelEnum.WARNING, 
+        target_type=TargetType.ADMIN, 
+        target_id=admin.id,
         details={"before": snapshot_before, "after": snapshot_after, "email": admin.email}
     )
     db.commit()
     return AdminResponse(
-        id=admin.id, full_name=admin.full_name, email=admin.email,
-        is_active=admin.is_active, is_deleted=getattr(admin, "is_deleted", False), # 🎯 SUNTIKKAN INI
-        role=admin.role.role_name, department=admin.department, phone_number=admin.phone_number,
-        notes=admin.notes, created_at=admin.created_at, last_login_at=admin.last_login_at
+        id=admin.id, 
+        full_name=admin.full_name, 
+        email=admin.email,
+        is_active=admin.is_active, 
+        is_deleted=getattr(admin, "is_deleted", False), # 🎯 SUNTIKKAN INI
+        role=admin.role.role_name, 
+        department=admin.department, 
+        phone_number=admin.phone_number,
+        notes=admin.notes, 
+        created_at=admin.created_at, 
+        last_login_at=admin.last_login_at
     )
 
 
-# ✅ SUSPEND / ACTIVATE
+# SUSPEND / ACTIVATE
 def set_account_status(db, admin_id, is_active: bool, performed_by):
     repo = AdminRepository(db)
     admin = repo.get_by_id(admin_id)
@@ -219,20 +233,32 @@ def set_account_status(db, admin_id, is_active: bool, performed_by):
     actor_admin = db.query(Admin).filter(Admin.id == performed_by).first()
 
     log_activity(
-        db=db, admin=actor_admin, action_type=status_enum, module_source=EventSourceEnum.AUTH,
+        db=db, 
+        admin=actor_admin, 
+        action_type=status_enum, 
+        module_source=EventSourceEnum.AUTH,
         severity=SeverityLevelEnum.HIGH if not is_active else SeverityLevelEnum.INFO,
-        target_type=TargetType.ADMIN, target_id=admin.id, details={"email": admin.email, "target_status_active": is_active}
+        target_type=TargetType.ADMIN, 
+        target_id=admin.id, 
+        details={"email": admin.email, "target_status_active": is_active}
     )
     db.commit()
     return AdminResponse(
-        id=admin.id, full_name=admin.full_name, email=admin.email,
-        is_active=admin.is_active, is_deleted=getattr(admin, "is_deleted", False), # 🎯 SUNTIKKAN INI
-        role=admin.role.role_name, department=admin.department, phone_number=admin.phone_number,
-        notes=admin.notes, created_at=admin.created_at, last_login_at=admin.last_login_at
+        id=admin.id, 
+        full_name=admin.full_name, 
+        email=admin.email,
+        is_active=admin.is_active, 
+        is_deleted=getattr(admin, "is_deleted", False), 
+        role=admin.role.role_name, 
+        department=admin.department, 
+        phone_number=admin.phone_number,
+        notes=admin.notes, 
+        created_at=admin.created_at, 
+        last_login_at=admin.last_login_at
     )
 
 
-# 🗑️ FIX POIN 9: SOFT DELETE ACCOUNT (Integritas Forensik Terjamin) 
+# SOFT DELETE ACCOUNT (Integritas Forensik) 
 def delete_account(db, admin_id, performed_by):
     repo = AdminRepository(db)
     admin = repo.get_by_id(admin_id)
@@ -245,9 +271,9 @@ def delete_account(db, admin_id, performed_by):
         if count_active_super_admins(repo) <= 1:
             raise HTTPException(400, "Cannot delete the last Super Admin")
 
-    # 🚨 EKSEKUSI LIFECYCLE SOFT DELETE 
+    # EKSEKUSI LIFECYCLE SOFT DELETE 
     admin.is_deleted = True
-    admin.is_active = False # Otomatis nonaktifkan akses login
+    admin.is_active = False 
     admin.deleted_at = datetime.now(timezone.utc)
     admin.deleted_by = performed_by
     
@@ -256,11 +282,11 @@ def delete_account(db, admin_id, performed_by):
 
     actor_admin = db.query(Admin).filter(Admin.id == performed_by).first()
 
-    # Catat ke log dengan tingkat bahaya CRITICAL karena penghapusan bersifat permanen di mata sistem [cite: 275]
+    # Catat ke log dengan tingkat bahaya CRITICAL karena penghapusan bersifat permanen di mata sistem
     log_activity(
         db=db,
         admin=actor_admin,
-        action_type=ActivityActionEnum.ACCOUNT_SUSPENDED, # Memanfaatkan enum suspend makro untuk log v1
+        action_type=ActivityActionEnum.ACCOUNT_SUSPENDED, 
         module_source=EventSourceEnum.AUTH,
         severity=SeverityLevelEnum.CRITICAL, 
         target_type=TargetType.ADMIN,
@@ -272,5 +298,5 @@ def delete_account(db, admin_id, performed_by):
         }
     )
     
-    db.commit() # Commit tunggal yang mengikat pembaruan relasi & data log [cite: 110]
+    db.commit() 
     return {"message": "Account successfully archived and soft deleted"}

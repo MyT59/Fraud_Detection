@@ -17,7 +17,7 @@ class MLRealtimeService:
     - orchestration flow
     - async-ready processing structure
     - transaction ML field updates
-    - optional alert escalation
+    - alert escalation
 
     Actual ML responsibilities later:
     - realtime feature generation
@@ -98,19 +98,46 @@ class MLRealtimeService:
         transaction.score_breakdown = existing_breakdown
 
         # =========================================================
-        # OPTIONAL ALERT ESCALATION
+        # ALERT ESCALATION
         # =========================================================
+        # Temporary backend orchestration placeholder.
+        # ML actual anomaly logic can be connected later.
+
+        anomaly_threshold = 0.8
+
+        if ml_score >= anomaly_threshold:
+            is_anomaly = True
 
         if is_anomaly:
-            create_alert(
-                db=self.db,
-                transaction_id=transaction.id,
-                alert_type="ML_ANOMALY",
-                severity="HIGH",
-                title="ML Anomaly Detected",
-                description="Async ML engine detected suspicious behavior.",
-                source="ML_RUNTIME",
-            )
+            try:
+                create_alert(
+                    db=self.db,
+                    transaction_id=transaction.id,
+                    alert_type="ML_ANOMALY",
+                    severity="HIGH",
+                    title="ML Anomaly Detected",
+                    description=(
+                        "Batch/Realtime ML engine detected "
+                        "suspicious transaction behavior."
+                    ),
+                    source="ML_RUNTIME",
+                )
+
+                existing_breakdown.update(
+                    {
+                        "alert_escalated": True,
+                        "alert_escalated_at": datetime.now(
+                            timezone.utc
+                        ).isoformat(),
+                    }
+                )
+
+            except Exception as e:
+                existing_breakdown.update(
+                    {
+                        "alert_escalation_error": str(e),
+                    }
+                )
 
         self.db.commit()
         self.db.refresh(transaction)

@@ -33,10 +33,9 @@ def normalize(value: str | None, to_lower: bool = True):
     return value.lower() if to_lower else value
 
 def _apply_hard_block(trx: Transaction, violations: list, db: Session, bl_score: float = None):
-    """
-    Helper untuk menangani eksekusi early return (Blacklist / Rule Block).
-    Mencegah duplikasi kode dan memastikan is_flagged_ml di-set sebelum commit.
-    """
+    # Helper untuk menangani eksekusi early return (Blacklist / Rule Block).
+    # Mencegah duplikasi kode dan memastikan is_flagged_ml di-set sebelum commit.
+
     trx.risk_score = max(100, bl_score or 100)
     trx.final_status = TransactionStatusEnum.FRAUD
     trx.risk_level = "CRITICAL"
@@ -44,9 +43,8 @@ def _apply_hard_block(trx: Transaction, violations: list, db: Session, bl_score:
     if violations:
         trx.violation_reason = " | ".join([f"{v['type']}:{v['name']}" for v in violations])
 
-    # FIX BUG #1, #3 & #4: Set flag & buat alert sebelum commit
     trx.is_flagged_ml = True
-    create_alert(db, trx)  # Pastikan alert_service HANYA melakukan db.add(alert)
+    create_alert(db, trx) 
 
     log_activity(
         db=db,
@@ -202,12 +200,10 @@ def process_transaction(data: dict, db: Session):
         # =========================
         # 9. ALERT & COMMIT (FINAL STATE)
         # =========================
-        # FIX BUG #1 & #2: Siapkan state dengan utuh, alert tanpa commit, baru final commit
         if trx.final_status in [TransactionStatusEnum.REVIEW, TransactionStatusEnum.FRAUD]:
             trx.is_flagged_ml = True
             create_alert(db, trx)
             
-            # 🔥 TAMBAHKAN DI SINI (Normal ML/Rule Flagging)
             log_activity(
                 db=db,
                 admin=None,

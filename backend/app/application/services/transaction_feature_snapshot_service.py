@@ -69,6 +69,8 @@ class TransactionFeatureSnapshotService:
         # NORMALIZED SNAPSHOT PAYLOAD
         # =========================================================
 
+        details = transaction.transaction_details or {}
+
         snapshot = {
             "transaction": {
                 "id": transaction.id,
@@ -89,6 +91,19 @@ class TransactionFeatureSnapshotService:
                     None,
                 ),
                 "domain": domain,
+                
+                # --- AGENUSA ---
+                "response_code": details.get("response_code"),
+                "processing_code": details.get("processing_code"),
+                "dest_account_number": details.get("dest_account_number"),
+                
+                # --- NUSABILL ---
+                "customer_id": getattr(transaction, "user_account_id", None), 
+                "bill_date": getattr(transaction, "transaction_time", None), 
+                "payment_date": getattr(transaction, "transaction_time", None), 
+                "bill_amount": float(transaction.amount or 0), 
+                "payment_amount": float(transaction.amount or 0), 
+                "channel": details.get("channel", "API")
             },
             "historical_context": {
                 "recent_account_transactions": recent_account_transactions,
@@ -99,7 +114,7 @@ class TransactionFeatureSnapshotService:
                 "snapshot_generated_at": datetime.now(
                     timezone.utc
                 ).isoformat(),
-                "snapshot_version": "v1",
+                "snapshot_version": "v1.1", 
                 "snapshot_type": "REALTIME_CONTEXT",
             },
         }
@@ -109,7 +124,6 @@ class TransactionFeatureSnapshotService:
     # =============================================================
     # INTERNAL HELPERS
     # =============================================================
-
     def _detect_transaction_domain(self, transaction):
         """
         Detect normalized ML domain.

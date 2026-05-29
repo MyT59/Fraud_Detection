@@ -34,6 +34,7 @@ from app.presentation.routes.ws_routes import router as ws_router
 from app.presentation.routes import session_routes
 from app.presentation.routes.isolation_routes import router as isolation_router
 from app.presentation.routes.retrain_routes import router as retrain_router
+from app.presentation.routes.analytics_routes import router as analytics_router
 
 # SERVICES
 from app.application.services.dashboard_service import DashboardService
@@ -150,7 +151,7 @@ app.include_router(rule_router)
 app.include_router(session_routes.router)
 app.include_router(isolation_router)
 app.include_router(retrain_router)
-
+app.include_router(analytics_router)
 
 # =========================
 # HEALTH CHECK (MERGED)

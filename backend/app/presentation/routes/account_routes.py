@@ -22,11 +22,10 @@ router = APIRouter(prefix="/accounts", tags=["Accounts"])
 # CREATE ACCOUNT
 @router.post("/", response_model=AdminResponse)
 def create(
-    request: AdminCreateRequest,  # 🔥 Frontend mengirim JSON dengan format ini
+    request: AdminCreateRequest,  
     db: Session = Depends(get_db),
     current_admin=Depends(require_roles("SUPER_ADMIN"))
 ):
-    # Data dari request dibongkar dan dikirim ke service kamu
     return create_account(
         db=db,
         full_name=request.full_name,

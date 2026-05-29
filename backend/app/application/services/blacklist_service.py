@@ -117,13 +117,12 @@ def run_blacklist_check(db, trx):
     if blacklist_hit:
         blacklist_hit.hit_count += 1
         
-        # 🔥 REKOMENDASI AUDIT WAJIB: Catat insiden Blacklist Hit ke Activity Log 
         log_activity(
             db=db,
-            admin=None,  # Sistem Otomatis / Autonomous Decision 
+            admin=None,  
             action_type=ActivityActionEnum.BLACKLIST_HIT,
             module_source=EventSourceEnum.BLACKLIST,
-            severity=SeverityLevelEnum.CRITICAL,  # Terkena Blacklist bernilai Critical karena langsung memblokir [cite: 251]
+            severity=SeverityLevelEnum.CRITICAL,  
             target_type="TRANSACTION",
             target_id=str(trx.original_trx_id),
             ip_address=getattr(trx, "ip_address", None),
@@ -137,7 +136,6 @@ def run_blacklist_check(db, trx):
             }
         )
         
-        # Sinkronisasi satu kali transaksi untuk perubahan hit_count dan penulisan log 
         db.commit() 
         
         return True, [{

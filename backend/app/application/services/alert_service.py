@@ -132,7 +132,6 @@ def create_alert(db, trx, background_tasks: BackgroundTasks):
 
     prefix = "AGN" if trx.service_source == "AGENUSA" else "NUS"
     
-    # 🎯 FIX 2: Diubah memanggil safe_redis_publish agar parameter task_type tidak memicu crash 
     background_tasks.add_task(
         safe_redis_publish,
         {
@@ -250,14 +249,14 @@ def update_alert_status_service(db, alert_id, status, user_id, background_tasks:
         {"type": "ALERT_UPDATED", "alert_id": alert.id, "status": alert.status},
         task_type="ALERT_STATUS_UPDATED"
     )
-    return {"message": "Alert status updated successfully", "alert_id": alert.id, "new_status": alert.status, "resolved_by": alert.resolved_by, "resolved_at": alert.resolved_at}
+    return {"message": "Alert status updated successfully", "alert_id": alert.id, 
+            "new_status": alert.status, "resolved_by": alert.resolved_by, 
+            "resolved_at": alert.resolved_at}
 
 
 # ==========================================
 # 🔥 INVESTIGATION WORKFLOW HARDENING
 # ==========================================
-
-# 🎯 FIX 1: Mengubah nama parameter user_id -> admin_id agar sesuai dengan rute API 
 def claim_alert_service(db, alert_id, admin_id, background_tasks: BackgroundTasks):
     alert = db.query(FraudAlert).filter(FraudAlert.id == alert_id).with_for_update().first()
     if not alert: raise HTTPException(status_code=404, detail="Alert not found")
@@ -269,11 +268,9 @@ def claim_alert_service(db, alert_id, admin_id, background_tasks: BackgroundTask
     alert.claimed_by = admin_id
     alert.claimed_at = datetime.now(timezone.utc)
     alert.status = "IN_PROGRESS"
-
     trx_repo = TransactionRepository(db)
     trx = trx_repo.get_by_id(alert.transaction_id)
     if trx: trx.final_status = TransactionStatusEnum.UNDER_REVIEW
-
     actor_admin = db.query(Admin).filter(Admin.id == admin_id).first()
 
     log_activity(
@@ -286,16 +283,13 @@ def claim_alert_service(db, alert_id, admin_id, background_tasks: BackgroundTask
         target_id=alert.id,
         details={"claimed_by_id": admin_id, "transaction_id": alert.transaction_id, "status": "INVESTIGATION_STARTED"}
     )
-
     db.commit()
     db.refresh(alert)
 
     payload = {"event": "ALERT_CLAIMED", "alert_id": alert.id, "claimed_by": admin_id, "message": "..."}
     background_tasks.add_task(safe_redis_publish, payload, task_type="ALERT_CLAIMED")
     return {"message": "Alert successfully claimed", "alert_id": alert.id}
-
-
-# 🎯 FIX 1: Mengubah nama parameter user_id -> admin_id agar sesuai dengan rute API 
+ 
 def release_alert_service(db, alert_id, admin_id, user_role="FRAUD_ANALYST"):
     alert = db.query(FraudAlert).filter(FraudAlert.id == alert_id).with_for_update().first()
     if not alert: raise HTTPException(status_code=404, detail="Alert not found")
@@ -307,11 +301,9 @@ def release_alert_service(db, alert_id, admin_id, user_role="FRAUD_ANALYST"):
     alert.claimed_by = None
     alert.claimed_at = None
     alert.status = "OPEN"
-
     trx_repo = TransactionRepository(db)
     trx = trx_repo.get_by_id(alert.transaction_id)
     if trx: trx.final_status = TransactionStatusEnum.PENDING
-
     actor_admin = db.query(Admin).filter(Admin.id == admin_id).first()
 
     log_activity(
@@ -322,7 +314,8 @@ def release_alert_service(db, alert_id, admin_id, user_role="FRAUD_ANALYST"):
         severity=SeverityLevelEnum.WARNING, 
         target_type=TargetType.ALERT,
         target_id=alert.id,
-        details={"released_by_id": admin_id, "previous_owner_id": old_owner, "transaction_id": alert.transaction_id}
+        details={"released_by_id": admin_id, "previous_owner_id": old_owner,
+                  "transaction_id": alert.transaction_id}
     )
 
     db.commit()

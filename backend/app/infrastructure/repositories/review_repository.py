@@ -76,7 +76,7 @@ class ReviewRepository:
         ).group_by(
             ManualReview.reviewer_id, Admin.full_name, Admin.email
         ).order_by(
-            func.count(ManualReview.id).desc()  # Urutkan dari yang paling produktif
+            func.count(ManualReview.id).desc()  
         ).all()
     
     def get_hourly_reviews_24h(self):
@@ -121,10 +121,8 @@ class ReviewRepository:
         return [{"day": r.day.strftime("%Y-%m-%d") if r.day else "", "count": r.count} for r in results]
 
     def get_queue_growth_7d(self):
-        # Hitung batas waktu 7 hari ke belakang
         seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
-        # 1. Subquery untuk menghitung Alert Masuk (Incoming) per hari
         incoming_sq = (
             self.db.query(
                 func.date(FraudAlert.created_at).label("day"),
@@ -135,8 +133,6 @@ class ReviewRepository:
             .subquery()
         )
 
-        # 2. Subquery untuk menghitung Alert Selesai (Resolved) per hari
-        # (Asumsi kita menghitung dari updated_at ketika status berubah menjadi RESOLVED)
         resolved_sq = (
             self.db.query(
                 func.date(FraudAlert.updated_at).label("day"),
@@ -150,23 +146,17 @@ class ReviewRepository:
             .subquery()
         )
 
-        # 3. FULL OUTER JOIN untuk menggabungkan kedua subquery berdasarkan tanggal
-        # COALESCE digunakan untuk mengisi tanggal yang kosong dari salah satu tabel,
-        # dan mengubah nilai NULL menjadi 0.
         query = (
             self.db.query(
                 func.coalesce(incoming_sq.c.day, resolved_sq.c.day).label("day"),
                 func.coalesce(incoming_sq.c.incoming_count, 0).label("incoming_count"),
                 func.coalesce(resolved_sq.c.resolved_count, 0).label("resolved_count")
             )
-            # Parameter full=True adalah kunci utama FULL OUTER JOIN di SQLAlchemy
             .outerjoin(resolved_sq, incoming_sq.c.day == resolved_sq.c.day, full=True)
             .order_by("day")
         )
 
         results = query.all()
-
-        # 4. Format hasil akhirnya sesuai dengan schema Pydantic yang diminta Frontend
         return [
             {
                 "day": str(row.day),

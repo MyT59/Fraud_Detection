@@ -15,13 +15,12 @@ from app.infrastructure.database.models.retrain_schedule_model import RetrainSch
 logger = logging.getLogger(__name__)
 
 def run_sla_escalation_task():
-    """
-    Background worker yang berjalan periodik untuk mencari alert HIGH/CRITICAL 
-    yang terlantar di antrean OPEN > 10 menit, lalu mendongkrak prioritasnya.
-    """
+    # Background worker yang berjalan periodik untuk mencari alert HIGH/CRITICAL 
+    # yang terlantar di antrean OPEN > 10 menit, lalu mendongkrak prioritasnya.
+
     db = SessionLocal()
     try:
-        # Tentukan ambang batas waktu SLA (10 menit yang lalu)
+        # Ambang batas waktu SLA (10 menit yang lalu)
         sla_threshold = datetime.now(timezone.utc) - timedelta(minutes=10)
         
         # Cari alert OPEN, HIGH/CRITICAL, yang dibuat sebelum waktu batas, dan belum dieskalasi
@@ -37,13 +36,10 @@ def run_sla_escalation_task():
 
         for alert in overdue_alerts:
             old_priority = alert.priority or 0.0
-            
-            # Eksekusi Eskalasi: Berikan penalti +20 poin agar melesat ke atas antrean
             alert.priority = old_priority + 20.0  
             alert.is_escalated = True
             alert.title = f"[ESCALATED] {alert.title or 'Fraud Detected'}"
             
-            # Catat log aktivitas sistem (Aktor: None / System Engine)
             log_activity(
                 db=db,
                 admin=None, 

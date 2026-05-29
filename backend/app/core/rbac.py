@@ -23,7 +23,7 @@ def require_roles(*allowed_roles):
 # SPECIFIC SHORTCUTS
 # =========================
 
-# 🔴 SUPER ADMIN
+# SUPER ADMIN
 def is_super_admin(admin=Depends(get_current_user)):
     if admin.role.role_name != "SUPER_ADMIN":
         raise HTTPException(
@@ -33,7 +33,7 @@ def is_super_admin(admin=Depends(get_current_user)):
     return admin
 
 
-# 🟠 RISK MANAGER
+# RISK MANAGER
 def is_risk_manager(admin=Depends(get_current_user)):
     if admin.role.role_name != "RISK_MANAGER":
         raise HTTPException(
@@ -43,7 +43,7 @@ def is_risk_manager(admin=Depends(get_current_user)):
     return admin
 
 
-# 🟡 FRAUD ANALYST (ADMIN)
+# FRAUD ANALYST (ADMIN)
 def is_fraud_analyst(admin=Depends(get_current_user)):
     if admin.role.role_name != "FRAUD_ANALYST":
         raise HTTPException(
