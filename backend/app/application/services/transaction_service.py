@@ -168,7 +168,7 @@ def process_transaction(data: dict, db: Session):
         )
 
         trx.risk_score = ensemble.get("final_score", 0)
-        trx.final_status = ensemble.get("final_status", TransactionStatusEnum.REVIEW)
+        trx.final_status = ensemble.get("final_status", TransactionStatusEnum.UNDER_REVIEW)
         trx.score_breakdown = {
             "rule_score": rule_score,
             "pattern_score": pattern_score,
@@ -200,7 +200,7 @@ def process_transaction(data: dict, db: Session):
         # =========================
         # 9. ALERT & COMMIT (FINAL STATE)
         # =========================
-        if trx.final_status in [TransactionStatusEnum.REVIEW, TransactionStatusEnum.FRAUD]:
+        if trx.final_status in [TransactionStatusEnum.UNDER_REVIEW, TransactionStatusEnum.FRAUD]:
             trx.is_flagged_ml = True
             create_alert(db, trx)
             

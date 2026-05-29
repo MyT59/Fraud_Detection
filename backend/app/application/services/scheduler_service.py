@@ -66,10 +66,7 @@ def scheduled_retrain_task(schedule_dict: Dict[str, Any]):
         logger.info(f"[Scheduler] Memulai retrain otomatis untuk: {schedule_dict.get('name')} ({schedule_id})")
         
         retrain_service = RetrainService(db)
-        # 1. Eksekusi Proses ML
         result = retrain_service.execute_retrain(schedule_dict=schedule_dict, trigger="scheduled")
-        
-        # 🔥 2. UPDATE CACHE DASHBOARD (Berhasil)
         schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
         if schedule_obj:
             schedule_obj.last_run_at = datetime.now(timezone.utc)
@@ -101,7 +98,6 @@ class SchedulerService:
         if not cron_expr:
             logger.error(f"❌ Schedule {schedule_id} tidak punya cron expression.")
             return
-
         try:
             trigger = CronTrigger.from_crontab(cron_expr)
             job = self.scheduler.add_job(
@@ -112,8 +108,6 @@ class SchedulerService:
                 replace_existing=True,
                 name=f"Retrain Job - {schedule_dict.get('name', schedule_id)}"
             )
-            
-            # 🔥 UPDATE CACHE: Simpan waktu 'Next Run' ke Database
             db = SessionLocal()
             try:
                 schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
@@ -122,7 +116,6 @@ class SchedulerService:
                     db.commit()
             finally:
                 db.close()
-
             logger.info(f"✅ Job {schedule_id} diregister. Next run: {job.next_run_time}")
             
         except Exception as e:

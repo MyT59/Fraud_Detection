@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timezone
 from fastapi import HTTPException, BackgroundTasks
+from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 import logging
@@ -78,7 +79,11 @@ def safe_redis_publish(payload: dict, task_type: str = "ALERT_UPDATED"):
         logger.warning(f"[REDIS OFFLINE] Gagal mengirim broadcast {task_type}. Keperluan realtime stream dilewati.")
         logger.debug(f"Payload yang gagal dikirim: {payload}")
 
-def create_alert(db, trx, background_tasks: BackgroundTasks):
+def create_alert(
+    db,
+    trx,
+    background_tasks: Optional[BackgroundTasks] = None
+):
 
     def determine_alert_type(trx):
         reason = trx.violation_reason or ""
@@ -132,12 +137,13 @@ def create_alert(db, trx, background_tasks: BackgroundTasks):
 
     prefix = "AGN" if trx.service_source == "AGENUSA" else "NUS"
     
-    background_tasks.add_task(
-        safe_redis_publish,
-        {
-            "type": "DASHBOARD_PARTIAL_UPDATE",
-            "alert": {
-                "id": alert.id, "title": alert.title, "description": alert.message, "severity": alert.severity,
+    if background_tasks:
+        background_tasks.add_task(
+            safe_redis_publish,
+            {
+                "type": "DASHBOARD_PARTIAL_UPDATE",
+                "alert": {
+                    "id": alert.id, "title": alert.title, "description": alert.message, "severity": alert.severity,
                 "badge": alert.severity, "color": "dark-red" if alert.severity == "CRITICAL" else ("red" if alert.severity == "HIGH" else "yellow"),
                 "trx_id": f"{prefix}-{str(alert.transaction_id).zfill(6)}", "time": "just now",
                 "type": getattr(alert, "alert_type", "UNKNOWN"), "icon": "fraud" if alert.severity in ["CRITICAL", "HIGH"] else "warning"

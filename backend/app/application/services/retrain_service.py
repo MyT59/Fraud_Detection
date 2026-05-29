@@ -62,16 +62,13 @@ class RetrainService:
     def _register_model(self, domain: str, model_path: str, anomalies_found: int, total_records: int) -> MLModel:
         """Helper to handle model versioning, active switching, and metric tracking."""
         
-        # 1. Nonaktifkan model lama
         self.db.query(MLModel).filter(
             MLModel.target_service == domain,
             MLModel.is_active == True
         ).update({"is_active": False})
 
-        # 2. Ambil contamination rate secara dinamis
         contamination = DOMAIN_ISO_CONFIG.get(domain, {}).get("contamination", 0.05)
         
-        # 3. Buat versi awal (Precision: Minute)
         version_str = f"{domain}_v{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
 
         new_model = MLModel(
@@ -91,11 +88,8 @@ class RetrainService:
             self.db.add(new_model)
             self.db.commit()
         except IntegrityError:
-            # 櫨 RACE CONDITION RESISTANT
-            # Jika ada duplikasi version_name karena commit bersamaan
             self.db.rollback()
             
-            # Gunakan Microseconds fallback agar pasti unik
             unique_version = f"{domain}_v{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
             new_model.version_name = unique_version
             
@@ -324,17 +318,12 @@ class RetrainService:
         domain = schedule_dict.get("domain", "auto_detect")
         
         try:
-            # 1. Ambil dataset terbaru untuk domain terkait
             dataset_path = self._get_latest_dataset(domain)
             if not dataset_path:
                 raise Exception(f"Tidak ada dataset ditemukan untuk domain: {domain}")
 
-            # 2. Jalankan Logika Training (Feature Engineering & ML Engine)
             result = self._run_training_logic(dataset_path, domain)
 
-            # 3. Register Model Baru
-            # Helper ini sudah menangani: deaktifasi model lama, 
-            # dynamic contamination rate, dan IntegrityError (Retry Safety).
             new_model = self._register_model(
                 domain=result["domain"],
                 model_path=result["model_path"],
@@ -342,7 +331,6 @@ class RetrainService:
                 total_records=result["total_records"]
             )
 
-            # 4. Audit Log (Hanya jika dijalankan manual oleh admin)
             if trigger == "manual" and admin_id:
                 self._log_activity(
                     admin_id, 
@@ -352,8 +340,6 @@ class RetrainService:
                     f"Run Now: {schedule_dict.get('name')}"
                 )
 
-            # 5. Catat History Eksekusi
-            # Menghubungkan history dengan model_id yang baru dibuat.
             self._record_history(
                 schedule_id=schedule_id, 
                 trigger_source=trigger, 
@@ -363,14 +349,11 @@ class RetrainService:
                 model_id=new_model.id
             )
             
-            # 6. Update Timestamp Terakhir pada Jadwal
             if schedule_id:
                 self.db.query(RetrainSchedule).filter(
                     RetrainSchedule.id == schedule_id
                 ).update({"updated_at": datetime.now(timezone.utc)})
 
-            # 7. MLOps Lifecycle: Cleanup Otomatis
-            # Menjaga storage tetap efisien setelah eksekusi sukses.
             try:
                 from app.application.services.dataset_retention_service import DatasetRetentionService
                 retention_service = DatasetRetentionService(self.db)
@@ -383,15 +366,12 @@ class RetrainService:
             except Exception as cleanup_err:
                 print(f"[Retention Warning] {cleanup_err}")
 
-            # Final Commit untuk seluruh rangkaian proses
             self.db.commit()
             return result
 
         except Exception as e:
-            # Rollback transaksi jika terjadi error di tengah jalan
             self.db.rollback()
             
-            # Catat kegagalan ke history untuk audit
             self._record_history(
                 schedule_id=schedule_id, 
                 trigger_source=trigger, 
@@ -413,10 +393,8 @@ class RetrainService:
         if domain == "auto_detect":
             domain = detect_domain(df.columns.tolist()) or "agenusa"
 
-        # Feature Engineering
         feature_df = build_features(domain, df)
 
-        # Retrain Isolation Forest
         training_result = self.training_engine.train_and_detect(
             feature_df=feature_df,
             domain=domain
