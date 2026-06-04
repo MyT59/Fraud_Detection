@@ -18,12 +18,10 @@ class ActivityLog(Base):
     target_type = Column(String(100))
     target_id = Column(String(100))
     
-    # Forensic Data
     ip_address = Column(String(50))
     device = Column(String(100))
     browser = Column(String(100))
     
-    # JSONB untuk searchable details & before-after snapshot
     details = Column(JSONB, default={})
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

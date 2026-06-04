@@ -7,17 +7,13 @@ class UserSession(Base):
 
     id = Column(Integer, primary_key=True)
     admin_id = Column(Integer, ForeignKey("admins.id"))
-
     access_token = Column(Text)
     refresh_token = Column(Text)
-
     ip_address = Column(String(50))
     user_agent = Column(Text)
-    device = Column(String(100))          # ← NEW (parsed device)
-    browser = Column(String(100))         # ← NEW (parsed browser)
-    is_current = Column(Boolean, default=False)  # ← NEW
-
+    device = Column(String(100))         
+    browser = Column(String(100))         
+    is_current = Column(Boolean, default=False)  
     is_active = Column(Boolean, default=True)
-
     created_at = Column(DateTime(timezone=True))
     last_used_at = Column(DateTime(timezone=True))

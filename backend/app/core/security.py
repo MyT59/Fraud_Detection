@@ -56,7 +56,7 @@ def decode_token(token: str):
 
 # CURRENT USER
 def get_current_user(
-    request: Request,  # 🔥 Tambahkan Request
+    request: Request,  
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
@@ -68,7 +68,7 @@ def get_current_user(
         return SystemUser()
 
     # ====================================================
-    # 👇 3. LOGIKA JWT (KODE LAMA KAMU) 👇
+    # 3. LOGIKA JWT 
     # ====================================================
     if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -86,14 +86,14 @@ def get_current_user(
     if not session:
         raise HTTPException(status_code=401, detail="Session revoked")
 
-    # 🔥 AUTO EXPIRE LOGIC
+    # AUTO EXPIRE LOGIC
     if session.last_used_at:
         if datetime.now(timezone.utc) - session.last_used_at > timedelta(minutes=SESSION_TIMEOUT_MINUTES):
             session.is_active = False
             db.commit()
             raise HTTPException(status_code=401, detail="Session expired")
 
-    # ✅ UPDATE LAST USED
+    # UPDATE LAST USED
     session.last_used_at = datetime.now(timezone.utc)
     db.commit()
 

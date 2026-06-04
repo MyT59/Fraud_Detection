@@ -70,32 +70,29 @@ def get_pattern_effectiveness_service(db):
             "pattern_name": p.pattern_name,
             "true_positive": p.true_positive or 0,
             "false_positive": p.false_positive or 0,
-            # Dibulatkan menjadi 2 angka di belakang koma untuk konsistensi UI
             "accuracy_score": round(p.accuracy_score or 0.0, 2)
         }
         for p in patterns
     ]
 
 def get_pattern_diagnostics_service(db):
-    """
-    Mengagregasi performa diagnostik ruleset untuk menemukan anomali false positive 
-    dan memberikan rekomendasi aktivasi otomatis terhadap kluster pattern kandidat.
-    """
+    # Mengagregasi performa diagnostik ruleset untuk menemukan anomali false positive 
+    # dan memberikan rekomendasi aktivasi otomatis terhadap kluster pattern kandidat.
+
     pattern_repo = PatternRepository(db)
     all_patterns = pattern_repo.get_all_patterns()
 
-    # 1. Cari Top 5 Pola Berisik (False Positive Tertinggi)
+    # 1. Cari Top 5 Pola False Positive Tertinggi
     noisy_patterns = sorted(all_patterns, key=lambda x: x.false_positive or 0, reverse=True)[:5]
     
     # 2. Cari Top 5 Pola dengan Akurasi Terburuk
-    worst_rules = sorted(all_patterns, key=lambda x: x.accuracy_score or 0.0, reverse=False)[:5]
+    worst_patterns = sorted(all_patterns, key=lambda x: x.accuracy_score or 0.0, reverse=False)[:5]
 
     # 3. AUTO SUGGESTION LOOP: Menggunakan nilai ambang batas dinamis dari Settings
     suggestions = []
     inactive_candidates = [p for p in all_patterns if not p.is_active]
 
     for p in inactive_candidates:
-        # 🎯 FIX: Ganti angka 3 hardcoded dengan settings variabel
         if (p.hit_count or 0) >= settings.AUTO_PATTERN_ACTIVATION_THRESHOLD:
             suggestions.append({
                 "pattern_id": p.id,
@@ -113,9 +110,9 @@ def get_pattern_diagnostics_service(db):
             {"id": p.id, "name": p.pattern_name, "false_positives": p.false_positive or 0} 
             for p in noisy_patterns if (p.false_positive or 0) > 0
         ],
-        "worst_accuracy_rules": [
+        "worst_accuracy_patterns": [
             {"id": p.id, "name": p.pattern_name, "accuracy": round(p.accuracy_score or 0.0, 2)} 
-            for p in worst_rules if p.accuracy_score is not None
+            for p in worst_patterns if p.accuracy_score is not None
         ],
         "system_suggestions": suggestions
     }

@@ -32,7 +32,6 @@ class MLFeedbackLog(Base):
     violation_rule_ids = Column(JSONB)
     violation_pattern_ids = Column(JSONB)
 
-    # 🏷️ TARGET LABELS DARI WORKFLOW INVESTIGASI HUMAN
     analyst_decision = Column(String(20), nullable=False)  # SAFE | FRAUD
     decision_confidence = Column(String(20))               # LOW | MEDIUM | HIGH
     

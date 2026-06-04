@@ -202,14 +202,12 @@ def run_pattern_engine(db, trx):
             
             if pattern.action:
                 actions.append(pattern.action)
-
-            # 🔥 REKOMENDASI WAJIB V1: Catat pemicuan Pattern ke Audit Log 
             log_activity(
                 db=db,
-                admin=None, # Sistem Otomatis
+                admin=None, 
                 action_type=ActivityActionEnum.PATTERN_TRIGGERED,
                 module_source=EventSourceEnum.PATTERN_ENGINE,
-                severity=SeverityLevelEnum.HIGH, # Rekomendasi minimal HIGH [cite: 251]
+                severity=SeverityLevelEnum.HIGH, 
                 target_type="TRANSACTION",
                 target_id=str(trx.original_trx_id),
                 ip_address=getattr(trx, "ip_address", None),
@@ -221,5 +219,4 @@ def run_pattern_engine(db, trx):
                     "score_assigned": pattern.risk_score
                 }
             )
-
     return violations, pattern_ids, risk_score, actions

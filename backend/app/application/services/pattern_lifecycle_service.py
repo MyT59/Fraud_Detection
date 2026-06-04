@@ -1,6 +1,4 @@
 from datetime import datetime, timedelta, timezone
-
-# 🔥 IMPORT SERVICE LOG UTAMA & ENUM
 from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 
@@ -56,7 +54,6 @@ def apply_pattern_lifecycle(db, pattern):
             pattern.is_active = True
             pattern.disabled_at = None
             
-            # 🔥 LOG RE-ACTIVATE OLEH SISTEM [cite: 256]
             log_activity(
                 db=db, admin=None,
                 action_type=ActivityActionEnum.PATTERN_REACTIVATED,
@@ -74,12 +71,11 @@ def apply_pattern_lifecycle(db, pattern):
         pattern.action = "FLAG"
         pattern.disabled_at = now
         
-        # 🔥 LOG AUTO DISABLE [cite: 173, 254]
         log_activity(
             db=db, admin=None,
             action_type=ActivityActionEnum.PATTERN_AUTO_DISABLE,
             module_source=EventSourceEnum.PATTERN_ENGINE,
-            severity=SeverityLevelEnum.HIGH, # Status mati otomatis bernilai penting
+            severity=SeverityLevelEnum.HIGH, 
             target_type="PATTERN", target_id=str(pattern.id),
             details={
                 "pattern_name": pattern.pattern_name,
@@ -89,13 +85,12 @@ def apply_pattern_lifecycle(db, pattern):
         )
 
     # =========================
-    # AUTO PROMOTE (Kinerja Sangat Akurat)
+    # AUTO PROMOTE 
     # =========================
     elif total >= PROMOTE_MIN_SAMPLE and accuracy >= PROMOTE_THRESHOLD:
         pattern.action = "BLOCK"
         pattern.is_active = True
         
-        # 🔥 LOG AUTO PROMOTE [cite: 172, 255]
         log_activity(
             db=db, admin=None,
             action_type=ActivityActionEnum.PATTERN_AUTO_PROMOTE,
@@ -109,15 +104,9 @@ def apply_pattern_lifecycle(db, pattern):
             }
         )
 
-    # =========================
-    # RESET ACTION (ANTI STUCK)
-    # =========================
     elif accuracy < 0.6:
         pattern.action = "REVIEW"
 
-    # =========================
-    # SCORE ADJUST
-    # =========================
     base_score = pattern.risk_score or 40
     new_score = int(base_score * accuracy)
     new_score = max(10, min(new_score, 100))

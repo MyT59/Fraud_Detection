@@ -15,13 +15,12 @@ from app.infrastructure.database.models.retrain_schedule_model import RetrainSch
 logger = logging.getLogger(__name__)
 
 def run_sla_escalation_task():
-    """
-    Background worker yang berjalan periodik untuk mencari alert HIGH/CRITICAL 
-    yang terlantar di antrean OPEN > 10 menit, lalu mendongkrak prioritasnya.
-    """
+    # Background worker yang berjalan periodik untuk mencari alert HIGH/CRITICAL 
+    # yang terlantar di antrean OPEN > 10 menit, lalu mendongkrak prioritasnya.
+
     db = SessionLocal()
     try:
-        # Tentukan ambang batas waktu SLA (10 menit yang lalu)
+        # Ambang batas waktu SLA (10 menit yang lalu)
         sla_threshold = datetime.now(timezone.utc) - timedelta(minutes=10)
         
         # Cari alert OPEN, HIGH/CRITICAL, yang dibuat sebelum waktu batas, dan belum dieskalasi
@@ -37,13 +36,10 @@ def run_sla_escalation_task():
 
         for alert in overdue_alerts:
             old_priority = alert.priority or 0.0
-            
-            # Eksekusi Eskalasi: Berikan penalti +20 poin agar melesat ke atas antrean
             alert.priority = old_priority + 20.0  
             alert.is_escalated = True
             alert.title = f"[ESCALATED] {alert.title or 'Fraud Detected'}"
             
-            # Catat log aktivitas sistem (Aktor: None / System Engine)
             log_activity(
                 db=db,
                 admin=None, 
@@ -70,10 +66,7 @@ def scheduled_retrain_task(schedule_dict: Dict[str, Any]):
         logger.info(f"[Scheduler] Memulai retrain otomatis untuk: {schedule_dict.get('name')} ({schedule_id})")
         
         retrain_service = RetrainService(db)
-        # 1. Eksekusi Proses ML
         result = retrain_service.execute_retrain(schedule_dict=schedule_dict, trigger="scheduled")
-        
-        # 🔥 2. UPDATE CACHE DASHBOARD (Berhasil)
         schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
         if schedule_obj:
             schedule_obj.last_run_at = datetime.now(timezone.utc)
@@ -105,7 +98,6 @@ class SchedulerService:
         if not cron_expr:
             logger.error(f"❌ Schedule {schedule_id} tidak punya cron expression.")
             return
-
         try:
             trigger = CronTrigger.from_crontab(cron_expr)
             job = self.scheduler.add_job(
@@ -116,8 +108,6 @@ class SchedulerService:
                 replace_existing=True,
                 name=f"Retrain Job - {schedule_dict.get('name', schedule_id)}"
             )
-            
-            # 🔥 UPDATE CACHE: Simpan waktu 'Next Run' ke Database
             db = SessionLocal()
             try:
                 schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
@@ -126,7 +116,6 @@ class SchedulerService:
                     db.commit()
             finally:
                 db.close()
-
             logger.info(f"✅ Job {schedule_id} diregister. Next run: {job.next_run_time}")
             
         except Exception as e:

@@ -56,7 +56,6 @@ class DashboardService:
 
     @staticmethod
     def get_kpi(db: Session):
-        # Kueri KPI dasar dipertahankan untuk Capstone v1
         agenusa = db.query(func.count(Transaction.id)).filter(Transaction.service_source == "AGENUSA").scalar()
         nusabill = db.query(func.count(Transaction.id)).filter(Transaction.service_source == "NUSABILL").scalar()
 
@@ -71,30 +70,23 @@ class DashboardService:
         total_tx = (agenusa or 0) + (nusabill or 0)
         total_fraud = (fraud_agenusa or 0) + (fraud_nusabill or 0)
         fraud_rate = (total_fraud / total_tx * 100) if total_tx else 0
-
-        # 1. Tarik baris model yang berstatus aktif dan paling baru dibuat
         latest_active_model = db.query(MLModel)\
             .filter(MLModel.is_active == True)\
             .order_by(MLModel.created_at.desc())\
             .first()
-
         accuracy = None
         
-        # 2. Bongkar dictionary JSONB secara aman jika datanya tersedia
         if latest_active_model and latest_active_model.metrics:
-            # Fallback toleransi pencarian key JSON (bisa berupa 'accuracy' atau 'accuracy_score')
             raw_accuracy = latest_active_model.metrics.get("accuracy") or latest_active_model.metrics.get("accuracy_score")
             
             if raw_accuracy is not None:
                 try:
                     accuracy = float(raw_accuracy)
-                    # Jika model menyimpan format desimal ML standar (misal 0.945 -> jadikan 94.50%)
                     if accuracy < 1.0:
                         accuracy = accuracy * 100
                 except (ValueError, TypeError):
                     accuracy = None
 
-        # 3. Guard Fallback Default jika database kosong / belum pernah melakukan retraining model
         if accuracy is None:
             accuracy = 94.20
 
@@ -144,23 +136,19 @@ class DashboardService:
 
     @staticmethod
     def get_top_patterns(db: Session):
-        # 🎯 FIX POIN 6: RESOLVE RAW ARRAY MENJADI OBJEK MANUSIAWI 
         raw_data = db.query(
             Transaction.violation_pattern_ids,
             func.count(Transaction.id)
         ).filter(Transaction.violation_pattern_ids.isnot(None))\
          .group_by(Transaction.violation_pattern_ids)\
          .order_by(func.count(Transaction.id).desc()).limit(5).all()
-
         resolved_results = []
-        # Ambil semua profil master pattern untuk dicocokkan di memori agar cepat
         pattern_master = {p.id: p for p in db.query(FraudPattern).all()}
 
         for row in raw_data:
             pattern_ids = row[0]
             count = row[1]
             
-            # Jika violation_pattern_ids berupa list/array, ambil ID pertamanya
             if isinstance(pattern_ids, list) and len(pattern_ids) > 0:
                 pid = pattern_ids[0]
                 pattern_obj = pattern_master.get(pid)
@@ -175,7 +163,6 @@ class DashboardService:
                     })
                     continue
             
-            # Fallback aman jika data korup/tidak ditemukan relasinya
             resolved_results.append({
                 "pattern_id": None,
                 "pattern_name": f"Unknown Discovered Pattern {str(pattern_ids)}",
@@ -215,90 +202,73 @@ class DashboardService:
     @staticmethod
     def get_activity_timeline(db: Session, type: str = None):
         timeline = []
-
-        # Gunakan pemanggilan gabungan repositori dengan optimalisasi join admin
-        fraud_trx = TransactionRepository(db).get_recent_fraud()
-        
+        fraud_trx = TransactionRepository(db).get_recent_fraud()        
         alerts = db.query(FraudAlert).filter(FraudAlert.status == "OPEN")\
                    .order_by(FraudAlert.created_at.desc()).limit(5).all()
-        
-        # Poin 10: Lakukan kueri join ke tabel admin agar full_name langsung terisi rapi 
         reviews = db.query(ManualReview).options(joinedload(ManualReview.admin))\
                     .order_by(ManualReview.created_at.desc()).limit(5).all()
-        
         logs = db.query(ActivityLog).options(joinedload(ActivityLog.admin))\
                  .order_by(ActivityLog.created_at.desc()).limit(10).all()
 
-        # 🎯 1. MAP DATA TRANSAKSI FRAUD OTOMATIS
         for t in fraud_trx:
             timeline.append({
-                "type": TimelineTypeEnum.TIMELINE_FRAUD.value, # Menggunakan Enum Terstandardisasi [cite: 322-323]
+                "type": TimelineTypeEnum.TIMELINE_FRAUD.value, 
                 "title": "High-Risk Transaction Blocked",
                 "description": f"Transaction {t.original_trx_id} automatically blocked by system",
                 "created_at": t.created_at,
                 "time": format_time(t.created_at),
                 "actor": "System",
-                "severity": SeverityLevelEnum.CRITICAL.value,  # Suntik nilai Keparahan [cite: 338, 350]
-                "source": EventSourceEnum.PATTERN_ENGINE.value, # Suntik nilai Sumber Event [cite: 351, 359]
+                "severity": SeverityLevelEnum.CRITICAL.value,  
+                "source": EventSourceEnum.PATTERN_ENGINE.value, 
                 "metadata": {"amount": f"Rp {t.amount}" if t.amount else "-", "user": t.user_account_id or "-"}
             })
 
-        # 🎯 2. MAP DATA FRUAD ALERT (WARNING TRIGGER)
         for a in alerts:
             timeline.append({
-                "type": TimelineTypeEnum.TIMELINE_ALERT.value, # [cite: 324]
+                "type": TimelineTypeEnum.TIMELINE_ALERT.value, 
                 "title": a.title or "Fraud Alert Triggered",
                 "description": a.message,
                 "created_at": a.created_at,
                 "time": format_time(a.created_at),
                 "actor": "System",
-                "severity": a.severity if a.severity else SeverityLevelEnum.HIGH.value, # [cite: 349]
-                "source": EventSourceEnum.RULE_ENGINE.value, # [cite: 358]
+                "severity": a.severity if a.severity else SeverityLevelEnum.HIGH.value, 
+                "source": EventSourceEnum.RULE_ENGINE.value, 
                 "metadata": {"alert_id": a.id}
             })
 
-        # 🎯 3. MAP DATA MANUAL REVIEW HISTORY
         for r in reviews:
-            # Tentukan nilai keparahan dinamis berdasarkan vonis analis
             rev_severity = SeverityLevelEnum.HIGH.value if r.decision == "FRAUD" else SeverityLevelEnum.INFO.value
             timeline.append({
-                "type": TimelineTypeEnum.TIMELINE_REVIEW.value, # [cite: 325]
+                "type": TimelineTypeEnum.TIMELINE_REVIEW.value, 
                 "title": f"Transaction Marked as {r.decision.capitalize()}",
                 "description": f"Trx ID {r.transaction_id} resolved by investigator",
                 "created_at": r.created_at,
-                "time": format_time(r.created_at),
-                # 🎯 FIX POIN 10: Tampilkan Nama Asli Analis, bukan "Admin User" 
+                "time": format_time(r.created_at), 
                 "actor": r.admin.full_name if r.admin else f"Analyst ID {r.reviewer_id}", 
                 "severity": rev_severity,
-                "source": EventSourceEnum.MANUAL_REVIEW.value, # [cite: 360]
+                "source": EventSourceEnum.MANUAL_REVIEW.value,
                 "metadata": {"decision": r.decision, "note": r.review_note}
             })
 
-        # 🎯 4. MAP DATA SECURITY LOG AUDIT (SYSTEM EVENTS)
         for log in logs:
             timeline.append({
-                # Jika log aktivitas auth, arahkan ke TIMELINE_SECURITY, sisanya SYSTEM [cite: 326-327]
                 "type": TimelineTypeEnum.TIMELINE_SECURITY.value if log.module_source == "AUTH" else TimelineTypeEnum.TIMELINE_SYSTEM.value,
                 "title": log.action_type.replace("_", " ").title() if log.action_type else "System Security Event",
                 "description": str(log.details) if log.details else "-",
                 "created_at": log.created_at,
                 "time": format_time(log.created_at),
-                # Tampilkan nama asli admin pembuat log jika ada
                 "actor": log.admin.full_name if log.admin else "System/Autonomous",
-                "severity": log.severity if log.severity else SeverityLevelEnum.INFO.value, # [cite: 346]
-                "source": log.module_source if log.module_source else EventSourceEnum.SYSTEM.value, # [cite: 356]
+                "severity": log.severity if log.severity else SeverityLevelEnum.INFO.value, 
+                "source": log.module_source if log.module_source else EventSourceEnum.SYSTEM.value, 
                 "metadata": {"target_type": log.target_type, "target_id": log.target_id}
             })
 
-        # ================= SORT PERUBAHAN DATA =================
-        timeline.sort(key=lambda x: x["created_at"], reverse=True)
 
-        # Filter tipe data berdasarkan parameter input jika dikirim dari router frontend
+        timeline.sort(key=lambda x: x["created_at"], reverse=True)
         if type:
             type = type.upper()
             timeline = [t for t in timeline if t["type"] == type]
 
-        # Hapus variabel timestamp mentah agar payload response rapi
         for t in timeline:
             del t["created_at"]
 

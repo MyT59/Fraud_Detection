@@ -15,12 +15,11 @@ from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 
 def login(db: Session, email: str, password: str, ip: str = None, user_agent: str = None):
-    # 🎯 FIX 1: Bongkar tuple (unpacking) secara benar langsung dari fungsi parser perangkat
     device_name, browser_name = parse_device(user_agent)
     if device_name == "Unknown":
         device_name = "Unknown Device"
 
-    # 🛑 1. CEK APAKAH AKUN TERKUNCI (BRUTE FORCE DETECTION)
+    # (BRUTE FORCE DETECTION)
     if is_locked(email):
         log_activity(
             db=db, admin=None,
@@ -37,7 +36,7 @@ def login(db: Session, email: str, password: str, ip: str = None, user_agent: st
     repo = AdminRepository(db)
     admin = repo.get_by_email(email)
 
-    # 🛑 2. GAGAL LOGIN: EMAIL TIDAK DITEMUKAN
+    # GAGAL LOGIN: EMAIL TIDAK DITEMUKAN
     if not admin:
         register_failed_attempt(email)
         log_activity(
@@ -55,7 +54,7 @@ def login(db: Session, email: str, password: str, ip: str = None, user_agent: st
     if not admin.is_active:
         raise HTTPException(403, "Account suspended")
 
-    # 🛑 3. GAGAL LOGIN: PASSWORD SALAH
+    # GAGAL LOGIN: PASSWORD SALAH
     if not verify_password(password, admin.password_hash):
         register_failed_attempt(email)
         log_activity(

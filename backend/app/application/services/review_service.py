@@ -28,42 +28,50 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
     allowed = ["SAFE", "FRAUD"]
     decision = decision.upper()
     if decision not in allowed:
-        raise HTTPException(status_code=400, detail=f"Invalid decision: {decision}. Allowed: {allowed}")
+        raise HTTPException(status_code=400, 
+                            detail=f"Invalid decision: {decision}. Allowed: {allowed}")
     
     allowed_confidence = ["LOW", "MEDIUM", "HIGH"]
     confidence = confidence.upper()  
     if confidence not in allowed_confidence:
-        raise HTTPException(status_code=400, detail=f"Invalid confidence level: {confidence}. Allowed: {allowed_confidence}")
+        raise HTTPException(status_code=400, 
+                            detail=f"Invalid confidence level: {confidence}. Allowed: {allowed_confidence}")
 
     try:
         alert_repo = AlertRepository(db)
         alert = alert_repo.get_by_id(alert_id)
         if not alert:
-            raise HTTPException(status_code=404, detail="Alert not found")
+            raise HTTPException(status_code=404, 
+                                detail="Alert not found")
         
         if alert.status == "RESOLVED":
             raise HTTPException(400, "Alert already resolved")
             
         if alert.status == "OPEN":
-            raise HTTPException(status_code=400, detail="Alert must be claimed before submitting a review. Please claim it first.")
+            raise HTTPException(status_code=400, 
+                                detail="Alert must be claimed before submitting a review. Please claim it first.")
             
         if alert.claimed_by != reviewer_id:
-            raise HTTPException(status_code=403, detail=f"Access Denied: This alert is currently claimed by Analyst ID {alert.claimed_by}")
+            raise HTTPException(status_code=403, 
+                                detail=f"Access Denied: This alert is currently claimed by Analyst ID {alert.claimed_by}")
 
         review_repo = ReviewRepository(db)
         existing_review = review_repo.get_by_alert_id(alert_id)
         if existing_review:
-            raise HTTPException(status_code=400, detail="Alert already reviewed")
+            raise HTTPException(status_code=400, 
+                                detail="Alert already reviewed")
 
         trx_repo = TransactionRepository(db)
         trx = trx_repo.get_by_id(alert.transaction_id)
         if not trx:
-            raise HTTPException(status_code=404, detail="Transaction not found")
+            raise HTTPException(status_code=404, 
+                                detail="Transaction not found")
 
         try:
             target_status = TransactionStatusEnum(decision)
         except ValueError:
-            raise HTTPException(status_code=400, detail="Decision does not match database Enum values")
+            raise HTTPException(status_code=400, 
+                                detail="Decision does not match database Enum values")
 
         transaction_snapshot = {
             "id": trx.id,
@@ -153,8 +161,6 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
         alert.status = "RESOLVED"
         alert.resolved_by = reviewer_id
         alert.resolved_at = now_utc
-
-        # 🚨 FIX: Gunakan Enum Standar V1 untuk resolusi review manual [cite: 146]
         action_enum = ActivityActionEnum.REVIEW_REJECTED if decision == "FRAUD" else ActivityActionEnum.REVIEW_APPROVED
 
         log_activity(
@@ -178,11 +184,14 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
         raise http_exc
     except StaleDataError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Race Condition Detected: Kasus ini baru saja diperbarui atau diselesaikan oleh analis lain.")
+        raise HTTPException(status_code=409, 
+                            detail="Race Condition Detected: Kasus ini baru saja diperbarui atau diselesaikan oleh analis lain.")
     except Exception as e:
         db.rollback()
-        logger.error(f"[REVIEW ERROR] alert_id={alert_id} reviewer_id={reviewer_id} error={str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        logger.error(f"[REVIEW ERROR] alert_id={alert_id} reviewer_id={reviewer_id} error={str(e)}",
+                      exc_info=True)
+        raise HTTPException(status_code=500, 
+                            detail="Internal Server Error")
 
 def get_review_history(db, page: int = 1, limit: int = 10):
     query = db.query(ManualReview).join(Transaction).filter(ManualReview.is_deleted == False)
@@ -197,7 +206,7 @@ def get_review_history(db, page: int = 1, limit: int = 10):
         "total": total,
         "page": page,
         "limit": limit,
-        "items": [  # 🎯 FIX: Mengubah dari "data" menjadi "items" agar konsisten di semua API 
+        "items": [
             {
                 "id": r.id,
                 "transaction_id": r.transaction_id,
@@ -254,22 +263,17 @@ def update_pattern_accuracy(db, trx, is_fraud: bool):
 def get_review_metrics_service(db):
     review_repo = ReviewRepository(db)
     alert_repo = AlertRepository(db)
-    
-    # 1. Ambil agregat dari repositori
     review_counts = review_repo.get_decision_counts()
     avg_duration_seconds = review_repo.get_avg_review_duration_seconds()
-    
     open_alerts = alert_repo.get_count_by_status("OPEN")
     in_progress_alerts = alert_repo.get_count_by_status("IN_PROGRESS")
-    
     total_rev = review_counts["total"]
     fraud_cnt = review_counts["fraud"]
     safe_cnt = review_counts["safe"]
     
-    # 2. Hitung rasio konfirmasi kecurangan (Fraud Confirmation Rate) dalam %
+    # Hitung Fraud Confirmation Rate dalam %
     confirmation_rate = round((fraud_cnt / total_rev * 100), 2) if total_rev > 0 else 0.0
     
-    # Konversi detik ke menit untuk human label
     avg_duration_minutes = round((avg_duration_seconds / 60), 2)
     
     return {
@@ -332,21 +336,22 @@ def soft_delete_review_service(db, review_id: int, admin_id: int):
     db.commit()
     return {"status": "success", "message": "Review history successfully soft deleted for compliance tracking."}
 
-# 🔥 TAMBAHAN BARU POIN 15: Review Reopen & Override Mechanism
 def override_review_decision_service(db, review_id: int, admin_id: int, new_decision: str, reason: str):
-    review = db.query(ManualReview).filter(ManualReview.id == review_id, ManualReview.is_deleted == False).first()
+    review = db.query(ManualReview).filter(ManualReview.id == review_id, 
+                                           ManualReview.is_deleted == False).first()
     if not review:
-        raise HTTPException(status_code=404, detail="Review history tidak ditemukan")
+        raise HTTPException(status_code=404,
+                             detail="Review history tidak ditemukan")
         
     new_decision = new_decision.upper()
     if review.decision == new_decision:
-        raise HTTPException(status_code=400, detail=f"Vonis saat ini sudah berstatus {new_decision}. Tidak ada perubahan keputusan.")
+        raise HTTPException(status_code=400, 
+                            detail=f"Vonis saat ini sudah berstatus {new_decision}. Tidak ada perubahan keputusan.")
 
     try:
         trx = db.query(Transaction).filter(Transaction.id == review.transaction_id).first()
         alert = db.query(FraudAlert).filter(FraudAlert.id == review.alert_id).first()
         
-        # 🚨 SNAPSHOT KEPUTUSAN SEBELUMNYA (Sebelum di-mutate) 
         snapshot_before = {
             "decision": review.decision,
             "final_status": str(review.final_status.value) if review.final_status else None
@@ -363,28 +368,23 @@ def override_review_decision_service(db, review_id: int, admin_id: int, new_deci
         review.overridden_by = admin_id
         review.overridden_at = datetime.now(timezone.utc)
         review.override_reason = reason
-        
         review.decision = new_decision
         review.final_status = target_status
         if trx:
             trx.final_status = target_status
-            
         if alert:
-            alert.status = "OVERRIDDEN" # Menandai siklus state machine ke status OVERRIDDEN
-
-        # 🚨 SNAPSHOT KEPUTUSAN SESUDAH (After Snapshot)
+            alert.status = "OVERRIDDEN" 
         snapshot_after = {
             "decision": review.decision,
             "final_status": str(review.final_status.value) if review.final_status else None
         }
 
-        # Catat ke Log Aktivitas dengan snapshot lengkap forensik v1
         log_activity(
             db=db,
             admin=type("obj", (object,), {"id": admin_id})(),
             action_type=ActivityActionEnum.REVIEW_OVERRIDDEN,
             module_source=EventSourceEnum.MANUAL_REVIEW,
-            severity=SeverityLevelEnum.HIGH, # Override peninjauan bernilai tinggi (HIGH)
+            severity=SeverityLevelEnum.HIGH, 
             target_type=TargetType.TRANSACTION,
             target_id=trx.id,
             ip_address=getattr(trx, "ip_address", None),
@@ -405,7 +405,6 @@ def log_false_negative_service(db, transaction_id: int, admin_id: int, reason: s
     """
     Fitur khusus pimpinan untuk menandai transaksi sukses yang ternyata lolos dari ML (False Negative).
     """
-    # 1. Cari data transaksi di feed
     trx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not trx:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
@@ -413,13 +412,10 @@ def log_false_negative_service(db, transaction_id: int, admin_id: int, reason: s
     if trx.final_status == TransactionStatusEnum.FRAUD:
         raise HTTPException(status_code=400, detail="Transaksi ini memang sudah berstatus FRAUD")
 
-    # 2. Paksa status transaksi berubah menjadi FRAUD (Koreksi status)
     trx.final_status = TransactionStatusEnum.FRAUD
     trx.violation_reason = f"[FALSE_NEGATIVE_REPORT] {reason}"
-
-    # 3. Kirim data koreksi ke Golden Dataset agar teman ML bisa mempelajari pola yang lolos ini
     feedback_log = MLFeedbackLog(
-        review_id=None, # Penanda khusus 0 berarti bypass/kebobolan tanpa review manual di antrean
+        review_id=None, 
         transaction_id=trx.id,
         original_trx_id=trx.original_trx_id,
         service_source=trx.service_source,
@@ -442,17 +438,13 @@ def log_false_negative_service(db, transaction_id: int, admin_id: int, reason: s
         violation_reason=trx.violation_reason,
         violation_rule_ids=trx.violation_rule_ids,
         violation_pattern_ids=trx.violation_pattern_ids,
-        
-        # Target label koreksi
         analyst_decision="FRAUD", 
         decision_confidence="HIGH" 
     )
     db.add(feedback_log)
 
-    # 4. Update counter akurasi pattern engine (karena kecurangan ini lolos, pattern bernilai salah)
     update_pattern_accuracy(db, trx, is_fraud=True)
 
-    # 5. Catat log audit aktivitas sistem
     log_activity(
         db=db,
         admin=type("obj", (object,), {"id": admin_id})(),
@@ -463,4 +455,5 @@ def log_false_negative_service(db, transaction_id: int, admin_id: int, reason: s
     )
     
     db.commit()
-    return {"status": "success", "message": "Transaksi berhasil ditandai sebagai False Negative. Dataset retraining telah diperbarui."}
+    return {"status": "success", 
+            "message": "Transaksi berhasil ditandai sebagai False Negative. Dataset retraining telah diperbarui."}

@@ -14,12 +14,11 @@ def create_rule(db: Session, data, admin):
     
     db.add(rule)
     try:
-        db.flush()  # Ambil ID tanpa commit dulu
+        db.flush()  
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Rule key already exists")
 
-    # Capture state awal (After)
     snapshot_after = {
         "rule_name": rule.rule_name,
         "rule_key": rule.rule_key,
@@ -28,7 +27,6 @@ def create_rule(db: Session, data, admin):
         "is_active": rule.is_active,
         "rule_config": rule.rule_config
     }
-
     log_activity(
         db=db,
         admin=admin,
@@ -40,7 +38,7 @@ def create_rule(db: Session, data, admin):
         details={"before": {}, "after": snapshot_after, "reason": "Initial rule creation"}
     )
 
-    db.commit()  # Single transaction commit untuk rule + activity log
+    db.commit()  
     db.refresh(rule)
     return rule
 
@@ -72,7 +70,7 @@ def update_rule(db: Session, rule_id: int, data, admin):
     if not rule:
         return None
 
-    # 1. Simpan State SEBELUM Perubahan (Before Snapshot)
+    # Simpan State sebelum Perubahan (Before Snapshot)
     snapshot_before = {
         "rule_name": rule.rule_name,
         "action": rule.action,
@@ -81,13 +79,12 @@ def update_rule(db: Session, rule_id: int, data, admin):
         "rule_config": rule.rule_config
     }
 
-    # 2. Lakukan Mutasi Data
     for key, value in data.dict(exclude_unset=True).items():
         setattr(rule, key, value)
     
     db.flush()
 
-    # 3. Simpan State SESUDAH Perubahan (After Snapshot)
+    # Simpan State sesudah Perubahan (After Snapshot)
     snapshot_after = {
         "rule_name": rule.rule_name,
         "action": rule.action,
@@ -96,13 +93,12 @@ def update_rule(db: Session, rule_id: int, data, admin):
         "rule_config": rule.rule_config
     }
 
-    # 4. Catat ke Log dengan format terstruktur
     log_activity(
         db=db,
         admin=admin,
         action_type=ActivityActionEnum.RULE_UPDATED,
         module_source=EventSourceEnum.RULE_ENGINE,
-        severity=SeverityLevelEnum.WARNING,  # Modifikasi rule bernilai sensitif
+        severity=SeverityLevelEnum.WARNING, 
         target_type=TargetType.RULE,
         target_id=rule.id,
         details={
@@ -112,7 +108,7 @@ def update_rule(db: Session, rule_id: int, data, admin):
         }
     )
     
-    db.commit()  # Commit tunggal mencegah partial failure
+    db.commit()  
     db.refresh(rule)
     return rule
 
@@ -129,19 +125,15 @@ def create_rule_builder_service(db, data, admin):
         description=data.description,
         created_by=admin.id
     )
-
     db.add(rule)
-
     try:
         db.flush()
-
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=409,
             detail="Rule key already exists"
         )
-
     log_activity(
         db,
         admin,
@@ -150,10 +142,8 @@ def create_rule_builder_service(db, data, admin):
         target_id=rule.id,
         details=f"Created builder rule: {rule.rule_name}"
     )
-    
     db.commit()
     db.refresh(rule)
-
     return rule
 
 

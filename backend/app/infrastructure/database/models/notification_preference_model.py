@@ -8,10 +8,8 @@ class NotificationPreference(Base):
 
     id = Column(Integer, primary_key=True)
     admin_id = Column(Integer, ForeignKey("admins.id"), unique=True)
-
     fraud_alerts_enabled = Column(Boolean, default=True)
     push_notifications_enabled = Column(Boolean, default=True)
-
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
+    
     admin = relationship("Admin", back_populates="notification_preference")

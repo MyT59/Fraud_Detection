@@ -53,9 +53,6 @@ class AlertRepository:
             elif label == "LOW":
                 query = query.filter(FraudAlert.priority < 50)
 
-        # =========================
-        # ENTERPRISE QUEUE ORDERING
-        # =========================
         return query.order_by(
             FraudAlert.priority.desc(),
             FraudAlert.created_at.asc()
@@ -73,8 +70,8 @@ class AlertRepository:
                 FraudAlert.status == "IN_PROGRESS"
             )\
             .order_by(
-                FraudAlert.priority.desc(),  # 🔥 FIX POIN 7: Highest risk first di antrean analis
-                FraudAlert.claimed_at.asc()  # FIFO jika prioritasnya sama
+                FraudAlert.priority.desc(),  
+                FraudAlert.claimed_at.asc()  
             )\
             .all()
     

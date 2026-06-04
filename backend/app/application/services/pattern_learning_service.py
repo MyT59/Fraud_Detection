@@ -8,7 +8,7 @@ from app.infrastructure.database.models.transaction_model import Transaction
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
 
 # =========================
-# 🔥 CONFIG THRESHOLDS
+# CONFIG THRESHOLDS
 # =========================
 TIME_WINDOW = 5
 MIN_SUPPORT = 3  
@@ -19,10 +19,9 @@ FAN_OUT_THRESHOLD = 20  # Threshold Spam Billing (NUSABILL)
 
 
 def generate_patterns_from_reviews(db):
-    """
-    Menganalisis transaksi yang di-flag FRAUD secara manual
-    dan menghasilkan pola ruleset otomatis.
-    """
+    # Menganalisis transaksi yang di-flag FRAUD secara manual
+    # dan menghasilkan pola ruleset otomatis.
+
     reviews_with_trx = db.query(ManualReview, Transaction).join(
         Transaction, ManualReview.transaction_id == Transaction.id
     ).filter(
@@ -33,7 +32,7 @@ def generate_patterns_from_reviews(db):
         return []
 
     # =========================
-    # 🔥 AGGREGATION CONTAINERS
+    # AGGREGATION CONTAINERS
     # =========================
     velocity_counter = {}
     amount_counter = {}
@@ -80,7 +79,7 @@ def generate_patterns_from_reviews(db):
             amount_counter[key] = amount_counter.get(key, 0) + 1
 
         # ---------------------------------------------------------
-        # 3. FAN-IN (MANY-TO-ONE / EDC COLLUSION) - DB LEVEL
+        # 3. FAN-IN (MANY-TO-ONE / EDC COLLUSION) 
         # ---------------------------------------------------------
         terminal_id = details.get("terminal_id")
         if terminal_id:
@@ -97,7 +96,7 @@ def generate_patterns_from_reviews(db):
                 network_counter[key] = network_counter.get(key, 0) + 1
 
         # ---------------------------------------------------------
-        # 4. FAN-OUT (ONE-TO-MANY / SPAM BILLING) - DB LEVEL
+        # 4. FAN-OUT (ONE-TO-MANY / SPAM BILLING) 
         # ---------------------------------------------------------
         if trx.user_account_id:
             distinct_customers = db.query(
@@ -125,7 +124,6 @@ def generate_patterns_from_reviews(db):
                 Transaction.transaction_time <= trx.transaction_time
             ).order_by(Transaction.transaction_time.desc()).limit(5).all()
 
-            # hitung failure beruntun
             fail_count = 0
 
             for t in recent_trxs:
@@ -134,7 +132,7 @@ def generate_patterns_from_reviews(db):
                 if rc != "00":
                     fail_count += 1
                 else:
-                    break  # stop kalau ada success
+                    break  
 
             if fail_count >= 3:
                 key = ("DECLINE_VELOCITY", trx.service_source, 3)
@@ -177,7 +175,7 @@ def generate_patterns_from_reviews(db):
                 super_pattern_counter[key] = super_pattern_counter.get(key, 0) + 1
 
     # =========================
-    # 🔥 COMPILE PATTERNS
+    #  COMPILE PATTERNS
     # =========================
     patterns_created = []
 
@@ -222,7 +220,8 @@ def generate_patterns_from_reviews(db):
                     "pattern_rules": {
                         "logic": "AND",
                         "time_window_minutes": TIME_WINDOW,
-                        "conditions": [{"field": "distinct_account_count", "operator": ">=", "value": threshold}]
+                        "conditions": [{"field": "distinct_account_count", "operator": ">=", 
+                                        "value": threshold}]
                     },
                     "risk_score": 80,
                     "action": "BLOCK",
@@ -235,7 +234,8 @@ def generate_patterns_from_reviews(db):
                     "pattern_rules": {
                         "logic": "AND",
                         "time_window_minutes": TIME_WINDOW,
-                        "conditions": [{"field": "distinct_customer_count", "operator": ">=", "value": threshold}]
+                        "conditions": [{"field": "distinct_customer_count", "operator": ">=", 
+                                        "value": threshold}]
                     },
                     "risk_score": 70,
                     "action": "BLOCK",
