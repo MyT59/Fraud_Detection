@@ -9,7 +9,8 @@ const API_ENDPOINTS = [
     name: "Dashboard API",
     description: "Stats & overview data",
     icon: "bi-speedometer2",
-    url: `${API_BASE}/dashboard/all`,
+
+    url: `${API_BASE}/dashboard/summary`,
     method: "GET",
   },
   {
@@ -17,23 +18,26 @@ const API_ENDPOINTS = [
     name: "Alerts Service",
     description: "Fraud & rule engine alerts",
     icon: "bi-bell",
-    url: `${API_BASE}/alerts/saved`,
+
+    url: `${API_BASE}/alerts/?limit=1`,
     method: "GET",
   },
   {
     id: "audit",
-    name: "Audit Log API",
+    name: "Activity Log API",
     description: "System audit trail",
     icon: "bi-journal-text",
-    url: `${API_BASE}/audit-logs/stats`,
+
+    url: `${API_BASE}/activity-logs/?limit=1`,
     method: "GET",
   },
   {
     id: "users",
-    name: "Users API",
+    name: "Accounts API",
     description: "User management service",
     icon: "bi-people",
-    url: `${API_BASE}/users?page_size=1`,
+
+    url: `${API_BASE}/accounts/`,
     method: "GET",
   },
   {
@@ -74,11 +78,15 @@ const SystemHealth = () => {
     const start = performance.now();
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+      const timeout = setTimeout(() => controller.abort(), 5000);
 
       const res = await fetch(endpoint.url, {
         method: endpoint.method,
         signal: controller.signal,
+
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        },
       });
       clearTimeout(timeout);
 

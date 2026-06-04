@@ -11,9 +11,11 @@ const TYPE_OPTIONS = [
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Semua Status" },
+  { value: "unread", label: "Belum Dibaca (OPEN)" },
+  { value: "read", label: "In Progress" },
+  { value: "resolved", label: "Resolved" },
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
-  { value: "unread", label: "Belum Dibaca" },
 ];
 
 const SEVERITY_OPTIONS = [
@@ -33,7 +35,7 @@ const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
           <input
             type="text"
             className="alerts-search-input"
-            placeholder="Cari berdasarkan pesan, ID transaksi..."
+            placeholder="Cari pesan, ID transaksi..."
             value={filters.search}
             onChange={(e) => onFilterChange({ search: e.target.value })}
           />
@@ -84,8 +86,7 @@ const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
         </select>
 
         <button className="alerts-btn-outline" onClick={onReset}>
-          <i className="bi bi-arrow-counterclockwise"></i>
-          Reset
+          <i className="bi bi-arrow-counterclockwise"></i> Reset
         </button>
       </div>
 

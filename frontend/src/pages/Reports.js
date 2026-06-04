@@ -116,7 +116,7 @@ const generateReportHistory = () => {
   const reports = [];
   for (let i = 1; i <= 15; i++) {
     const randomDate = new Date(
-      2024,
+      2026,
       Math.floor(Math.random() * 12),
       Math.floor(Math.random() * 28) + 1,
     );

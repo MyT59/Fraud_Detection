@@ -1,14 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import {
+  fetchReviewHistory,
+  mapHistoryItem,
+} from "../services/reviewApiService";
 import "./ReviewHistory.css";
 
-const fmt = (amount) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(amount);
-
 const fmtTs = (ds) => {
+  if (!ds) return "—";
   const d = new Date(ds);
   return d.toLocaleDateString("id-ID", {
     day: "2-digit",
@@ -20,6 +18,7 @@ const fmtTs = (ds) => {
 };
 
 const timeAgo = (ds) => {
+  if (!ds) return "—";
   const diff = (Date.now() - new Date(ds).getTime()) / 1000;
   if (diff < 60) return `${Math.floor(diff)}s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
@@ -30,10 +29,14 @@ const timeAgo = (ds) => {
 const ACTION_META = {
   approved: {
     icon: "bi-check-circle-fill",
-    label: "Approved",
+    label: "Approved (SAFE)",
     cls: "approved",
   },
-  rejected: { icon: "bi-x-circle-fill", label: "Rejected", cls: "rejected" },
+  rejected: {
+    icon: "bi-x-circle-fill",
+    label: "Rejected (FRAUD)",
+    cls: "rejected",
+  },
   flagged: { icon: "bi-flag-fill", label: "Flagged", cls: "flagged" },
   escalated: {
     icon: "bi-arrow-up-circle-fill",
@@ -42,498 +45,338 @@ const ACTION_META = {
   },
 };
 
+const DECISION_META = {
+  SAFE: { label: "SAFE", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
+  FRAUD: { label: "FRAUD", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
+};
+
 const SAMPLE = [
   {
     id: 1,
     transactionId: "AGN-000008",
+    alertId: null,
     action: "rejected",
+    decision: "FRAUD",
     reviewer: "Admin User",
     reviewerRole: "Senior Analyst",
     timestamp: new Date().toISOString(),
-    amount: 895000,
-    riskScore: 96,
-    duration: "4 minutes",
     notes:
       "Multiple patterns confirmed: bruteforce PIN + money mule destination. Account blocked.",
   },
   {
     id: 2,
     transactionId: "NUS-000009",
+    alertId: null,
     action: "rejected",
+    decision: "FRAUD",
     reviewer: "Jane Smith",
     reviewerRole: "Fraud Analyst",
     timestamp: new Date(Date.now() - 3600000).toISOString(),
-    amount: 315845,
-    riskScore: 95,
-    duration: "5 minutes",
     notes:
       "Refund abuse + burst payment pattern via API channel. Transaction reversed.",
   },
   {
     id: 3,
-    transactionId: "AGN-000003",
-    action: "escalated",
+    transactionId: "AGN-000007",
+    alertId: null,
+    action: "approved",
+    decision: "SAFE",
     reviewer: "John Doe",
     reviewerRole: "Junior Analyst",
     timestamp: new Date(Date.now() - 7200000).toISOString(),
-    amount: 234802,
-    riskScore: 78,
-    duration: "8 minutes",
-    notes:
-      "Midnight withdrawal pattern — requires senior approval before blocking.",
-  },
-  {
-    id: 4,
-    transactionId: "AGN-000007",
-    action: "approved",
-    reviewer: "Sarah W.",
-    reviewerRole: "Fraud Analyst",
-    timestamp: new Date(Date.now() - 10800000).toISOString(),
-    amount: 130227,
-    riskScore: 52,
-    duration: "2 minutes",
-    notes:
-      "Score above threshold but no pattern matched. Verified with account holder.",
-  },
-  {
-    id: 5,
-    transactionId: "NUS-000001",
-    action: "rejected",
-    reviewer: "Admin User",
-    reviewerRole: "Senior Analyst",
-    timestamp: new Date(Date.now() - 18000000).toISOString(),
-    amount: 412500,
-    riskScore: 94,
-    duration: "6 minutes",
-    notes:
-      "Burst payment + sudden API channel switch + refund abuse. Customer account suspended.",
-  },
-  {
-    id: 6,
-    transactionId: "NUS-000008",
-    action: "approved",
-    reviewer: "Rina Sari",
-    reviewerRole: "Fraud Analyst",
-    timestamp: new Date(Date.now() - 21600000).toISOString(),
-    amount: 280575,
-    riskScore: 50,
-    duration: "2 minutes",
-    notes:
-      "Customer confirmed API channel change was intentional — migrating from Web.",
-  },
-  {
-    id: 7,
-    transactionId: "AGN-000004",
-    action: "flagged",
-    reviewer: "John Doe",
-    reviewerRole: "Junior Analyst",
-    timestamp: new Date(Date.now() - 25200000).toISOString(),
-    amount: 226048,
-    riskScore: 61,
-    duration: "4 minutes",
-    notes: "Impossible terminal switch detected — flagged for senior review.",
-  },
-  {
-    id: 8,
-    transactionId: "NUS-000002",
-    action: "rejected",
-    reviewer: "Jane Smith",
-    reviewerRole: "Fraud Analyst",
-    timestamp: new Date(Date.now() - 28800000).toISOString(),
-    amount: 275000,
-    riskScore: 87,
-    duration: "5 minutes",
-    notes:
-      "REFUND_FLAG=1 combined with underpayment and burst pattern. Rejected.",
-  },
-  {
-    id: 9,
-    transactionId: "AGN-000006",
-    action: "approved",
-    reviewer: "Admin User",
-    reviewerRole: "Senior Analyst",
-    timestamp: new Date(Date.now() - 86400000).toISOString(),
-    amount: 184311,
-    riskScore: 57,
-    duration: "3 minutes",
-    notes: "Midnight flag but single pattern only. Customer OTP verified.",
-  },
-  {
-    id: 10,
-    transactionId: "NUS-000003",
-    action: "escalated",
-    reviewer: "Budi S.",
-    reviewerRole: "Junior Analyst",
-    timestamp: new Date(Date.now() - 90000000).toISOString(),
-    amount: 198000,
-    riskScore: 76,
-    duration: "6 minutes",
-    notes:
-      "Payment spike + burst pattern — escalated for further review by compliance.",
-  },
-  {
-    id: 11,
-    transactionId: "AGN-000005",
-    action: "approved",
-    reviewer: "Sarah W.",
-    reviewerRole: "Fraud Analyst",
-    timestamp: new Date(Date.now() - 172800000).toISOString(),
-    amount: 142014,
-    riskScore: 60,
-    duration: "3 minutes",
-    notes:
-      "Terminal switch detected but geo-verified. Approved after confirmation.",
-  },
-  {
-    id: 12,
-    transactionId: "NUS-000004",
-    action: "flagged",
-    reviewer: "Rina Sari",
-    reviewerRole: "Fraud Analyst",
-    timestamp: new Date(Date.now() - 180000000).toISOString(),
-    amount: 357477,
-    riskScore: 65,
-    duration: "4 minutes",
-    notes:
-      "Sudden API channel switch — flagged, pending customer verification.",
+    notes: "Verified with customer — legit transaction.",
   },
 ];
 
-const HIST_PER_PAGE = 5;
-
-const Pagination = ({
-  currentPage,
-  totalPages,
-  totalItems,
-  perPage,
-  onPageChange,
-}) => {
-  const start = totalItems === 0 ? 0 : (currentPage - 1) * perPage + 1;
-  const end = Math.min(currentPage * perPage, totalItems);
-  const effectivePages = Math.max(1, totalPages);
-  const getPages = () => {
-    if (effectivePages <= 7)
-      return Array.from({ length: effectivePages }, (_, i) => i + 1);
-    const pages = [1];
-    if (currentPage > 3) pages.push("...");
-    for (
-      let i = Math.max(2, currentPage - 1);
-      i <= Math.min(effectivePages - 1, currentPage + 1);
-      i++
-    )
-      pages.push(i);
-    if (currentPage < effectivePages - 2) pages.push("...");
-    pages.push(effectivePages);
-    return pages;
-  };
-  return (
-    <div className="pagination-bar">
-      <span className="pagination-info">
-        Showing{" "}
-        <strong>
-          {start}–{end}
-        </strong>{" "}
-        of <strong>{totalItems}</strong> entries
-      </span>
-      <div className="pagination-controls">
-        <button
-          className="page-btn page-nav"
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-        >
-          <i className="bi bi-chevron-left"></i>
-        </button>
-        {getPages().map((p, i) =>
-          p === "..." ? (
-            <span key={`dot${i}`} className="page-ellipsis">
-              …
-            </span>
-          ) : (
-            <button
-              key={p}
-              className={`page-btn${p === currentPage ? " active" : ""}`}
-              onClick={() => onPageChange(p)}
-            >
-              {p}
-            </button>
-          ),
-        )}
-        <button
-          className="page-btn page-nav"
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === effectivePages || totalItems === 0}
-        >
-          <i className="bi bi-chevron-right"></i>
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const HistoryModal = ({ item, onClose }) => {
+const HistoryItem = ({ item }) => {
+  const [expanded, setExpanded] = useState(false);
   const meta = ACTION_META[item.action] || ACTION_META.approved;
-  const bgMap = {
-    approved: "#dcfce7",
-    rejected: "#fee2e2",
-    escalated: "#dbeafe",
-    flagged: "#fef3c7",
-  };
+  const decisionMeta = DECISION_META[item.decision] || DECISION_META.SAFE;
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className={`history-item ${meta.cls}`}>
       <div
-        className="txn-modal audit-modal"
-        onClick={(e) => e.stopPropagation()}
+        className="history-item-header"
+        onClick={() => setExpanded((v) => !v)}
       >
-        <div className="modal-header">
-          <div className="modal-header-left">
-            <span className="modal-txn-id">Audit Entry</span>
-            <span
-              className={`audit-action-label ${meta.cls}`}
-              style={{
-                padding: ".2rem .6rem",
-                borderRadius: "99px",
-                fontSize: ".7rem",
-                background: bgMap[meta.cls] || "#fef3c7",
-              }}
-            >
-              {meta.label}
-            </span>
-          </div>
-          <button className="modal-close-btn" onClick={onClose}>
-            <i className="bi bi-x-lg"></i>
-          </button>
-        </div>
-        <div className="audit-modal-hero">
-          <div className={`audit-hero-icon ${meta.cls}`}>
+        <div className="history-item-left">
+          <div className={`history-action-icon ${meta.cls}`}>
             <i className={`bi ${meta.icon}`}></i>
           </div>
-          <div>
-            <div className="audit-hero-txn">{item.transactionId}</div>
-            <div className="audit-hero-meta">
-              {fmtTs(item.timestamp)} · {item.duration}
+          <div className="history-item-info">
+            <div className="history-item-title">
+              <span className="history-txn-id">{item.transactionId}</span>
+
+              <span
+                style={{
+                  fontSize: ".68rem",
+                  fontWeight: 700,
+                  padding: "2px 7px",
+                  borderRadius: "4px",
+                  background: decisionMeta.bg,
+                  color: decisionMeta.color,
+                  border: `1px solid ${decisionMeta.border}`,
+                  letterSpacing: ".04em",
+                }}
+              >
+                {decisionMeta.label}
+              </span>
+              {item.alertId && (
+                <span
+                  style={{
+                    fontSize: ".65rem",
+                    color: "#64748b",
+                    fontWeight: 500,
+                  }}
+                >
+                  Alert #{item.alertId}
+                </span>
+              )}
+            </div>
+            <div className="history-item-meta">
+              <span className="history-reviewer">
+                <i className="bi bi-person-circle"></i>
+                {item.reviewer || "—"}{" "}
+                {item.reviewerRole && (
+                  <span style={{ color: "#94a3b8", fontSize: ".72rem" }}>
+                    · {item.reviewerRole}
+                  </span>
+                )}
+              </span>
+              <span className="history-time">
+                <i className="bi bi-clock"></i>
+                {timeAgo(item.timestamp)}
+              </span>
             </div>
           </div>
         </div>
-        <div className="modal-body">
-          <div className="audit-modal-grid">
-            <div className="audit-kv">
-              <div className="audit-kv-label">Amount</div>
-              <div className="audit-kv-value mono">{fmt(item.amount)}</div>
+
+        <div className="history-item-right">
+          <span className={`history-action-badge ${meta.cls}`}>
+            <i className={`bi ${meta.icon}`}></i>
+            {meta.label}
+          </span>
+          <button className="history-expand-btn">
+            <i className={`bi bi-chevron-${expanded ? "up" : "down"}`}></i>
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="history-item-body">
+          <div className="history-detail-grid">
+            <div className="history-detail-item">
+              <span className="history-detail-label">Transaction ID</span>
+              <span className="history-detail-value mono">
+                {item.transactionId}
+              </span>
             </div>
-            <div className="audit-kv">
-              <div className="audit-kv-label">Risk Score</div>
-              <div className="audit-kv-value mono">{item.riskScore}/100</div>
-            </div>
-            <div className="audit-kv">
-              <div className="audit-kv-label">Reviewed By</div>
-              <div className="audit-kv-value">{item.reviewer}</div>
-            </div>
-            <div className="audit-kv">
-              <div className="audit-kv-label">Role</div>
-              <div className="audit-kv-value">{item.reviewerRole}</div>
-            </div>
-            <div className="audit-kv">
-              <div className="audit-kv-label">Review Duration</div>
-              <div className="audit-kv-value">{item.duration}</div>
-            </div>
-            <div className="audit-kv">
-              <div className="audit-kv-label">Timestamp</div>
-              <div
-                className="audit-kv-value mono"
-                style={{ fontSize: ".75rem" }}
-              >
-                {fmtTs(item.timestamp)}
+            {item.alertId && (
+              <div className="history-detail-item">
+                <span className="history-detail-label">Alert ID</span>
+                <span className="history-detail-value mono">
+                  #{item.alertId}
+                </span>
               </div>
+            )}
+            <div className="history-detail-item">
+              <span className="history-detail-label">Decision</span>
+              <span
+                className="history-detail-value"
+                style={{ color: decisionMeta.color, fontWeight: 700 }}
+              >
+                {decisionMeta.label}
+              </span>
             </div>
+            <div className="history-detail-item">
+              <span className="history-detail-label">Reviewed At</span>
+              <span className="history-detail-value">
+                {fmtTs(item.timestamp)}
+              </span>
+            </div>
+            {item.previousStatus && (
+              <div className="history-detail-item">
+                <span className="history-detail-label">Previous Status</span>
+                <span className="history-detail-value">
+                  {item.previousStatus}
+                </span>
+              </div>
+            )}
+            {item.finalStatus && (
+              <div className="history-detail-item">
+                <span className="history-detail-label">Final Status</span>
+                <span className="history-detail-value">{item.finalStatus}</span>
+              </div>
+            )}
           </div>
+
           {item.notes && (
-            <div className="audit-notes-block">
+            <div className="history-notes">
               <i className="bi bi-chat-left-text"></i>
-              <span className="audit-notes-text">{item.notes}</span>
+              <span>{item.notes}</span>
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 };
 
-const ReviewHistory = ({ history }) => {
-  const [selectedEntry, setSelectedEntry] = useState(null);
-  const [histPage, setHistPage] = useState(1);
-  const data = history && history.length > 0 ? history : SAMPLE;
+const ReviewHistory = ({ recentTransactions = [] }) => {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [usingFallback, setFallback] = useState(false);
+  const LIMIT = 10;
 
-  const stats = {
-    approved: data.filter((d) => d.action === "approved").length,
-    rejected: data.filter((d) => d.action === "rejected").length,
-    escalated: data.filter((d) => d.action === "escalated").length,
-  };
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchReviewHistory({ page, limit: LIMIT });
+        const mapped = (data.items || []).map(mapHistoryItem);
+        setItems(mapped);
+        setTotal(data.total || 0);
+        setFallback(false);
+      } catch (err) {
+        const reviewed = recentTransactions
+          .filter((t) => t.status === "approved" || t.status === "rejected")
+          .map((t, i) => ({
+            id: i + 100,
+            transactionId: t.id,
+            alertId: t._alertId || null,
+            action: t.status,
+            decision: t.status === "approved" ? "SAFE" : "FRAUD",
+            reviewer: "You",
+            reviewerRole: "Analyst",
+            timestamp: t.reviewedAt || new Date().toISOString(),
+            notes: t.reviewNotes || "",
+          }));
 
-  const totalHistPages = Math.ceil(data.length / HIST_PER_PAGE);
-  const paginatedHist = data.slice(
-    (histPage - 1) * HIST_PER_PAGE,
-    histPage * HIST_PER_PAGE,
-  );
+        const combined = [...reviewed, ...SAMPLE].slice(0, LIMIT);
+        setItems(combined);
+        setTotal(combined.length);
+        setFallback(true);
+        setError(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, [page, recentTransactions]);
+
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
-    <>
-      <div className="review-section">
-        <div className="section-header">
-          <span className="section-title">
-            <i className="bi bi-clock-history"></i>Review History
-          </span>
-          <span className="section-meta">{data.length} entries</span>
-        </div>
-
-        <div className="txn-table-wrapper">
-          <table className="audit-table">
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>Action</th>
-                <th>Txn ID</th>
-                <th>Amount</th>
-                <th className="hide-sm">Risk</th>
-                <th className="hide-sm">Reviewer</th>
-                <th className="hide-sm">Duration</th>
-                <th>Notes</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedHist.map((item) => {
-                const meta = ACTION_META[item.action] || ACTION_META.approved;
-                const initials = item.reviewer
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("");
-                return (
-                  <tr key={item.id} onClick={() => setSelectedEntry(item)}>
-                    <td>
-                      <div className="audit-ts">{fmtTs(item.timestamp)}</div>
-                      <div
-                        style={{
-                          fontSize: ".68rem",
-                          color: "#94a3b8",
-                          marginTop: ".1rem",
-                        }}
-                      >
-                        {timeAgo(item.timestamp)}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="audit-action-cell">
-                        <span className={`audit-dot ${meta.cls}`}></span>
-                        <span className={`audit-action-label ${meta.cls}`}>
-                          {meta.label}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="audit-txn-id">{item.transactionId}</span>
-                    </td>
-                    <td>
-                      <span className="audit-amount">{fmt(item.amount)}</span>
-                    </td>
-                    <td className="hide-sm">
-                      <span
-                        style={{
-                          fontFamily: "IBM Plex Mono, monospace",
-                          fontSize: ".775rem",
-                          fontWeight: "600",
-                          color:
-                            item.riskScore >= 80
-                              ? "#dc2626"
-                              : item.riskScore >= 60
-                                ? "#d97706"
-                                : "#16a34a",
-                        }}
-                      >
-                        {item.riskScore}
-                        <span style={{ fontWeight: 400, color: "#94a3b8" }}>
-                          /100
-                        </span>
-                      </span>
-                    </td>
-                    <td className="hide-sm">
-                      <div className="audit-reviewer">
-                        <div className="audit-avatar">{initials}</div>
-                        <span className="audit-reviewer-name">
-                          {item.reviewer}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="hide-sm">
-                      <span
-                        style={{
-                          fontFamily: "IBM Plex Mono, monospace",
-                          fontSize: ".75rem",
-                          color: "#475569",
-                        }}
-                      >
-                        {item.duration}
-                      </span>
-                    </td>
-                    <td>
-                      {item.notes ? (
-                        <span className="audit-notes">{item.notes}</span>
-                      ) : (
-                        <span style={{ color: "#94a3b8", fontSize: ".8rem" }}>
-                          —
-                        </span>
-                      )}
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <button
-                        className="btn-audit-detail"
-                        onClick={() => setSelectedEntry(item)}
-                      >
-                        <i className="bi bi-eye"></i>View
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <Pagination
-          currentPage={histPage}
-          totalPages={totalHistPages}
-          totalItems={data.length}
-          perPage={HIST_PER_PAGE}
-          onPageChange={setHistPage}
-        />
-
-        <div className="audit-footer">
-          <div className="audit-footer-stats">
-            <span className="audit-stat green">
-              <i className="bi bi-check-circle-fill"></i>
-              {stats.approved} Approved
+    <div className="review-history">
+      <div className="history-header">
+        <div className="history-title-row">
+          <h3 className="history-title">
+            <i className="bi bi-clock-history"></i>
+            Review History
+          </h3>
+          {usingFallback && (
+            <span
+              style={{
+                fontSize: ".72rem",
+                fontWeight: 700,
+                padding: "2px 8px",
+                borderRadius: "4px",
+                background: "#fef3c7",
+                color: "#92400e",
+                border: "1px solid #fde68a",
+              }}
+            >
+              Offline mode
             </span>
-            <span className="audit-stat red">
-              <i className="bi bi-x-circle-fill"></i>
-              {stats.rejected} Rejected
-            </span>
-            <span className="audit-stat blue">
-              <i className="bi bi-arrow-up-circle-fill"></i>
-              {stats.escalated} Escalated
-            </span>
-          </div>
-          <button className="btn-audit-detail">
-            View Full Log <i className="bi bi-arrow-right"></i>
-          </button>
+          )}
         </div>
+        <p className="history-subtitle">
+          {usingFallback
+            ? "Menampilkan data lokal — API tidak tersedia"
+            : `${total} review tercatat`}
+        </p>
       </div>
 
-      {selectedEntry && (
-        <HistoryModal
-          item={selectedEntry}
-          onClose={() => setSelectedEntry(null)}
-        />
+      {loading ? (
+        <div
+          style={{
+            padding: "2rem",
+            textAlign: "center",
+            color: "#94a3b8",
+            fontSize: ".9rem",
+          }}
+        >
+          <i
+            className="bi bi-arrow-repeat"
+            style={{ marginRight: ".4rem" }}
+          ></i>
+          Memuat riwayat review...
+        </div>
+      ) : items.length === 0 ? (
+        <div className="history-empty">
+          <i className="bi bi-inbox"></i>
+          <p>Belum ada riwayat review.</p>
+        </div>
+      ) : (
+        <div className="history-list">
+          {items.map((item) => (
+            <HistoryItem key={item.id} item={item} />
+          ))}
+        </div>
       )}
-    </>
+
+      {!usingFallback && totalPages > 1 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: ".75rem 1rem 0",
+            borderTop: "1px solid #f1f5f9",
+            marginTop: ".5rem",
+          }}
+        >
+          <span style={{ fontSize: ".8rem", color: "#64748b" }}>
+            Page {page} of {totalPages} · {total} total
+          </span>
+          <div style={{ display: "flex", gap: ".4rem" }}>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              style={{
+                padding: ".3rem .6rem",
+                border: "1px solid #e2e8f0",
+                borderRadius: "6px",
+                background: "#fff",
+                cursor: page === 1 ? "not-allowed" : "pointer",
+                opacity: page === 1 ? 0.4 : 1,
+              }}
+            >
+              <i className="bi bi-chevron-left"></i>
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              style={{
+                padding: ".3rem .6rem",
+                border: "1px solid #e2e8f0",
+                borderRadius: "6px",
+                background: "#fff",
+                cursor: page === totalPages ? "not-allowed" : "pointer",
+                opacity: page === totalPages ? 0.4 : 1,
+              }}
+            >
+              <i className="bi bi-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

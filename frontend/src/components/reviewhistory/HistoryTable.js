@@ -28,12 +28,8 @@ const timeAgo = (ds) => {
 };
 
 const ACTION_META = {
-  approved: {
-    icon: "bi-check-circle-fill",
-    label: "Approved",
-    cls: "approved",
-  },
-  rejected: { icon: "bi-x-circle-fill", label: "Rejected", cls: "rejected" },
+  approved: { icon: "bi-check-circle-fill", label: "Safe", cls: "approved" },
+  rejected: { icon: "bi-x-circle-fill", label: "Fraud", cls: "rejected" },
   flagged: { icon: "bi-flag-fill", label: "Flagged", cls: "flagged" },
   escalated: {
     icon: "bi-arrow-up-circle-fill",
@@ -109,9 +105,15 @@ const ColDropdown = ({ options, activeValue, onSelect, isActive }) => {
   );
 };
 
-const ROWS_PER_PAGE = 10;
-const DEFAULT_COL = "timestamp";
-const DEFAULT_DIR = "desc";
+const SkeletonRow = () => (
+  <tr className="htable-row htable-row--skeleton">
+    {[...Array(9)].map((_, i) => (
+      <td key={i}>
+        <div className="hcell-skeleton" />
+      </td>
+    ))}
+  </tr>
+);
 
 const Pagination = ({
   currentPage,
@@ -209,6 +211,9 @@ const RISK_OPTS = [
   { value: "riskScore-asc", label: "Terendah", icon: "bi-sort-numeric-up" },
 ];
 
+const DEFAULT_COL = "timestamp";
+const DEFAULT_DIR = "desc";
+
 const PILL_META = {
   "layanan:agenusa": {
     label: "Agenusa",
@@ -276,39 +281,41 @@ const PILL_META = {
   },
 };
 
-const HistoryTable = ({ data, onViewDetail }) => {
-  const [page, setPage] = useState(1);
+const HistoryTable = ({
+  data = [],
+  loading = false,
+  totalItems = 0,
+  page = 1,
+  totalPages = 1,
+  perPage = 10,
+  onPageChange,
+  onViewDetail,
+  onRefresh,
+}) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterLayanan, setFilterLayanan] = useState("all");
-
   const [sortList, setSortList] = useState([]);
+
+  useEffect(() => {}, [data]);
 
   const handleSort = (sortVal) => {
     const lastDash = sortVal.lastIndexOf("-");
     const col = sortVal.slice(0, lastDash);
     const dir = sortVal.slice(lastDash + 1);
-
     const isDefault = col === DEFAULT_COL && dir === DEFAULT_DIR;
 
     setSortList((prev) => {
       const filtered = prev.filter((s) => s.col !== col);
-
       if (isDefault) return filtered;
-
       return [...filtered, { col, dir }];
     });
-    setPage(1);
   };
 
-  const handleLayanan = (val) => {
-    setFilterLayanan(val);
-    setPage(1);
-  };
+  const handleLayanan = (val) => setFilterLayanan(val);
 
   const getSortActiveVal = (col) => {
     const entry = sortList.find((s) => s.col === col);
     if (entry) return `${entry.col}-${entry.dir}`;
-
     if (col === DEFAULT_COL) return `${DEFAULT_COL}-${DEFAULT_DIR}`;
     return null;
   };
@@ -317,42 +324,31 @@ const HistoryTable = ({ data, onViewDetail }) => {
 
   const activePills = useMemo(() => {
     const pills = [];
-
     if (filterLayanan !== "all")
       pills.push({
         key: `layanan:${filterLayanan}`,
         type: "layanan",
         col: null,
       });
-
-    sortList.forEach(({ col, dir }) => {
-      pills.push({ key: `sort:${col}-${dir}`, type: "sort", col });
-    });
-
+    sortList.forEach(({ col, dir }) =>
+      pills.push({ key: `sort:${col}-${dir}`, type: "sort", col }),
+    );
     return pills;
   }, [filterLayanan, sortList]);
 
   const hasActiveFilters = activePills.length > 0;
 
   const handleRemovePill = (pill) => {
-    if (pill.type === "layanan") {
-      setFilterLayanan("all");
-    } else if (pill.type === "sort") {
+    if (pill.type === "layanan") setFilterLayanan("all");
+    else if (pill.type === "sort")
       setSortList((prev) => prev.filter((s) => s.col !== pill.col));
-    }
-    setPage(1);
   };
 
   const handleResetAll = () => {
     setFilterLayanan("all");
     setSortList([]);
     setSearchTerm("");
-    setPage(1);
   };
-
-  useEffect(() => {
-    setPage(1);
-  }, [data]);
 
   const processed = useMemo(() => {
     let arr = [...data];
@@ -372,9 +368,7 @@ const HistoryTable = ({ data, onViewDetail }) => {
 
     const sortCols = [...sortList].reverse();
     const hasTimestamp = sortList.some((s) => s.col === DEFAULT_COL);
-    if (!hasTimestamp) {
-      sortCols.push({ col: DEFAULT_COL, dir: DEFAULT_DIR });
-    }
+    if (!hasTimestamp) sortCols.push({ col: DEFAULT_COL, dir: DEFAULT_DIR });
 
     arr.sort((a, b) => {
       for (const { col, dir } of sortCols) {
@@ -393,12 +387,6 @@ const HistoryTable = ({ data, onViewDetail }) => {
     return arr;
   }, [data, searchTerm, filterLayanan, sortList]);
 
-  const totalPages = Math.ceil(processed.length / ROWS_PER_PAGE);
-  const paginated = processed.slice(
-    (page - 1) * ROWS_PER_PAGE,
-    page * ROWS_PER_PAGE,
-  );
-
   return (
     <div className="htable-section">
       <div className="htable-header">
@@ -406,7 +394,21 @@ const HistoryTable = ({ data, onViewDetail }) => {
           <i className="bi bi-clock-history"></i>
           Review Audit Log
         </span>
-        <span className="htable-meta">{data.length} Total entries</span>
+        <div style={{ display: "flex", alignItems: "center", gap: ".75rem" }}>
+          <span className="htable-meta">{totalItems} Total entries</span>
+          {onRefresh && (
+            <button
+              className="htable-refresh-btn"
+              onClick={onRefresh}
+              title="Refresh data"
+              disabled={loading}
+            >
+              <i
+                className={`bi bi-arrow-clockwise${loading ? " spin" : ""}`}
+              ></i>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="htable-searchbar">
@@ -415,20 +417,14 @@ const HistoryTable = ({ data, onViewDetail }) => {
           <input
             type="text"
             className="htable-search-input"
-            placeholder="Cari txn ID, account, customer ID, reviewer..."
+            placeholder="Cari txn ID, account, reviewer..."
             value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => setSearchTerm(e.target.value)}
           />
           {searchTerm && (
             <button
               className="htable-search-clear"
-              onClick={() => {
-                setSearchTerm("");
-                setPage(1);
-              }}
+              onClick={() => setSearchTerm("")}
             >
               <i className="bi bi-x"></i>
             </button>
@@ -436,7 +432,7 @@ const HistoryTable = ({ data, onViewDetail }) => {
         </div>
         <span className="htable-search-count">
           <i className="bi bi-funnel"></i>
-          {processed.length} entries found
+          {processed.length} entries shown
         </span>
       </div>
 
@@ -489,7 +485,6 @@ const HistoryTable = ({ data, onViewDetail }) => {
           className={`htaf-reset-btn${!hasActiveFilters ? " htaf-reset-btn--disabled" : ""}`}
           onClick={hasActiveFilters ? handleResetAll : undefined}
           disabled={!hasActiveFilters}
-          title="Reset semua filter"
         >
           <i className="bi bi-arrow-counterclockwise"></i>
           Reset Semua
@@ -497,11 +492,11 @@ const HistoryTable = ({ data, onViewDetail }) => {
       </div>
 
       <div className="htable-wrapper">
-        {processed.length === 0 ? (
+        {!loading && processed.length === 0 ? (
           <div className="htable-empty">
             <i className="bi bi-inbox"></i>
             <p>No review history found</p>
-            <span>Try adjusting your filters</span>
+            <span>Try adjusting your filters or check back later.</span>
           </div>
         ) : (
           <table className="htable">
@@ -531,7 +526,7 @@ const HistoryTable = ({ data, onViewDetail }) => {
                 </th>
                 <th>
                   <div className="htable-th-inner">
-                    <span>ID</span>
+                    <span>Transaction ID</span>
                   </div>
                 </th>
                 <th className="hide-md">
@@ -573,111 +568,133 @@ const HistoryTable = ({ data, onViewDetail }) => {
                 </th>
                 <th>
                   <div className="htable-th-inner">
-                    <span>Status</span>
+                    <span>Decision</span>
                   </div>
                 </th>
               </tr>
             </thead>
 
             <tbody>
-              {paginated.map((item) => {
-                const meta = ACTION_META[item.action] || ACTION_META.approved;
-                const initials = item.reviewer
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2);
+              {loading
+                ? [...Array(perPage)].map((_, i) => <SkeletonRow key={i} />)
+                : processed.map((item) => {
+                    const meta =
+                      ACTION_META[item.action] ?? ACTION_META.approved;
+                    const initials = (item.reviewer || "?")
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase();
 
-                return (
-                  <tr
-                    key={item.id}
-                    className="htable-row"
-                    onClick={() => onViewDetail(item)}
-                  >
-                    <td>
-                      <div className="hcell-ts">{fmtTs(item.timestamp)}</div>
-                      <div className="hcell-ts-ago">
-                        {timeAgo(item.timestamp)}
-                      </div>
-                    </td>
-                    <td>
-                      {item.service ? (
-                        <ServiceBadge service={item.service} />
-                      ) : (
-                        <span style={{ color: "#94a3b8", fontSize: ".8rem" }}>
-                          —
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span className="hcell-txnid">{item.transactionId}</span>
-                    </td>
-                    <td className="hide-md">
-                      <span
-                        style={{
-                          fontFamily: "IBM Plex Mono, monospace",
-                          fontSize: ".75rem",
-                          color: "#334155",
-                          fontWeight: 600,
-                        }}
+                    return (
+                      <tr
+                        key={item.id}
+                        className="htable-row"
+                        onClick={() => onViewDetail(item)}
                       >
-                        {item.accountId || "—"}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="hcell-amount">{fmt(item.amount)}</span>
-                    </td>
-                    <td className="hide-md">
-                      <span
-                        className="hcell-risk"
-                        style={{
-                          color:
-                            item.riskScore >= 80
-                              ? "#dc2626"
-                              : item.riskScore >= 60
-                                ? "#d97706"
-                                : "#16a34a",
-                        }}
-                      >
-                        {item.riskScore}
-                        <span className="hcell-risk-max">/100</span>
-                      </span>
-                    </td>
-                    <td className="hide-md">
-                      <div className="hreviewer-row">
-                        <div className="hreviewer-avatar">{initials}</div>
-                        <div>
-                          <div className="hreviewer-name">{item.reviewer}</div>
-                          <div className="hreviewer-role">
-                            {item.reviewerRole}
+                        <td>
+                          <div className="hcell-ts">
+                            {fmtTs(item.timestamp)}
                           </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {item.notes ? (
-                        <button
-                          className="hbtn-view"
-                          onClick={() => onViewDetail(item)}
-                        >
-                          <i className="bi bi-chat-left-text"></i>View Notes
-                        </button>
-                      ) : (
-                        <span className="hcell-empty">—</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="haction-cell">
-                        <span className={`haction-dot ${meta.cls}`}></span>
-                        <span className={`haction-label ${meta.cls}`}>
-                          <i className={`bi ${meta.icon}`}></i>
-                          {meta.label}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                          <div className="hcell-ts-ago">
+                            {timeAgo(item.timestamp)}
+                          </div>
+                        </td>
+                        <td>
+                          {item.service ? (
+                            <ServiceBadge service={item.service} />
+                          ) : (
+                            <span
+                              style={{ color: "#94a3b8", fontSize: ".8rem" }}
+                            >
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="hcell-txnid">
+                            {item.transactionId}
+                          </span>
+                        </td>
+                        <td className="hide-md">
+                          <span
+                            style={{
+                              fontFamily: "IBM Plex Mono, monospace",
+                              fontSize: ".75rem",
+                              color: "#334155",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {item.accountId || "—"}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="hcell-amount">
+                            {item.amount ? fmt(item.amount) : "—"}
+                          </span>
+                        </td>
+                        <td className="hide-md">
+                          {item.riskScore > 0 ? (
+                            <span
+                              className="hcell-risk"
+                              style={{
+                                color:
+                                  item.riskScore >= 80
+                                    ? "#dc2626"
+                                    : item.riskScore >= 60
+                                      ? "#d97706"
+                                      : "#16a34a",
+                              }}
+                            >
+                              {item.riskScore}
+                              <span className="hcell-risk-max">/100</span>
+                            </span>
+                          ) : (
+                            <span
+                              style={{ color: "#94a3b8", fontSize: ".8rem" }}
+                            >
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td className="hide-md">
+                          <div className="hreviewer-row">
+                            <div className="hreviewer-avatar">{initials}</div>
+                            <div>
+                              <div className="hreviewer-name">
+                                {item.reviewer}
+                              </div>
+                              <div className="hreviewer-role">
+                                {item.reviewerRole}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          {item.notes ? (
+                            <button
+                              className="hbtn-view"
+                              onClick={() => onViewDetail(item)}
+                            >
+                              <i className="bi bi-chat-left-text"></i>View Notes
+                            </button>
+                          ) : (
+                            <span className="hcell-empty">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="haction-cell">
+                            <span className={`haction-dot ${meta.cls}`}></span>
+                            <span className={`haction-label ${meta.cls}`}>
+                              <i className={`bi ${meta.icon}`}></i>
+                              {meta.label}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
             </tbody>
           </table>
         )}
@@ -686,9 +703,9 @@ const HistoryTable = ({ data, onViewDetail }) => {
       <Pagination
         currentPage={page}
         totalPages={totalPages}
-        totalItems={processed.length}
-        perPage={ROWS_PER_PAGE}
-        onPageChange={setPage}
+        totalItems={totalItems}
+        perPage={perPage}
+        onPageChange={onPageChange}
       />
     </div>
   );

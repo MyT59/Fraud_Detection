@@ -1,8 +1,15 @@
 import React, { useState, useEffect, useCallback } from "react";
 import PageLoader from "../components/common/PageLoader";
 import ReviewFilter from "../components/review/ReviewFilter";
-import { labelHistory } from "../services/mlService";
-import { submitReview, postFraudAlert } from "../services/reviewService";
+
+import {
+  fetchOpenQueue,
+  fetchReviewMetrics,
+  claimAndSubmitReview,
+  claimAlert,
+  submitReview,
+  mapAlertsToTransactions,
+} from "../services/reviewApiService";
 
 import "./ManualReview.css";
 
@@ -11,7 +18,7 @@ const fmt = (amount) =>
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: 0,
-  }).format(amount);
+  }).format(amount || 0);
 
 const fmtDate = (ds) => {
   if (!ds) return "—";
@@ -59,11 +66,11 @@ const RISK_COLOR = {
   critical: "#dc2626",
 };
 const getRiskColor = (l) => RISK_COLOR[l] || "#475569";
-const TXN_PER_PAGE = 5;
 
 const SAMPLE_TRANSACTIONS = [
   {
     id: "AGN-000001",
+    _alertId: null,
     service: "agenusa",
     status: "pending",
     rawScore: 0.931,
@@ -81,6 +88,7 @@ const SAMPLE_TRANSACTIONS = [
   },
   {
     id: "AGN-000002",
+    _alertId: null,
     service: "agenusa",
     status: "pending",
     rawScore: 0.854,
@@ -94,6 +102,7 @@ const SAMPLE_TRANSACTIONS = [
   },
   {
     id: "AGN-000003",
+    _alertId: null,
     service: "agenusa",
     status: "pending",
     rawScore: 0.782,
@@ -106,85 +115,8 @@ const SAMPLE_TRANSACTIONS = [
     matched_patterns: ["rapid_retry_declined", "midnight_unusual_amount"],
   },
   {
-    id: "AGN-000004",
-    service: "agenusa",
-    status: "pending",
-    rawScore: 0.615,
-    ACCOUNT_NUMBER: "ACCT100145",
-    TIMESTAMP_DB: "2026-01-11 10:47:00",
-    AMOUNT: 226048,
-    DEST_ACCOUNT_NUMBER: "DST300122",
-    PROCESSING_CODE: 400000,
-    RESPONSE_CODE: 0,
-    matched_patterns: [
-      "impossible_travel_terminal_switch",
-      "rapid_retry_declined",
-    ],
-  },
-  {
-    id: "AGN-000005",
-    service: "agenusa",
-    status: "pending",
-    rawScore: 0.602,
-    ACCOUNT_NUMBER: "ACCT100235",
-    TIMESTAMP_DB: "2026-01-21 04:00:00",
-    AMOUNT: 142014,
-    DEST_ACCOUNT_NUMBER: "DST300197",
-    PROCESSING_CODE: 10000,
-    RESPONSE_CODE: 0,
-    matched_patterns: ["impossible_travel_terminal_switch"],
-  },
-  {
-    id: "AGN-000006",
-    service: "agenusa",
-    status: "pending",
-    rawScore: 0.573,
-    ACCOUNT_NUMBER: "ACCT100166",
-    TIMESTAMP_DB: "2026-01-20 04:11:00",
-    AMOUNT: 184311,
-    DEST_ACCOUNT_NUMBER: "DST300135",
-    PROCESSING_CODE: 10000,
-    RESPONSE_CODE: 0,
-    matched_patterns: ["midnight_unusual_amount"],
-  },
-  {
-    id: "AGN-000007",
-    service: "agenusa",
-    status: "approved",
-    rawScore: 0.521,
-    ACCOUNT_NUMBER: "ACCT100187",
-    TIMESTAMP_DB: "2026-01-21 03:15:00",
-    AMOUNT: 130227,
-    DEST_ACCOUNT_NUMBER: "DST300179",
-    PROCESSING_CODE: 10000,
-    RESPONSE_CODE: 0,
-    matched_patterns: [],
-    reviewNotes: "Verified with customer — legit transaction.",
-    reviewedAt: "2026-01-22T08:30:00.000Z",
-  },
-  {
-    id: "AGN-000008",
-    service: "agenusa",
-    status: "rejected",
-    rawScore: 0.962,
-    ACCOUNT_NUMBER: "ACCT100299",
-    TIMESTAMP_DB: "2026-01-22 02:45:00",
-    AMOUNT: 895000,
-    DEST_ACCOUNT_NUMBER: "DST300301",
-    PROCESSING_CODE: 10000,
-    RESPONSE_CODE: 0,
-    matched_patterns: [
-      "rapid_retry_declined",
-      "bruteforce_pin_pattern",
-      "money_mule_destination",
-      "midnight_unusual_amount",
-    ],
-    reviewNotes: "Multiple high-risk patterns confirmed. Account blocked.",
-    reviewedAt: "2026-01-22T09:10:00.000Z",
-  },
-
-  {
     id: "NUS-000001",
+    _alertId: null,
     service: "nusabill",
     status: "pending",
     rawScore: 0.942,
@@ -194,14 +126,11 @@ const SAMPLE_TRANSACTIONS = [
     PAYMENT_AMOUNT: 412500,
     CHANNEL: "API",
     REFUND_FLAG: 0,
-    matched_patterns: [
-      "burst_payment_pattern",
-      "sudden_channel_switch_to_api",
-      "refund_abuse_pattern",
-    ],
+    matched_patterns: ["burst_payment_pattern", "sudden_channel_switch_to_api"],
   },
   {
     id: "NUS-000002",
+    _alertId: null,
     service: "nusabill",
     status: "pending",
     rawScore: 0.878,
@@ -213,147 +142,10 @@ const SAMPLE_TRANSACTIONS = [
     REFUND_FLAG: 1,
     matched_patterns: ["refund_abuse_pattern", "burst_payment_pattern"],
   },
-  {
-    id: "NUS-000003",
-    service: "nusabill",
-    status: "pending",
-    rawScore: 0.765,
-    CUSTOMER_ID: "CUST10199",
-    BILL_ID: "BILL556677",
-    BILL_AMOUNT: 198000,
-    PAYMENT_AMOUNT: 198000,
-    CHANNEL: "Mobile",
-    REFUND_FLAG: 0,
-    matched_patterns: ["payment_spike", "burst_payment_pattern"],
-  },
-  {
-    id: "NUS-000004",
-    service: "nusabill",
-    status: "pending",
-    rawScore: 0.657,
-    CUSTOMER_ID: "CUST10188",
-    BILL_ID: "BILL629474",
-    BILL_AMOUNT: 357477,
-    PAYMENT_AMOUNT: 357477,
-    CHANNEL: "Web",
-    REFUND_FLAG: 0,
-    matched_patterns: ["sudden_channel_switch_to_api"],
-  },
-  {
-    id: "NUS-000005",
-    service: "nusabill",
-    status: "pending",
-    rawScore: 0.655,
-    CUSTOMER_ID: "CUST10514",
-    BILL_ID: "BILL445805",
-    BILL_AMOUNT: 324503,
-    PAYMENT_AMOUNT: 324503,
-    CHANNEL: "Web",
-    REFUND_FLAG: 0,
-    matched_patterns: ["sudden_channel_switch_to_api"],
-  },
-  {
-    id: "NUS-000006",
-    service: "nusabill",
-    status: "pending",
-    rawScore: 0.648,
-    CUSTOMER_ID: "CUST10360",
-    BILL_ID: "BILL717788",
-    BILL_AMOUNT: 195992,
-    PAYMENT_AMOUNT: 195992,
-    CHANNEL: "Mobile",
-    REFUND_FLAG: 0,
-    matched_patterns: ["sudden_channel_switch_to_api"],
-  },
-  {
-    id: "NUS-000007",
-    service: "nusabill",
-    status: "pending",
-    rawScore: 0.531,
-    CUSTOMER_ID: "CUST10088",
-    BILL_ID: "BILL223344",
-    BILL_AMOUNT: 88000,
-    PAYMENT_AMOUNT: 80000,
-    CHANNEL: "Web",
-    REFUND_FLAG: 0,
-    matched_patterns: ["underpayment"],
-  },
-  {
-    id: "NUS-000008",
-    service: "nusabill",
-    status: "approved",
-    rawScore: 0.502,
-    CUSTOMER_ID: "CUST10008",
-    BILL_ID: "BILL160983",
-    BILL_AMOUNT: 280575,
-    PAYMENT_AMOUNT: 280575,
-    CHANNEL: "Web",
-    REFUND_FLAG: 0,
-    matched_patterns: ["sudden_channel_switch_to_api"],
-    reviewNotes: "Customer confirmed channel change was intentional.",
-    reviewedAt: "2026-01-22T10:00:00.000Z",
-  },
-  {
-    id: "NUS-000009",
-    service: "nusabill",
-    status: "rejected",
-    rawScore: 0.957,
-    CUSTOMER_ID: "CUST10588",
-    BILL_ID: "BILL153894",
-    BILL_AMOUNT: 315845,
-    PAYMENT_AMOUNT: 310000,
-    CHANNEL: "API",
-    REFUND_FLAG: 1,
-    matched_patterns: [
-      "burst_payment_pattern",
-      "refund_abuse_pattern",
-      "sudden_channel_switch_to_api",
-    ],
-    reviewNotes: "Confirmed fraud — refund abuse + API channel switch pattern.",
-    reviewedAt: "2026-01-22T11:20:00.000Z",
-  },
 ];
 
-const mapApiResult = (result, domain, index, originalId) => {
-  const rec = result.record;
-  const rawScore = result.ml_fraud_score;
-  const prefix = domain === "agenusa" ? "AGN" : "NUS";
-
-  const id = originalId || `${prefix}-${String(index + 1).padStart(6, "0")}`;
-
-  if (domain === "agenusa") {
-    return {
-      id,
-      service: "agenusa",
-      status: "pending",
-      rawScore,
-      matched_patterns: result.matched_patterns || [],
-      ACCOUNT_NUMBER: rec.ACCOUNT_NUMBER,
-      TIMESTAMP_DB: rec.TIMESTAMP_DB,
-      AMOUNT: rec.AMOUNT,
-      DEST_ACCOUNT_NUMBER: rec.DEST_ACCOUNT_NUMBER,
-      PROCESSING_CODE: rec.PROCESSING_CODE,
-      RESPONSE_CODE: rec.RESPONSE_CODE,
-    };
-  } else {
-    return {
-      id,
-      service: "nusabill",
-      status: "pending",
-      rawScore,
-      matched_patterns: result.matched_patterns || [],
-      CUSTOMER_ID: rec.CUSTOMER_ID,
-      BILL_ID: rec.BILL_ID,
-      BILL_AMOUNT: rec.BILL_AMOUNT,
-      PAYMENT_AMOUNT: rec.PAYMENT_AMOUNT,
-      CHANNEL: rec.CHANNEL,
-      REFUND_FLAG: rec.REFUND_FLAG,
-    };
-  }
-};
-
 const normalise = (raw) => {
-  const score01 = raw.rawScore;
+  const score01 = raw.rawScore ?? 0.5;
   const risk = scoreToRisk(score01, raw.service);
   const score100 = Math.round(score01 * 100);
   const patterns = (raw.matched_patterns || []).map((p) =>
@@ -365,13 +157,13 @@ const normalise = (raw) => {
       ...raw,
       fraudScore: score100,
       riskLevel: risk,
-      accountId: raw.ACCOUNT_NUMBER,
-      amount: raw.AMOUNT,
+      accountId: raw.ACCOUNT_NUMBER || "—",
+      amount: raw.AMOUNT || 0,
       amountNote: null,
-      destOrBill: raw.DEST_ACCOUNT_NUMBER,
+      destOrBill: raw.DEST_ACCOUNT_NUMBER || "—",
       typeOrChannel:
         PROC_CODE_MAP[raw.PROCESSING_CODE] || `Code ${raw.PROCESSING_CODE}`,
-      dateTime: raw.TIMESTAMP_DB,
+      dateTime: raw.TIMESTAMP_DB || null,
       anomalies: patterns,
     };
   } else {
@@ -379,16 +171,71 @@ const normalise = (raw) => {
       ...raw,
       fraudScore: score100,
       riskLevel: risk,
-      accountId: raw.CUSTOMER_ID,
-      amount: raw.BILL_AMOUNT,
+      accountId: raw.CUSTOMER_ID || "—",
+      amount: raw.BILL_AMOUNT || 0,
       amountNote:
         raw.BILL_AMOUNT !== raw.PAYMENT_AMOUNT
           ? `Paid: ${fmt(raw.PAYMENT_AMOUNT)}`
           : null,
-      destOrBill: raw.BILL_ID,
-      typeOrChannel: raw.CHANNEL,
+      destOrBill: raw.BILL_ID || "—",
+      typeOrChannel: raw.CHANNEL || "—",
       dateTime: null,
       anomalies: patterns,
+    };
+  }
+};
+
+const mapAlertToTxnFrontend = (alert) => {
+  const service =
+    (alert.service || "").toLowerCase() === "nusabill" ? "nusabill" : "agenusa";
+
+  const parseAnomalies = (msg = "") => {
+    return msg
+      .split("\n")
+      .filter((l) => l.trim().startsWith("-") || l.trim().startsWith("•"))
+      .map((l) => l.replace(/^[-•]\s*/, "").trim())
+      .filter(Boolean);
+  };
+
+  const priorityScore = alert.priority ?? 50;
+  const rawScore = Math.min(priorityScore / 100, 1);
+  const anomalies = parseAnomalies(
+    alert.description || alert.message_raw || "",
+  );
+
+  const base = {
+    id: alert.trx_id || `TXN-${alert.transaction_id}`,
+    _alertId: alert.id,
+    _transactionId: alert.transaction_id,
+    service,
+    status: "pending",
+    rawScore,
+    matched_patterns: anomalies.map((a) =>
+      a.toLowerCase().replace(/\s+/g, "_"),
+    ),
+    dateTime: alert.created_at || null,
+    _alertData: alert,
+  };
+
+  if (service === "agenusa") {
+    return {
+      ...base,
+      ACCOUNT_NUMBER: alert.user_account || "—",
+      DEST_ACCOUNT_NUMBER: "—",
+      TIMESTAMP_DB: alert.created_at,
+      AMOUNT: 0,
+      PROCESSING_CODE: 10000,
+      RESPONSE_CODE: 0,
+    };
+  } else {
+    return {
+      ...base,
+      CUSTOMER_ID: alert.user_account || "—",
+      BILL_ID: "—",
+      BILL_AMOUNT: 0,
+      PAYMENT_AMOUNT: 0,
+      CHANNEL: "—",
+      REFUND_FLAG: 0,
     };
   }
 };
@@ -436,6 +283,7 @@ const Pagination = ({
   const start = totalItems === 0 ? 0 : (currentPage - 1) * perPage + 1;
   const end = Math.min(currentPage * perPage, totalItems);
   const eff = Math.max(1, totalPages);
+
   const getPages = () => {
     if (eff <= 7) return Array.from({ length: eff }, (_, i) => i + 1);
     const pages = [1];
@@ -450,6 +298,7 @@ const Pagination = ({
     pages.push(eff);
     return pages;
   };
+
   return (
     <div className="pagination-bar">
       <span className="pagination-info">
@@ -499,24 +348,35 @@ const TxnModal = ({ txn, onClose, onReview }) => {
   const [notes, setNotes] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   const rColor = getRiskColor(txn.riskLevel);
   const isPending = txn.status === "pending";
   const isAgenusa = txn.service === "agenusa";
   const thr = THRESHOLDS[txn.service];
+  const isFallback = !txn._alertId;
 
   const handleDecide = (d) => {
     setDecision(d);
     setConfirming(true);
+    setError(null);
   };
+
   const handleCancel = () => {
     setDecision("");
     setConfirming(false);
+    setError(null);
   };
+
   const handleConfirm = async () => {
     setSubmitting(true);
-    await onReview(txn, decision, notes);
-    setSubmitting(false);
+    setError(null);
+    try {
+      await onReview(txn, decision, notes);
+    } catch (err) {
+      setError(err.message || "Terjadi kesalahan saat submit review.");
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -535,6 +395,21 @@ const TxnModal = ({ txn, onClose, onReview }) => {
             <span className="modal-txn-id">{txn.id}</span>
             <ServiceBadge service={txn.service} />
             <StatusTag status={txn.status} />
+            {isFallback && (
+              <span
+                style={{
+                  fontSize: ".68rem",
+                  fontWeight: 700,
+                  padding: "2px 7px",
+                  borderRadius: "4px",
+                  background: "#fef3c7",
+                  color: "#92400e",
+                  border: "1px solid #fde68a",
+                }}
+              >
+                SAMPLE DATA
+              </span>
+            )}
           </div>
           <button className="modal-close-btn" onClick={onClose}>
             <i className="bi bi-x-lg"></i>
@@ -664,6 +539,7 @@ const TxnModal = ({ txn, onClose, onReview }) => {
                 </div>
               )}
             </div>
+
             <div className="modal-info-block">
               <div className="modal-block-title">
                 <i className="bi bi-arrow-left-right"></i>
@@ -684,6 +560,32 @@ const TxnModal = ({ txn, onClose, onReview }) => {
               )}
             </div>
           </div>
+
+          {txn._alertId && (
+            <div
+              style={{
+                padding: ".5rem .75rem",
+                background: "#f0f9ff",
+                border: "1px solid #bae6fd",
+                borderRadius: "6px",
+                fontSize: ".78rem",
+                color: "#0369a1",
+                marginBottom: "1.25rem",
+                display: "flex",
+                alignItems: "center",
+                gap: ".4rem",
+              }}
+            >
+              <i className="bi bi-link-45deg"></i>
+              Alert ID: <strong>#{txn._alertId}</strong>
+              {txn._transactionId && (
+                <>
+                  {" "}
+                  · Transaction ID: <strong>#{txn._transactionId}</strong>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="modal-info-block" style={{ marginBottom: "1.25rem" }}>
             <div className="modal-block-title">
@@ -711,6 +613,27 @@ const TxnModal = ({ txn, onClose, onReview }) => {
               </p>
             )}
           </div>
+
+          {error && (
+            <div
+              style={{
+                padding: ".6rem .9rem",
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: "6px",
+                color: "#dc2626",
+                fontSize: ".82rem",
+                fontWeight: 600,
+                marginBottom: "1rem",
+                display: "flex",
+                alignItems: "center",
+                gap: ".4rem",
+              }}
+            >
+              <i className="bi bi-exclamation-circle-fill"></i>
+              {error}
+            </div>
+          )}
 
           {!isPending && (
             <div className="modal-reviewed-state">
@@ -742,6 +665,28 @@ const TxnModal = ({ txn, onClose, onReview }) => {
           {isPending && (
             <div className="modal-decision">
               <div className="modal-decision-title">Make Decision</div>
+
+              {isFallback && (
+                <div
+                  style={{
+                    padding: ".5rem .75rem",
+                    background: "#fef3c7",
+                    border: "1px solid #fde68a",
+                    borderRadius: "6px",
+                    fontSize: ".78rem",
+                    color: "#92400e",
+                    marginBottom: ".75rem",
+                    display: "flex",
+                    gap: ".4rem",
+                    alignItems: "center",
+                  }}
+                >
+                  <i className="bi bi-exclamation-triangle-fill"></i>
+                  Mode offline — keputusan hanya tersimpan secara lokal, tidak
+                  dikirim ke server.
+                </div>
+              )}
+
               {!confirming ? (
                 <div className="modal-decision-btns">
                   <button
@@ -759,15 +704,63 @@ const TxnModal = ({ txn, onClose, onReview }) => {
                 </div>
               ) : (
                 <div className="modal-confirm-section">
+                  <div
+                    style={{
+                      padding: ".5rem .75rem",
+                      background:
+                        decision === "approved" ? "#f0fdf4" : "#fef2f2",
+                      border: `1px solid ${decision === "approved" ? "#bbf7d0" : "#fecaca"}`,
+                      borderRadius: "6px",
+                      fontSize: ".82rem",
+                      fontWeight: 600,
+                      color: decision === "approved" ? "#15803d" : "#dc2626",
+                      marginBottom: ".75rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: ".4rem",
+                    }}
+                  >
+                    <i
+                      className={`bi ${decision === "approved" ? "bi-check-circle-fill" : "bi-x-circle-fill"}`}
+                    ></i>
+                    Confirm{" "}
+                    {decision === "approved"
+                      ? "Approval (SAFE)"
+                      : "Rejection (FRAUD)"}
+                    {txn._alertId && (
+                      <span
+                        style={{
+                          marginLeft: "auto",
+                          fontSize: ".72rem",
+                          fontWeight: 400,
+                          color: "#64748b",
+                        }}
+                      >
+                        Alert #{txn._alertId}
+                      </span>
+                    )}
+                  </div>
+
                   <div className="modal-notes-input">
-                    <label>Review Notes (Optional)</label>
+                    <label>Review Notes (Optional, max 500 karakter)</label>
                     <textarea
                       rows="3"
+                      maxLength={500}
                       placeholder="Add notes about your decision..."
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                     />
+                    <div
+                      style={{
+                        fontSize: ".72rem",
+                        color: "#94a3b8",
+                        textAlign: "right",
+                      }}
+                    >
+                      {notes.length}/500
+                    </div>
                   </div>
+
                   <div className="modal-confirm-row">
                     <button
                       className="modal-btn-cancel"
@@ -785,9 +778,25 @@ const TxnModal = ({ txn, onClose, onReview }) => {
                       onClick={handleConfirm}
                       disabled={submitting}
                     >
-                      {submitting
-                        ? "Submitting..."
-                        : `Confirm ${decision === "approved" ? "Approval" : "Rejection"}`}
+                      {submitting ? (
+                        <>
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: "12px",
+                              height: "12px",
+                              border: "2px solid currentColor",
+                              borderTopColor: "transparent",
+                              borderRadius: "50%",
+                              animation: "spin 0.6s linear infinite",
+                              marginRight: ".4rem",
+                            }}
+                          ></span>
+                          Submitting...
+                        </>
+                      ) : (
+                        `Confirm ${decision === "approved" ? "Approval" : "Rejection"}`
+                      )}
                     </button>
                   </div>
                 </div>
@@ -800,92 +809,161 @@ const TxnModal = ({ txn, onClose, onReview }) => {
   );
 };
 
+const ReviewStatsBar = ({ metrics, loading }) => {
+  if (loading) return null;
+  if (!metrics) return null;
+
+  const stats = [
+    {
+      label: "Open Alerts",
+      value: metrics.open_alerts ?? "—",
+      icon: "bi-inbox-fill",
+      color: "#f59e0b",
+    },
+    {
+      label: "In Progress",
+      value: metrics.in_progress_alerts ?? "—",
+      icon: "bi-hourglass-split",
+      color: "#3b82f6",
+    },
+    {
+      label: "Reviewed Today",
+      value: metrics.total_reviews ?? "—",
+      icon: "bi-clipboard-check",
+      color: "#8b5cf6",
+    },
+    {
+      label: "Fraud Rate",
+      value:
+        metrics.fraud_confirmation_rate != null
+          ? `${metrics.fraud_confirmation_rate.toFixed(1)}%`
+          : "—",
+      icon: "bi-shield-exclamation",
+      color: "#ef4444",
+    },
+    {
+      label: "Avg. Review Time",
+      value:
+        metrics.avg_review_duration_minutes != null
+          ? `${metrics.avg_review_duration_minutes.toFixed(1)} min`
+          : "—",
+      icon: "bi-stopwatch",
+      color: "#10b981",
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: ".75rem",
+        flexWrap: "wrap",
+        marginBottom: "1.25rem",
+      }}
+    >
+      {stats.map((s) => (
+        <div
+          key={s.label}
+          style={{
+            flex: "1 1 120px",
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "10px",
+            padding: ".75rem 1rem",
+            display: "flex",
+            alignItems: "center",
+            gap: ".6rem",
+          }}
+        >
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: "8px",
+              background: `${s.color}18`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: s.color,
+              fontSize: "1.1rem",
+              flexShrink: 0,
+            }}
+          >
+            <i className={`bi ${s.icon}`}></i>
+          </div>
+          <div>
+            <div
+              style={{ fontSize: ".72rem", color: "#64748b", fontWeight: 500 }}
+            >
+              {s.label}
+            </div>
+            <div
+              style={{ fontSize: "1.05rem", fontWeight: 700, color: "#0f172a" }}
+            >
+              {s.value}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const ManualReview = () => {
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState([]);
   const [selectedTxn, setSelectedTxn] = useState(null);
   const [apiError, setApiError] = useState(false);
+  const [metrics, setMetrics] = useState(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    const fetchFromML = async () => {
+    const load = async () => {
       try {
         setLoading(true);
         setApiError(false);
 
-        const BASE_URL =
-          process.env.REACT_APP_ML_API_URL || "http://localhost:8000";
+        const alerts = await fetchOpenQueue({ limit: 100 });
 
-        const txnRes = await fetch(`${BASE_URL}/transactions/flagged`);
-        if (!txnRes.ok)
-          throw new Error(`Gagal fetch dataset: ${txnRes.status}`);
-        const { agenusa: agenusaRaw, nusabill: nusabillRaw } =
-          await txnRes.json();
-
-        const agenusaIds = agenusaRaw.map((r) => r.id);
-        const nusabillIds = nusabillRaw.map((r) => r.id);
-
-        const agenusaRecords = agenusaRaw.map((r) => ({
-          TERMINAL_ID: r.TERMINAL_ID || "T1000",
-          MERCHANT_ID: r.MERCHANT_ID || "M2000",
-          ACCOUNT_NUMBER: r.ACCOUNT_NUMBER,
-          DEST_ACCOUNT_NUMBER: r.DEST_ACCOUNT_NUMBER,
-          TIMESTAMP_DB: r.TIMESTAMP_DB,
-          AMOUNT: Number(r.AMOUNT),
-          STAN: r.STAN || 100000,
-          PROCESSING_CODE: Number(r.PROCESSING_CODE) || 10000,
-          RESPONSE_CODE: Number(r.RESPONSE_CODE) || 0,
-          MTI: r.MTI || "0200",
-        }));
-
-        const nusabillRecords = nusabillRaw.map((r) => ({
-          BILL_ID: r.BILL_ID,
-          CUSTOMER_ID: r.CUSTOMER_ID,
-          BILL_AMOUNT: Number(r.BILL_AMOUNT),
-          PAYMENT_AMOUNT: Number(r.PAYMENT_AMOUNT),
-          BILL_DATE: r.BILL_DATE || "2026-01-01",
-          PAYMENT_DATE: r.PAYMENT_DATE || "2026-01-05",
-          CHANNEL: r.CHANNEL || "Web",
-          BILL_STATUS: r.BILL_STATUS || "Paid",
-          REFUND_FLAG: Number(r.REFUND_FLAG) || 0,
-        }));
-
-        const [agenusaRes, nusabillRes, feedbackRes] = await Promise.all([
-          labelHistory("agenusa", agenusaRecords, THRESHOLDS.agenusa),
-          labelHistory("nusabill", nusabillRecords, THRESHOLDS.nusabill),
-          fetch(`${BASE_URL}/review/feedback`).catch(() => null),
-        ]);
-
-        const reviewedIds = new Set();
-        if (feedbackRes && feedbackRes.ok) {
-          const fb = await feedbackRes.json();
-          (fb.records || []).forEach((r) => reviewedIds.add(r.transaction_id));
+        if (!Array.isArray(alerts) || alerts.length === 0) {
+          setTransactions(SAMPLE_TRANSACTIONS.map(normalise));
+          setApiError(true);
+          return;
         }
 
-        const allTxns = [
-          ...agenusaRes.results.map((r, i) =>
-            mapApiResult(r, "agenusa", i, agenusaIds[i]),
-          ),
-          ...nusabillRes.results.map((r, i) =>
-            mapApiResult(r, "nusabill", i, nusabillIds[i]),
-          ),
-        ]
+        const txns = alerts
+          .map(mapAlertToTxnFrontend)
           .map(normalise)
-          .filter((t) => !reviewedIds.has(t.id))
           .sort((a, b) => b.fraudScore - a.fraudScore);
 
-        setTransactions(allTxns);
+        setTransactions(txns);
       } catch (err) {
-        console.warn("ML API tidak tersedia, pakai sample data:", err.message);
+        console.warn("API tidak tersedia, pakai sample data:", err.message);
         setApiError(true);
-
         setTransactions(SAMPLE_TRANSACTIONS.map(normalise));
       } finally {
         setLoading(false);
       }
     };
 
-    fetchFromML();
-  }, []);
+    load();
+  }, [refreshKey]);
+
+  useEffect(() => {
+    const loadMetrics = async () => {
+      try {
+        setMetricsLoading(true);
+        const data = await fetchReviewMetrics();
+        setMetrics(data);
+      } catch {
+      } finally {
+        setMetricsLoading(false);
+      }
+    };
+
+    loadMetrics();
+  }, [refreshKey]);
 
   const handleReview = useCallback(async (txn, decision, notes) => {
     setTransactions((prev) =>
@@ -902,16 +980,41 @@ const ManualReview = () => {
     );
     setSelectedTxn(null);
 
-    try {
-      await submitReview(txn, decision, notes);
-    } catch (err) {
-      console.warn("submitReview gagal:", err.message);
-    }
+    if (txn._alertId) {
+      try {
+        await claimAndSubmitReview({
+          alertId: txn._alertId,
+          frontendDecision: decision,
+          note: notes,
+          fraudScore: txn.fraudScore,
+        });
 
-    try {
-      await postFraudAlert(txn, decision, notes);
-    } catch (err) {
-      console.warn("postFraudAlert gagal:", err.message);
+        setRefreshKey((k) => k + 1);
+      } catch (err) {
+        console.error("Submit review gagal:", err);
+
+        if (err.message && err.message.toLowerCase().includes("claim")) {
+          try {
+            await submitReview({
+              alertId: txn._alertId,
+              frontendDecision: decision,
+              note: notes,
+              fraudScore: txn.fraudScore,
+            });
+            setRefreshKey((k) => k + 1);
+          } catch (retryErr) {
+            console.error("Retry submit gagal:", retryErr);
+
+            throw retryErr;
+          }
+        } else {
+          throw err;
+        }
+      }
+    } else {
+      console.info(
+        "Mode offline: review disimpan lokal, tidak dikirim ke server.",
+      );
     }
   }, []);
 
@@ -925,26 +1028,68 @@ const ManualReview = () => {
           <p className="subtitle">Review and verify flagged transactions</p>
         </div>
 
-        {apiError && (
-          <div
+        <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
+          {apiError ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: ".5rem",
+                padding: ".5rem 1rem",
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: "8px",
+                fontSize: ".8rem",
+                color: "#92400e",
+                fontWeight: 600,
+              }}
+            >
+              <i className="bi bi-exclamation-triangle-fill"></i>
+              API offline — menampilkan sample data
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: ".5rem",
+                padding: ".5rem 1rem",
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: "8px",
+                fontSize: ".8rem",
+                color: "#15803d",
+                fontWeight: 600,
+              }}
+            >
+              <i className="bi bi-check-circle-fill"></i>
+              Terhubung ke API
+            </div>
+          )}
+
+          <button
+            onClick={() => setRefreshKey((k) => k + 1)}
             style={{
               display: "flex",
               alignItems: "center",
-              gap: ".5rem",
-              padding: ".5rem 1rem",
-              background: "#fef3c7",
-              border: "1px solid #fde68a",
+              gap: ".35rem",
+              padding: ".5rem .9rem",
+              border: "1px solid #e2e8f0",
               borderRadius: "8px",
-              fontSize: ".8rem",
-              color: "#92400e",
+              background: "#fff",
+              fontSize: ".82rem",
               fontWeight: 600,
+              color: "#374151",
+              cursor: "pointer",
             }}
           >
-            <i className="bi bi-exclamation-triangle-fill"></i>
-            ML API offline — menampilkan sample data
-          </div>
-        )}
+            <i className="bi bi-arrow-clockwise"></i>
+            Refresh
+          </button>
+        </div>
       </div>
+
+      <ReviewStatsBar metrics={metrics} loading={metricsLoading} />
 
       <ReviewFilter transactions={transactions}>
         {({
@@ -1089,23 +1234,23 @@ const ManualReview = () => {
                         </tr>
                       ))}
 
-                      {Array.from({ length: 10 - paginatedTxns.length }).map(
-                        (_, i) => (
-                          <tr key={`ghost-${i}`} className="txn-row-ghost">
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td className="hide-sm"></td>
-                            <td className="hide-sm"></td>
-                            <td className="hide-sm"></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td className="col-action"></td>
-                          </tr>
-                        ),
-                      )}
+                      {Array.from({
+                        length: Math.max(0, 10 - paginatedTxns.length),
+                      }).map((_, i) => (
+                        <tr key={`ghost-${i}`} className="txn-row-ghost">
+                          <td></td>
+                          <td></td>
+                          <td></td>
+                          <td></td>
+                          <td className="hide-sm"></td>
+                          <td className="hide-sm"></td>
+                          <td className="hide-sm"></td>
+                          <td></td>
+                          <td></td>
+                          <td></td>
+                          <td className="col-action"></td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 )}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Line, Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -12,6 +12,7 @@ import {
   Legend,
   Filler,
 } from "chart.js";
+import { api } from "../../services/apiService";
 import "./ChartCard.css";
 import "./TransactionChart.css";
 
@@ -33,7 +34,6 @@ const genToday = () => {
   return Array.from({ length: 24 }, (_, h) => {
     const isPast = h < currentHour;
     const isCurrent = h === currentHour;
-
     const base =
       h >= 8 && h <= 21
         ? 12 + Math.round(Math.sin(((h - 8) / 13) * Math.PI) * 12)
@@ -63,7 +63,6 @@ const genLastNDays = (n) => {
     const d = new Date(today);
     d.setDate(today.getDate() - (n - 1 - i));
     const isToday = i === n - 1;
-
     const base = Math.round(140 + Math.sin(i / 4) * 40 + Math.random() * 35);
     const txn = isToday
       ? Math.round(base * (new Date().getHours() / 24))
@@ -97,7 +96,6 @@ const genLast12Months = () => {
     const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
     const isCurrentMonth = i === 11;
     const base = Math.round(3800 + i * 220 + Math.random() * 400);
-
     const daysInMonth = new Date(
       d.getFullYear(),
       d.getMonth() + 1,
@@ -122,6 +120,57 @@ const buildStaticData = () => ({
   "1y": genLast12Months(),
 });
 
+const mapTrendResponse = (raw, range) => {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+
+  return raw.map((d) => {
+    if (d.hour !== undefined) {
+      return {
+        label: `${String(d.hour).padStart(2, "0")}:00`,
+        transactions: d.total || d.transactions || 0,
+        fraud: d.fraud || 0,
+      };
+    }
+
+    if (d.date !== undefined) {
+      const dt = new Date(d.date);
+      return {
+        label: `${dt.getDate()}/${dt.getMonth() + 1}`,
+        transactions: d.total || d.transactions || 0,
+        fraud: d.fraud || 0,
+      };
+    }
+
+    if (d.month !== undefined) {
+      const MONTHS = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+      return {
+        label: MONTHS[(d.month - 1) % 12] || String(d.month),
+        transactions: d.total || d.transactions || 0,
+        fraud: d.fraud || 0,
+      };
+    }
+
+    return {
+      label: d.day || d.label || "",
+      transactions: d.total || d.transactions || 0,
+      fraud: d.fraud || 0,
+    };
+  });
+};
+
 const RANGE_OPTIONS = [
   { key: "today", label: "Today" },
   { key: "7d", label: "7 days" },
@@ -129,6 +178,12 @@ const RANGE_OPTIONS = [
   { key: "1y", label: "1 year" },
   { key: "custom", label: "Custom", isCalendar: true },
 ];
+
+const RANGE_TO_API = {
+  today: "today",
+  "7d": "weekly",
+  "30d": "monthly",
+};
 
 const CARD_TITLES = {
   today: "Transactions Today",
@@ -160,8 +215,11 @@ const TransactionChart = ({ data, onRangeChange }) => {
     return d.toISOString().split("T")[0];
   });
   const [dateTo, setDateTo] = useState(new Date().toISOString().split("T")[0]);
+
+  const [apiData, setApiData] = useState({});
   const [customData, setCustomData] = useState(null);
   const [expanded, setExpanded] = useState(false);
+  const [isFetchingRange, setIsFetchingRange] = useState(false);
 
   const [staticData, setStaticData] = useState(() => buildStaticData());
 
@@ -188,11 +246,46 @@ const TransactionChart = ({ data, onRangeChange }) => {
     };
   }, [expanded]);
 
+  const fetchRangeData = useCallback(
+    async (range) => {
+      if (!RANGE_TO_API[range] || range === "today") return;
+
+      if (apiData[range]) return;
+
+      setIsFetchingRange(true);
+      try {
+        const raw = await api.get(
+          `/dashboard/transactions/trend/detail?range=${RANGE_TO_API[range]}`,
+        );
+        const mapped = mapTrendResponse(raw, range);
+        if (mapped && mapped.length > 0) {
+          setApiData((prev) => ({ ...prev, [range]: mapped }));
+        }
+      } catch (err) {
+        console.warn(
+          `[TransactionChart] Gagal fetch range "${range}":`,
+          err.message,
+        );
+      } finally {
+        setIsFetchingRange(false);
+      }
+    },
+    [apiData],
+  );
+
   const chartData = useMemo(() => {
+    if (activeRange === "today") {
+      return data && data.length > 0 ? data : staticData.today;
+    }
     if (activeRange === "custom" && customData) return customData;
-    if (data && data.length > 0 && activeRange !== "today") return data;
-    return staticData[activeRange] || staticData[DEFAULT_RANGE];
-  }, [activeRange, customData, data, staticData]);
+    if (activeRange === "1y") return staticData["1y"];
+
+    return (
+      apiData[activeRange] ||
+      staticData[activeRange] ||
+      staticData[DEFAULT_RANGE]
+    );
+  }, [activeRange, customData, data, staticData, apiData]);
 
   const handleRangeClick = (key) => {
     if (key === "custom") {
@@ -202,6 +295,8 @@ const TransactionChart = ({ data, onRangeChange }) => {
     setShowDatePicker(false);
     setActiveRange(key);
     if (onRangeChange) onRangeChange(key, null);
+
+    fetchRangeData(key);
   };
 
   const handleReset = () => {
@@ -215,8 +310,29 @@ const TransactionChart = ({ data, onRangeChange }) => {
     if (onRangeChange) onRangeChange(DEFAULT_RANGE, null);
   };
 
-  const handleApplyCustom = () => {
+  const handleApplyCustom = async () => {
     if (!dateFrom || !dateTo || dateTo < dateFrom) return;
+
+    setIsFetchingRange(true);
+    try {
+      const raw = await api.get(
+        `/dashboard/transactions/trend/detail?range=custom&start=${dateFrom}&end=${dateTo}`,
+      );
+      const mapped = mapTrendResponse(raw, "custom");
+      if (mapped && mapped.length > 0) {
+        setCustomData(mapped);
+        setActiveRange("custom");
+        setShowDatePicker(false);
+        if (onRangeChange)
+          onRangeChange("custom", { from: dateFrom, to: dateTo, data: mapped });
+        return;
+      }
+    } catch (err) {
+      console.warn("[TransactionChart] Gagal fetch custom range:", err.message);
+    } finally {
+      setIsFetchingRange(false);
+    }
+
     const d1 = new Date(dateFrom);
     const d2 = new Date(dateTo);
     const days = Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
@@ -361,7 +477,15 @@ const TransactionChart = ({ data, onRangeChange }) => {
   const isDefault = activeRange === DEFAULT_RANGE && !showDatePicker;
 
   const LegendRow = () => (
-    <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        marginTop: 8,
+        flexWrap: "wrap",
+        alignItems: "center",
+      }}
+    >
       {[
         { color: "#dc2626", label: "Transactions" },
         { color: "#fca5a5", label: "Fraud" },
@@ -388,6 +512,24 @@ const TransactionChart = ({ data, onRangeChange }) => {
           {label}
         </span>
       ))}
+
+      {isFetchingRange && (
+        <span
+          style={{
+            fontSize: 11,
+            color: "#9ca3af",
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          <i
+            className="bi bi-arrow-repeat"
+            style={{ animation: "spin 1s linear infinite", fontSize: 10 }}
+          ></i>
+          Loading…
+        </span>
+      )}
     </div>
   );
 
@@ -411,6 +553,7 @@ const TransactionChart = ({ data, onRangeChange }) => {
                 : ""
             }${opt.isCalendar ? " calendar-btn" : ""}`}
             onClick={() => handleRangeClick(opt.key)}
+            disabled={isFetchingRange}
             title={opt.isCalendar ? "Pick custom date range" : undefined}
           >
             {opt.isCalendar && (
@@ -424,6 +567,7 @@ const TransactionChart = ({ data, onRangeChange }) => {
             className="txn-filter-btn txn-reset-btn"
             onClick={handleReset}
             title="Reset to Today"
+            disabled={isFetchingRange}
           >
             <i
               className="bi bi-arrow-counterclockwise"
@@ -450,8 +594,12 @@ const TransactionChart = ({ data, onRangeChange }) => {
             max={new Date().toISOString().split("T")[0]}
             onChange={(e) => setDateTo(e.target.value)}
           />
-          <button className="txn-apply-btn" onClick={handleApplyCustom}>
-            Apply
+          <button
+            className="txn-apply-btn"
+            onClick={handleApplyCustom}
+            disabled={isFetchingRange}
+          >
+            {isFetchingRange ? "..." : "Apply"}
           </button>
         </div>
       )}
@@ -592,6 +740,13 @@ const TransactionChart = ({ data, onRangeChange }) => {
       </div>
 
       {expanded && <ExpandedView />}
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+      `}</style>
     </>
   );
 };

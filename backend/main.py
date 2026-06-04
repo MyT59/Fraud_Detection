@@ -4,6 +4,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from slowapi.middleware import SlowAPIMiddleware
@@ -116,6 +117,14 @@ app = FastAPI(
     title="Fraud Detection System API",
     version="2.0.0",
     lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # origin React-mu
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 async def redis_listener():

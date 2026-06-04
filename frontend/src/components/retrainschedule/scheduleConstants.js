@@ -1,10 +1,5 @@
 export const MODELS = [
-  "FraudNet v3.2",
-  "AnomalyDetector v1.8",
-  "RiskScorer v2.0",
-  "PatternClassifier v4.1",
-  "BehaviorAnalyzer v2.5",
-  "TransactionGuard v1.3",
+  "Isolation Forest",
 ];
 
 export const DAYS_OF_WEEK = [
@@ -31,7 +26,7 @@ export const INITIAL_SCHEDULES = [
   {
     id: 1,
     name: "Weekly Full Retrain",
-    model: "FraudNet v3.2",
+    model: "Isolation Forest",
     frequency: "weekly",
     dayOfWeek: "Monday",
     dayOfMonth: null,
@@ -45,7 +40,7 @@ export const INITIAL_SCHEDULES = [
   {
     id: 2,
     name: "Monthly Deep Retrain",
-    model: "AnomalyDetector v1.8",
+    model: "Isolation Forest",
     frequency: "monthly",
     dayOfWeek: null,
     dayOfMonth: "1",
@@ -59,7 +54,7 @@ export const INITIAL_SCHEDULES = [
   {
     id: 3,
     name: "Daily Incremental Update",
-    model: "RiskScorer v2.0",
+    model: "Isolation Forest",
     frequency: "daily",
     dayOfWeek: null,
     dayOfMonth: null,
@@ -73,7 +68,7 @@ export const INITIAL_SCHEDULES = [
   {
     id: 4,
     name: "Bi-weekly Pattern Refresh",
-    model: "PatternClassifier v4.1",
+    model: "Isolation Forest",
     frequency: "weekly",
     dayOfWeek: "Friday",
     dayOfMonth: null,

@@ -4,227 +4,89 @@ import BlacklistFormModal from "../components/riskmanagement/BlacklistFormModal"
 import RuleEngine from "../components/riskmanagement/RuleEngine";
 import RuleModal from "../components/riskmanagement/RuleModal";
 import RuleDetailModal from "../components/riskmanagement/RuleDetailModal";
-import "./RiskManagement.css";
+import RiskStats from "../components/riskmanagement/RiskStats";
 import PageLoader from "../components/common/PageLoader";
+import { api } from "../services/apiService";
+import "./RiskManagement.css";
 
-const SEED_BLACKLIST = [
-  {
-    id: 1,
-    accountNumber: "1230004567",
-    accountName: "Budi Palsu",
-    bank: "BCA",
-    reason: "Penipuan Online",
-    source: "manual",
-    status: "active",
-    hitCount: 7,
-    addedAt: "01 Feb 2025",
-  },
-  {
-    id: 2,
-    accountNumber: "0897766554",
-    accountName: "Sari Bohong",
-    bank: "BRI",
-    reason: "Rekening Mule",
-    source: "manual",
-    status: "active",
-    hitCount: 3,
-    addedAt: "01 Feb 2025",
-  },
-  {
-    id: 3,
-    accountNumber: "4450091823",
-    accountName: "Agen Penipu X",
-    bank: "Mandiri",
-    reason: "Investasi Bodong",
-    source: "manual",
-    status: "active",
-    hitCount: 0,
-    addedAt: "02 Feb 2025",
-  },
-  {
-    id: 4,
-    accountNumber: "8812345098",
-    accountName: "Toko Palsu Online",
-    bank: "BNI",
-    reason: "Jual Beli Palsu",
-    source: "import",
-    status: "pending",
-    hitCount: 0,
-    addedAt: "05 Feb 2025",
-  },
-  {
-    id: 5,
-    accountNumber: "3309988712",
-    accountName: "Pinjol Ilegal Co.",
-    bank: "BSI",
-    reason: "Pinjol Ilegal",
-    source: "import",
-    status: "pending",
-    hitCount: 0,
-    addedAt: "05 Feb 2025",
-  },
-  {
-    id: 6,
-    accountNumber: "7760123456",
-    accountName: "Hacker Anonim",
-    bank: "CIMB Niaga",
-    reason: "Phishing",
-    source: "system",
-    status: "active",
-    hitCount: 12,
-    addedAt: "10 Feb 2025",
-  },
-  {
-    id: 7,
-    accountNumber: "2234509876",
-    accountName: "Oknum Penipuan",
-    bank: "Danamon",
-    reason: "Social Engineering",
-    source: "manual",
-    status: "active",
-    hitCount: 1,
-    addedAt: "12 Feb 2025",
-  },
-  {
-    id: 8,
-    accountNumber: "9900123789",
-    accountName: "Rekening Bayangan",
-    bank: "Permata",
-    reason: "Rekening Mule",
-    source: "manual",
-    status: "inactive",
-    hitCount: 0,
-    addedAt: "15 Feb 2025",
-  },
-  {
-    id: 9,
-    accountNumber: "6678901234",
-    accountName: "Sindikat A",
-    bank: "BCA",
-    reason: "Penipuan Online",
-    source: "manual",
-    status: "active",
-    hitCount: 5,
-    addedAt: "17 Feb 2025",
-  },
-  {
-    id: 10,
-    accountNumber: "1122334455",
-    accountName: "Modus Baru Corp",
-    bank: "BRI",
-    reason: "Penipuan Online",
-    source: "import",
-    status: "pending",
-    hitCount: 0,
-    addedAt: "18 Feb 2025",
-  },
-];
+const ruleFromApi = (r) => ({
+  id: r.id,
+  name: r.rule_name || "Rule Tanpa Nama",
+  description: r.description || "",
+  priority: r.priority ?? 5,
+  action: (r.action || "FLAG").toLowerCase(),
+  enabled: r.is_active ?? true,
+  condition: buildConditionText(r),
+  condField: r.condition_field || "",
+  condOp: r.operator || ">",
+  condValue: r.threshold_value || "",
+  rule_key: r.rule_key || "",
+  service_scope: r.service_scope || "ALL",
+  severity: r.severity || "MEDIUM",
+  rule_group: r.rule_group || null,
+  hitCount: 0,
+  hitToday: 0,
+  hitWeek: 0,
+  hitMonth: 0,
+  createdAt: "—",
+});
 
-const SEED_RULES = [
-  {
-    id: 1,
-    name: "Transaksi Besar Akun Baru",
-    description: "Nominal > 50jt dari akun usia < 7 hari",
-    priority: 1,
-    action: "block",
-    enabled: true,
-    hitCount: 23,
-    hitToday: 3,
-    hitWeek: 9,
-    hitMonth: 23,
-    condition: "Jumlah Transaksi (Rp) > 50000000 (akun < 7 hari)",
-    condField: "Jumlah Transaksi (Rp)",
-    condOp: ">",
-    condValue: "50000000",
-    createdAt: "01 Jan 2025",
-  },
-  {
-    id: 2,
-    name: "Frekuensi Tinggi",
-    description: "Lebih dari 10 transaksi per jam",
-    priority: 2,
-    action: "block",
-    enabled: true,
-    hitCount: 8,
-    hitToday: 1,
-    hitWeek: 4,
-    hitMonth: 8,
-    condition: "Frekuensi (per jam) > 10",
-    condField: "Frekuensi (per jam)",
-    condOp: ">",
-    condValue: "10",
-    createdAt: "01 Jan 2025",
-  },
-  {
-    id: 3,
-    name: "Transaksi Dini Hari",
-    description: "Transaksi antara jam 01:00–04:00",
-    priority: 3,
-    action: "flag",
-    enabled: true,
-    hitCount: 41,
-    hitToday: 5,
-    hitWeek: 18,
-    hitMonth: 41,
-    condition: "Jam Transaksi >= 1 dan <= 4",
-    condField: "Jam Transaksi",
-    condOp: ">=",
-    condValue: "1",
-    condValue2: "4",
-    createdAt: "05 Jan 2025",
-  },
-  {
-    id: 4,
-    name: "Akumulasi Harian Besar",
-    description: "Total transaksi harian > 100jt",
-    priority: 4,
-    action: "review",
-    enabled: true,
-    hitCount: 17,
-    hitToday: 2,
-    hitWeek: 7,
-    hitMonth: 17,
-    condition: "Jumlah Kumulatif (hari ini) > 100000000",
-    condField: "Jumlah Kumulatif (hari ini)",
-    condOp: ">",
-    condValue: "100000000",
-    createdAt: "10 Jan 2025",
-  },
-  {
-    id: 5,
-    name: "Transaksi Luar Negeri",
-    description: "Kode negara tujuan bukan ID",
-    priority: 5,
-    action: "flag",
-    enabled: true,
-    hitCount: 6,
-    hitToday: 0,
-    hitWeek: 2,
-    hitMonth: 6,
-    condition: "Kode Negara Tujuan ≠ ID",
-    condField: "Kode Negara Tujuan",
-    condOp: "≠",
-    condValue: "ID",
-    createdAt: "15 Jan 2025",
-  },
-  {
-    id: 6,
-    name: "Velocity Harian Ekstrem",
-    description: "> 50 transaksi dalam sehari",
-    priority: 6,
-    action: "block",
-    enabled: false,
-    hitCount: 0,
-    hitToday: 0,
-    hitWeek: 0,
-    hitMonth: 0,
-    condition: "Frekuensi (per hari) > 50",
-    condField: "Frekuensi (per hari)",
-    condOp: ">",
-    condValue: "50",
-    createdAt: "20 Jan 2025",
-  },
-];
+function buildConditionText(r) {
+  if (!r.condition_field && !r.threshold_value) return "—";
+  const field = r.condition_field || "";
+  const op = r.operator || ">";
+  const val = r.threshold_value || "";
+  return `${field} ${op} ${val}`.trim() || "—";
+}
+
+const ruleToApiPayload = (form) => ({
+  rule_name: form.name,
+  rule_key: form.rule_key || `RULE_${Date.now()}`,
+  service_scope: form.service_scope || "ALL",
+  condition_field: form.condField || null,
+  operator: form.condOp || null,
+  threshold_value: form.condValue || null,
+  action: (form.action || "flag").toUpperCase(),
+  severity: form.severity || "MEDIUM",
+  priority: form.priority || 5,
+  rule_group: form.rule_group || null,
+  description: form.description || null,
+});
+
+const resolveBlStatus = (item) => {
+  if (item.status === "PENDING") return "pending";
+  if (item.status === "APPROVED" && item.is_active) return "active";
+  return "inactive";
+};
+
+const blFromApi = (item) => ({
+  id: item.id,
+  accountNumber: item.value,
+  accountName: "",
+  bank: item.type,
+  reason: item.reason,
+  reasonDetail: item.review_note || "",
+  source: (item.source || "MANUAL").toLowerCase(),
+  status: resolveBlStatus(item),
+  hitCount: item.hit_count || 0,
+  addedAt: item.created_at
+    ? new Date(item.created_at).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "—",
+
+  _apiStatus: item.status,
+  _isActive: item.is_active,
+});
+
+const blToApiPayload = (form) => ({
+  value: form.accountNumber,
+  type: "ACCOUNT_NUMBER",
+  service_scope: "ALL",
+  reason: form.reason || "Penipuan Online",
+});
 
 let _tid = 0;
 const useToast = () => {
@@ -250,12 +112,6 @@ const useToast = () => {
   }, []);
 
   const dismiss = useCallback((id) => {
-    Object.keys(timers.current).forEach((k) => {
-      if (String(k) === String(id)) {
-        clearTimeout(timers.current[k]);
-        delete timers.current[k];
-      }
-    });
     setToasts((p) => {
       const toast = p.find((t) => t.id === id);
       if (toast?._key && timers.current[toast._key]) {
@@ -270,18 +126,22 @@ const useToast = () => {
 };
 
 const RiskManagement = () => {
-  const [loading, setLoading] = useState(true);
-  const [blacklist, setBlacklist] = useState(SEED_BLACKLIST);
-  const [rules, setRules] = useState(SEED_RULES);
+  const [pageLoading, setPageLoading] = useState(true);
+
+  const [rules, setRules] = useState([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
+  const [rulesError, setRulesError] = useState(null);
+
+  const [blacklist, setBlacklist] = useState([]);
+  const [blLoading, setBlLoading] = useState(false);
+  const [blError, setBlError] = useState(null);
 
   const [blModal, setBlModal] = useState({
     open: false,
     mode: "single",
     editData: null,
   });
-
   const [ruleModal, setRuleModal] = useState({ open: false, editData: null });
-
   const [ruleDetailModal, setRuleDetailModal] = useState({
     open: false,
     rule: null,
@@ -289,95 +149,242 @@ const RiskManagement = () => {
 
   const { toasts, push, dismiss } = useToast();
 
-  const handleBlSubmit = (mode, items) => {
-    const now = new Date().toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+  const fetchRules = useCallback(async () => {
+    setRulesLoading(true);
+    setRulesError(null);
+    try {
+      const data = await api.get("/rules/");
+      setRules((data || []).map(ruleFromApi));
+    } catch (err) {
+      console.warn("[RiskManagement] Gagal memuat rules:", err.message);
+      setRulesError(err.message);
+      setRules([]);
+    } finally {
+      setRulesLoading(false);
+    }
+  }, []);
 
-    if (mode === "edit") {
-      setBlacklist((p) =>
-        p.map((b) => (b.id === items[0].id ? { ...b, ...items[0] } : b)),
+  const fetchBlacklist = useCallback(async () => {
+    setBlLoading(true);
+    setBlError(null);
+    try {
+      const data = await api.get("/blacklist/?skip=0&limit=100");
+      const items = data?.data || [];
+      setBlacklist(items.map(blFromApi));
+    } catch (err) {
+      console.warn("[RiskManagement] Gagal memuat blacklist:", err.message);
+      setBlError(err.message);
+      setBlacklist([]);
+    } finally {
+      setBlLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const init = async () => {
+      await Promise.all([fetchRules(), fetchBlacklist()]);
+      setPageLoading(false);
+    };
+    init();
+  }, [fetchRules, fetchBlacklist]);
+
+  const handleRuleSubmit = async (formData) => {
+    const isEdit = Boolean(
+      formData.id && rules.find((r) => r.id === formData.id),
+    );
+    const payload = ruleToApiPayload(formData);
+    try {
+      if (isEdit) {
+        const updated = await api.put(`/rules/${formData.id}`, payload);
+        setRules((p) =>
+          p.map((r) => (r.id === formData.id ? ruleFromApi(updated) : r)),
+        );
+        push(`Rule "${formData.name}" berhasil diperbarui.`, "info");
+      } else {
+        const created = await api.post("/rules/", payload);
+        setRules((p) => [ruleFromApi(created), ...p]);
+        push(`Rule "${formData.name}" berhasil dibuat.`, "success");
+      }
+    } catch (err) {
+      push(`Gagal menyimpan rule: ${err.message}`, "error");
+    }
+  };
+
+  const handleRuleDelete = async (id) => {
+    const rule = rules.find((r) => r.id === id);
+    try {
+      await api.del(`/rules/${id}`);
+      setRules((p) => p.filter((r) => r.id !== id));
+      push(`Rule "${rule?.name}" dihapus.`, "error");
+    } catch (err) {
+      push(`Gagal menghapus rule: ${err.message}`, "error");
+    }
+  };
+
+  const handleRuleToggle = async (id) => {
+    const rule = rules.find((r) => r.id === id);
+    if (!rule) return;
+
+    setRules((p) =>
+      p.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)),
+    );
+    try {
+      const updated = await api.patch(`/rules/${id}/toggle`);
+      setRules((p) => p.map((r) => (r.id === id ? ruleFromApi(updated) : r)));
+      const next = !rule.enabled;
+      push(
+        `Rule "${rule.name}" ${next ? "diaktifkan" : "dinonaktifkan"}.`,
+        next ? "success" : "warn",
+        "rule-toggle",
       );
-      push(`Rekening ${items[0].accountNumber} berhasil diperbarui.`, "info");
+    } catch (err) {
+      setRules((p) =>
+        p.map((r) => (r.id === id ? { ...r, enabled: rule.enabled } : r)),
+      );
+      push(`Gagal toggle rule: ${err.message}`, "error");
+    }
+  };
+
+  const handleRuleDetail = (rule) => setRuleDetailModal({ open: true, rule });
+
+  const handleBlSubmit = async (mode, items) => {
+    if (mode === "edit") {
+      const item = items[0];
+      try {
+        await api.put(`/blacklist/${item.id}`, blToApiPayload(item));
+
+        await fetchBlacklist();
+        push(
+          `Rekening ${item.accountNumber} diperbarui. Status kembali ke Pending verifikasi.`,
+          "info",
+        );
+      } catch (err) {
+        push(`Gagal memperbarui: ${err.message}`, "error");
+      }
       return;
     }
 
-    const newItems = items.map((it) => ({ ...it, addedAt: it.addedAt || now }));
-    setBlacklist((p) => [...newItems, ...p]);
-    push(
-      mode === "bulk"
-        ? `${items.length} rekening berhasil diimport, menunggu verifikasi.`
-        : `Rekening ${items[0].accountNumber} ditambahkan ke blacklist.`,
-      "success",
-    );
+    if (mode === "single") {
+      const item = items[0];
+      try {
+        const created = await api.post("/blacklist/", blToApiPayload(item));
+
+        setBlacklist((p) => [blFromApi(created), ...p]);
+        push(
+          `Rekening ${item.accountNumber} ditambahkan, menunggu verifikasi.`,
+          "success",
+        );
+      } catch (err) {
+        if (err.status === 409) {
+          push(
+            `Rekening ${item.accountNumber} sudah ada di blacklist.`,
+            "warn",
+          );
+        } else {
+          push(`Gagal menambahkan: ${err.message}`, "error");
+        }
+      }
+      return;
+    }
+
+    if (mode === "bulk") {
+      let success = 0;
+      let failed = 0;
+      for (const item of items) {
+        try {
+          await api.post("/blacklist/", blToApiPayload(item));
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+      await fetchBlacklist();
+      if (failed === 0) {
+        push(
+          `${success} rekening berhasil diimport, menunggu verifikasi.`,
+          "success",
+        );
+      } else {
+        push(
+          `${success} berhasil, ${failed} gagal (mungkin sudah terdaftar).`,
+          "warn",
+        );
+      }
+    }
   };
 
-  const handleBlDelete = (id) => {
+  const handleBlDelete = async (id) => {
     const item = blacklist.find((b) => b.id === id);
+
     setBlacklist((p) => p.filter((b) => b.id !== id));
-    push(`Rekening ${item?.accountNumber} dihapus dari blacklist.`, "error");
+    try {
+      await api.del(`/blacklist/${id}`);
+      push(`Rekening ${item?.accountNumber} dihapus permanen.`, "error");
+    } catch (err) {
+      if (item) setBlacklist((p) => [item, ...p]);
+      push(`Gagal menghapus: ${err.message}`, "error");
+    }
   };
 
-  const handleBlApprove = (id) => {
+  const handleBlApprove = async (id) => {
+    const item = blacklist.find((b) => b.id === id);
+
     setBlacklist((p) =>
-      p.map((b) => (b.id === id ? { ...b, status: "active" } : b)),
+      p.map((b) =>
+        b.id === id
+          ? { ...b, status: "active", _apiStatus: "APPROVED", _isActive: true }
+          : b,
+      ),
     );
-    push("Rekening disetujui dan sekarang aktif diblokir.", "info");
+    try {
+      await api.patch(`/blacklist/${id}/approve`, {
+        review_note: "Disetujui melalui dashboard",
+      });
+      push(
+        `Rekening ${item?.accountNumber} disetujui dan aktif diblokir.`,
+        "success",
+      );
+    } catch (err) {
+      setBlacklist((p) =>
+        p.map((b) =>
+          b.id === id ? { ...b, status: item?.status ?? "pending" } : b,
+        ),
+      );
+      push(`Gagal menyetujui: ${err.message}`, "error");
+    }
   };
 
   const handleBlEdit = (item) => {
     setBlModal({ open: true, mode: "single", editData: item });
   };
 
-  const handleBlToggleStatus = (id, newStatus) => {
+  const handleBlToggleStatus = async (id, newStatus) => {
     const item = blacklist.find((b) => b.id === id);
+
     setBlacklist((p) =>
       p.map((b) => (b.id === id ? { ...b, status: newStatus } : b)),
     );
-    push(
-      `Rekening ${item?.accountNumber} ${
-        newStatus === "active" ? "diaktifkan kembali" : "dinonaktifkan"
-      }.`,
-      newStatus === "active" ? "success" : "warn",
-      "bl-toggle",
-    );
-  };
-
-  const handleRuleSubmit = (data) => {
-    if (data.id && rules.find((r) => r.id === data.id)) {
-      setRules((p) => p.map((r) => (r.id === data.id ? { ...r, ...data } : r)));
-      push(`Rule "${data.name}" berhasil diperbarui.`, "info");
-    } else {
-      setRules((p) => [{ ...data, enabled: true, hitCount: 0 }, ...p]);
-      push(`Rule "${data.name}" berhasil dibuat.`, "success");
+    try {
+      if (newStatus === "active") {
+        await api.patch(`/blacklist/${id}/activate`);
+      } else {
+        await api.patch(`/blacklist/${id}/deactivate`);
+      }
+      push(
+        `Rekening ${item?.accountNumber} ${
+          newStatus === "active" ? "diaktifkan kembali" : "dinonaktifkan"
+        }.`,
+        newStatus === "active" ? "success" : "warn",
+        "bl-toggle",
+      );
+    } catch (err) {
+      setBlacklist((p) =>
+        p.map((b) =>
+          b.id === id ? { ...b, status: item?.status ?? "inactive" } : b,
+        ),
+      );
+      push(`Gagal mengubah status: ${err.message}`, "error");
     }
-  };
-
-  const handleRuleDelete = (id) => {
-    const rule = rules.find((r) => r.id === id);
-    setRules((p) => p.filter((r) => r.id !== id));
-    push(`Rule "${rule?.name}" dihapus.`, "error");
-  };
-
-  const handleRuleToggle = (id) => {
-    setRules((p) =>
-      p.map((r) => {
-        if (r.id !== id) return r;
-        const next = !r.enabled;
-        push(
-          `Rule "${r.name}" ${next ? "diaktifkan" : "dinonaktifkan"}.`,
-          next ? "success" : "warn",
-          "rule-toggle",
-        );
-        return { ...r, enabled: next };
-      }),
-    );
-  };
-
-  const handleRuleDetail = (rule) => {
-    setRuleDetailModal({ open: true, rule });
   };
 
   const toastIcon = (t) =>
@@ -389,12 +396,12 @@ const RiskManagement = () => {
           ? "bi-exclamation-triangle-fill"
           : "bi-info-circle-fill";
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(timer);
-  }, []);
+  if (pageLoading) return <PageLoader message="Memuat Risk Management..." />;
 
-  if (loading) return <PageLoader message="Memuat Risk Management..." />;
+  const liveRule = ruleDetailModal.rule
+    ? (rules.find((r) => r.id === ruleDetailModal.rule.id) ??
+      ruleDetailModal.rule)
+    : null;
 
   return (
     <div className="rm-page">
@@ -411,7 +418,35 @@ const RiskManagement = () => {
             </p>
           </div>
         </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <RefreshBtn
+            onClick={fetchBlacklist}
+            loading={blLoading}
+            label="Refresh Blacklist"
+          />
+          <RefreshBtn
+            onClick={fetchRules}
+            loading={rulesLoading}
+            label="Refresh Rules"
+          />
+        </div>
       </div>
+
+      {blError && (
+        <ErrorBanner
+          msg="Blacklist tidak dapat dimuat dari server."
+          onRetry={fetchBlacklist}
+        />
+      )}
+      {rulesError && (
+        <ErrorBanner
+          msg="Rules tidak dapat dimuat dari server. Pastikan backend berjalan."
+          onRetry={fetchRules}
+        />
+      )}
+
+      <RiskStats blacklist={blacklist} rules={rules} />
 
       <BlacklistPanel
         data={blacklist}
@@ -425,14 +460,41 @@ const RiskManagement = () => {
         onToggleStatus={handleBlToggleStatus}
       />
 
-      <RuleEngine
-        rules={rules}
-        onAdd={() => setRuleModal({ open: true, editData: null })}
-        onEdit={(rule) => setRuleModal({ open: true, editData: rule })}
-        onDelete={handleRuleDelete}
-        onToggle={handleRuleToggle}
-        onDetail={handleRuleDetail}
-      />
+      {rulesLoading && rules.length === 0 ? (
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e5e7eb",
+            borderRadius: 10,
+            marginTop: 24,
+            padding: "48px 20px",
+            textAlign: "center",
+            color: "#9ca3af",
+          }}
+        >
+          <i
+            className="bi bi-gear"
+            style={{
+              fontSize: "2rem",
+              display: "block",
+              marginBottom: 8,
+              opacity: 0.4,
+            }}
+          />
+          <p style={{ margin: 0, fontSize: "0.875rem" }}>
+            Memuat rules dari server...
+          </p>
+        </div>
+      ) : (
+        <RuleEngine
+          rules={rules}
+          onAdd={() => setRuleModal({ open: true, editData: null })}
+          onEdit={(rule) => setRuleModal({ open: true, editData: rule })}
+          onDelete={handleRuleDelete}
+          onToggle={handleRuleToggle}
+          onDetail={handleRuleDetail}
+        />
+      )}
 
       <BlacklistFormModal
         isOpen={blModal.open}
@@ -453,12 +515,7 @@ const RiskManagement = () => {
 
       <RuleDetailModal
         isOpen={ruleDetailModal.open}
-        rule={
-          ruleDetailModal.rule
-            ? (rules.find((r) => r.id === ruleDetailModal.rule.id) ??
-              ruleDetailModal.rule)
-            : null
-        }
+        rule={liveRule}
         onClose={() => setRuleDetailModal({ open: false, rule: null })}
         onEdit={(rule) => {
           setRuleDetailModal({ open: false, rule: null });
@@ -483,8 +540,79 @@ const RiskManagement = () => {
           </div>
         ))}
       </div>
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };
+
+const RefreshBtn = ({ onClick, loading, label }) => (
+  <button
+    onClick={onClick}
+    disabled={loading}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      padding: "8px 14px",
+      borderRadius: 7,
+      border: "1.5px solid #e5e7eb",
+      background: "#fff",
+      fontSize: "0.83rem",
+      fontWeight: 600,
+      color: loading ? "#9ca3af" : "#374151",
+      cursor: loading ? "not-allowed" : "pointer",
+    }}
+    title={label}
+  >
+    <i
+      className="bi bi-arrow-clockwise"
+      style={loading ? { animation: "spin 1s linear infinite" } : {}}
+    />
+    {loading ? "Memuat..." : label}
+  </button>
+);
+
+const ErrorBanner = ({ msg, onRetry }) => (
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "10px 16px",
+      marginBottom: 16,
+      background: "#fffbeb",
+      border: "1px solid #fde68a",
+      borderRadius: 8,
+      fontSize: "0.85rem",
+      color: "#92400e",
+    }}
+  >
+    <i className="bi bi-exclamation-triangle-fill" />
+    <span>
+      <strong>{msg}</strong>{" "}
+      <button
+        onClick={onRetry}
+        style={{
+          background: "none",
+          border: "none",
+          color: "#b45309",
+          fontWeight: 700,
+          cursor: "pointer",
+          padding: 0,
+          textDecoration: "underline",
+          fontFamily: "inherit",
+        }}
+      >
+        Coba lagi
+      </button>
+    </span>
+  </div>
+);
 
 export default RiskManagement;

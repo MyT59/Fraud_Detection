@@ -4,7 +4,7 @@ import PatternFilter from "../components/fraudpatterns/PatternFilter";
 import PatternCard from "../components/fraudpatterns/PatternCard";
 import PatternDetailModal from "../components/fraudpatterns/PatternDetailModal";
 import PatternTrendChart from "../components/fraudpatterns/PatternTrendChart";
-import ExportModal from "../components/fraudpatterns/ExportModal"; // ← NEW
+import ExportModal from "../components/fraudpatterns/ExportModal";
 import PageLoader from "../components/common/PageLoader";
 import "./FraudPatterns.css";
 
@@ -245,7 +245,7 @@ const FraudPatterns = () => {
   const [sortBy, setSortBy] = useState("occurrences_desc");
   const [selectedPattern, setSelectedPattern] = useState(null);
   const [viewMode, setViewMode] = useState("grid");
-  const [showExport, setShowExport] = useState(false); // ← NEW
+  const [showExport, setShowExport] = useState(false);
 
   useEffect(() => {
     const fetchPatternStats = async () => {

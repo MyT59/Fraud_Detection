@@ -1,7 +1,14 @@
 import React from "react";
 import AlertItem from "./AlertItem";
 
-const AlertsFeed = ({ alerts, onMarkRead, onResolve, onDelete }) => {
+const AlertsFeed = ({
+  alerts,
+  pendingOps = {},
+  onMarkRead,
+  onResolve,
+  onClaim,
+  onDelete,
+}) => {
   if (alerts.length === 0) {
     return (
       <div className="alerts-empty">
@@ -26,8 +33,10 @@ const AlertsFeed = ({ alerts, onMarkRead, onResolve, onDelete }) => {
           <AlertItem
             key={alert.id}
             alert={alert}
+            pending={pendingOps[alert.id] || null}
             onMarkRead={onMarkRead}
             onResolve={onResolve}
+            onClaim={onClaim}
             onDelete={onDelete}
           />
         ))}

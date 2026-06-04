@@ -71,7 +71,7 @@ const AlertsStats = ({ alerts, stats }) => {
             <i className={`bi ${s.icon}`}></i>
           </div>
           <div className="alerts-stat-content">
-            <div className="alerts-stat-value">{s.value}</div>
+            <div className="alerts-stat-value">{s.value ?? 0}</div>
             <div className="alerts-stat-label">{s.label}</div>
           </div>
         </div>

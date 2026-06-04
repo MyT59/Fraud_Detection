@@ -331,6 +331,26 @@
   flex-shrink: 0;
 }
 
+.login-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 1.25rem;
+  font-size: 0.84rem;
+  color: #fde68a;
+  animation: fadeSlideUp 0.4s ease both;
+}
+
+.login-warning i {
+  font-size: 1rem;
+  color: #eab308;
+  flex-shrink: 0;
+}
+
 @keyframes shake {
   0%,
   100% {

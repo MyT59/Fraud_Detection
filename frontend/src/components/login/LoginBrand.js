@@ -1,5 +1,5 @@
 import React from "react";
-import { BRAND, BRAND_STATS } from "./loginData";
+import { BRAND } from "./loginData";
 
 const LoginBrand = () => {
   return (
@@ -28,20 +28,6 @@ const LoginBrand = () => {
         </h1>
         <p>{BRAND.description}</p>
       </div>
-
-      {BRAND_STATS && BRAND_STATS.length > 0 && (
-        <div className="login-brand-stats">
-          {BRAND_STATS.map((stat, i) => (
-            <div className="brand-stat" key={i}>
-              <div className="brand-stat-value">
-                {stat.value}
-                <span>{stat.suffix}</span>
-              </div>
-              <div className="brand-stat-label">{stat.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

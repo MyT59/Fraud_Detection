@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { DEMO_CREDENTIALS } from "./loginData";
+import { authService } from "../../services/apiService";
 
-const LoginForm = ({ onLoginSuccess }) => {
+import { BRAND } from "./loginData";
+
+const LoginForm = ({ onLoginSuccess, sessionExpired }) => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -14,7 +15,7 @@ const LoginForm = ({ onLoginSuccess }) => {
     if (error) setError("");
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -29,26 +30,35 @@ const LoginForm = ({ onLoginSuccess }) => {
 
     setLoading(true);
 
-    setTimeout(() => {
-      if (
-        formData.email === DEMO_CREDENTIALS.email &&
-        formData.password === DEMO_CREDENTIALS.password
-      ) {
-        localStorage.setItem("isLoggedIn", "true");
-        onLoginSuccess();
-      } else {
-        setError("Invalid email or password. Please try again.");
-        setLoading(false);
-      }
-    }, 1200);
-  };
+    try {
+      const result = await authService.login(formData.email, formData.password);
 
-  const fillDemo = () => {
-    setFormData({
-      email: DEMO_CREDENTIALS.email,
-      password: DEMO_CREDENTIALS.password,
-    });
-    setError("");
+      if (result.require_password_change) {
+        onLoginSuccess({ requirePasswordChange: true });
+        return;
+      }
+
+      onLoginSuccess({ requirePasswordChange: false });
+    } catch (err) {
+      if (err.status === 401) {
+        setError("Invalid email or password. Please try again.");
+      } else if (err.status === 403) {
+        setError(
+          err.message ||
+            "Your account has been suspended or temporarily locked.",
+        );
+      } else if (err.status === 429) {
+        setError(
+          "Too many login attempts. Please wait a moment before trying again.",
+        );
+      } else if (err.status === 0 || !err.status) {
+        setError("Cannot connect to server. Please check your connection.");
+      } else {
+        setError(err.message || "An unexpected error occurred.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -56,8 +66,16 @@ const LoginForm = ({ onLoginSuccess }) => {
       <div className="login-form-container">
         <div className="login-form-header">
           <h2>Welcome back</h2>
-          <p>Sign in to your administrator account</p>
+          <p>Sign in to your account</p>
         </div>
+
+        {sessionExpired && (
+          <div className="login-warning">
+            <i className="bi bi-clock-history"></i>
+            Sesi Anda telah berakhir karena tidak aktif selama 60 menit. Silakan
+            login kembali.
+          </div>
+        )}
 
         {error && (
           <div className="login-error">
@@ -111,21 +129,6 @@ const LoginForm = ({ onLoginSuccess }) => {
             </div>
           </div>
 
-          <div className="login-options">
-            <label className="login-remember">
-              <input
-                type="checkbox"
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
-                disabled={loading}
-              />
-              <span>Remember me</span>
-            </label>
-            <button type="button" className="login-forgot">
-              Forgot password?
-            </button>
-          </div>
-
           <button type="submit" className="login-submit" disabled={loading}>
             {loading ? (
               <>
@@ -142,22 +145,19 @@ const LoginForm = ({ onLoginSuccess }) => {
         </form>
 
         <div className="login-form-divider">
-          <span>Demo Access</span>
+          <span>System Info</span>
         </div>
 
         <div className="login-demo-hint">
           <i className="bi bi-info-circle-fill"></i>
           <div className="login-demo-hint-text">
-            <strong>Demo credentials: </strong>
-            {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}{" "}
-            <button
-              type="button"
-              className="login-forgot"
-              onClick={fillDemo}
-              style={{ fontSize: "0.78rem" }}
-            >
-              Fill automatically
-            </button>
+            <strong>
+              {BRAND.name} — {BRAND.company}
+            </strong>
+            <br />
+            <span style={{ fontSize: "0.75rem", opacity: 0.75 }}>
+              Gunakan akun admin yang telah didaftarkan oleh Super Admin.
+            </span>
           </div>
         </div>
       </div>

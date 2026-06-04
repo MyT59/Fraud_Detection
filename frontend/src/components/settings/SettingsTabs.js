@@ -26,12 +26,6 @@ const SettingsTabs = ({ activeTab, onTabChange, onLogout }) => {
       label: "System",
       description: "Pengaturan sistem",
     },
-    {
-      id: "api",
-      icon: "code-slash",
-      label: "API",
-      description: "Konfigurasi API",
-    },
   ];
 
   return (

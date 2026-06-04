@@ -102,10 +102,7 @@ const QuickActions = () => {
   return (
     <div className="quick-actions-card">
       <div className="quick-actions-header">
-        <h3 className="quick-actions-title">
-          <i className="bi bi-lightning-fill"></i>
-          Quick Actions
-        </h3>
+        <h3 className="quick-actions-title">Quick Actions</h3>
         <p className="quick-actions-subtitle">Fast access to common tasks</p>
       </div>
 

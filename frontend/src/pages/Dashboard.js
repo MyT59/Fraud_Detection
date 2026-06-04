@@ -9,70 +9,183 @@ import SystemHealth from "../components/dashboard/SystemHealth";
 import TopFraudPatterns from "../components/dashboard/TopFraudPatterns";
 import ActivityTimeline from "../components/dashboard/ActivityTimeline";
 import PageLoader from "../components/common/PageLoader";
+import { api } from "../services/apiService";
 import "./Dashboard.css";
 
-const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const severityToType = (s = "") => {
+  const u = s.toUpperCase();
+  if (u === "CRITICAL" || u === "HIGH") return "high";
+  if (u === "MEDIUM") return "medium";
+  return "low";
+};
 
-const FALLBACK = {
-  stats: {
-    total_transactions: 1290,
-    total_fraud: 56,
-    fraud_rate: 4.34,
-    model_accuracy: 98.7,
+const scoreToRisk = (score = 50) => {
+  if (score >= 70) return "high";
+  if (score >= 40) return "medium";
+  return "low";
+};
+
+const activityTypeMap = {
+  FRAUD: "fraud_detected",
+  REVIEW: "manual_review",
+  SECURITY: "rule_update",
+  ALERT: "alert",
+  SYSTEM: "system",
+};
+
+const typeToIcon = (type = "") => {
+  switch (type.toUpperCase()) {
+    case "FRAUD":
+      return "bi-shield-exclamation";
+    case "REVIEW":
+      return "bi-check-circle";
+    case "SECURITY":
+      return "bi-gear";
+    case "ALERT":
+      return "bi-exclamation-triangle";
+    case "SYSTEM":
+      return "bi-cpu";
+    default:
+      return "bi-clock";
+  }
+};
+
+const typeToColor = (type = "") => {
+  switch (type.toUpperCase()) {
+    case "FRAUD":
+      return "red";
+    case "REVIEW":
+      return "green";
+    case "SECURITY":
+      return "blue";
+    case "ALERT":
+      return "orange";
+    case "SYSTEM":
+      return "purple";
+    default:
+      return "gray";
+  }
+};
+
+const alertIcon = (a) => {
+  if (a.icon === "fraud" || a.type === "COMBINED")
+    return "bi-shield-exclamation";
+  const badge = (a.badge || "").toUpperCase();
+  if (badge === "BLACKLIST") return "bi-ban";
+  if (badge === "RULE") return "bi-gear-fill";
+  return "bi-exclamation-triangle-fill";
+};
+
+const normalizeFraudRate = (raw) => {
+  if (!raw && raw !== 0) return 0;
+
+  const rate = raw < 1 ? raw * 100 : raw;
+  return parseFloat(rate.toFixed(2));
+};
+
+const normalizeAccuracy = (raw) => {
+  if (!raw && raw !== 0) return 0;
+  const acc = raw < 1 ? raw * 100 : raw;
+  return parseFloat(acc.toFixed(1));
+};
+
+const normalizeApiResponse = (data) => {
+  const kpi = data.kpi || {};
+
+  const trend = (data.transaction_trend || []).map((d) => ({
+    label: `${String(d.hour).padStart(2, "0")}:00`,
+    transactions: d.total || 0,
+    fraud: d.fraud || 0,
+  }));
+
+  const alerts = (data.recent_alerts || []).map((a) => ({
+    id: a.id,
+    type: severityToType(a.severity),
+    title: a.title || a.title_raw || "Alert",
+    description: a.description || a.message_raw || "",
+    time: a.time || "recently",
+    userId: a.trx_id || null,
+    amount: null,
+    icon: alertIcon(a),
+  }));
+
+  const alertsSummary = alerts.reduce(
+    (acc, a) => ({ ...acc, [a.type]: (acc[a.type] || 0) + 1 }),
+    { high: 0, medium: 0, low: 0 },
+  );
+
+  const patterns = (data.top_patterns || []).map((p, i) => ({
+    id: p.pattern_id ?? i + 1,
+    pattern: p.pattern_name || "Unknown Pattern",
+    description: p.category
+      ? `${p.category.replace(/_/g, " ")} pattern`
+      : "Detected fraud pattern",
+    examples: p.category ? [p.category.replace(/_/g, " ")] : [],
+    occurrences: p.count || 0,
+    riskLevel: scoreToRisk(p.risk_score),
+    trend: "stable",
+  }));
+
+  const activities = (data.activity || []).map((a, i) => ({
+    id: i + 1,
+    type: activityTypeMap[a.type?.toUpperCase()] || "system",
+    title: a.title || "Activity",
+    description: a.description || "",
+    user: a.actor || "System",
+    time: a.time || "recently",
+    icon: typeToIcon(a.type),
+    color: typeToColor(a.type),
+    details: a.metadata || {},
+  }));
+
+  const totalAgenusa = kpi.total_agenusa || 0;
+  const totalNusabill = kpi.total_nusabill || 0;
+  const fraudAgenusa = kpi.fraud_agenusa || 0;
+  const fraudNusabill = kpi.fraud_nusabill || 0;
+
+  return {
+    stats: {
+      total_agenusa: totalAgenusa,
+      total_nusabill: totalNusabill,
+      agenusa_fraud: fraudAgenusa,
+      nusabill_fraud: fraudNusabill,
+      total_transactions: totalAgenusa + totalNusabill,
+      total_fraud: fraudAgenusa + fraudNusabill,
+
+      fraud_rate: normalizeFraudRate(kpi.fraud_rate),
+      model_accuracy: normalizeAccuracy(kpi.model_accuracy),
+    },
+    transactions_daily: trend,
+    fraud_distribution: data.fraud_distribution || null,
+    recent_alerts: alerts,
+    alerts_summary: alertsSummary,
+    top_patterns: patterns,
+    activity_preview: activities,
+  };
+};
+
+const FALLBACK = normalizeApiResponse({
+  kpi: {
     total_agenusa: 720,
     total_nusabill: 570,
-    agenusa_fraud: 31,
-    nusabill_fraud: 25,
+    fraud_agenusa: 31,
+    fraud_nusabill: 25,
+    fraud_rate: 4.34,
+    model_accuracy: 98.7,
   },
-  transactions_daily: [
-    { label: "Mon", transactions: 120, fraud: 8, legit: 112 },
-    { label: "Tue", transactions: 190, fraud: 15, legit: 175 },
-    { label: "Wed", transactions: 150, fraud: 10, legit: 140 },
-    { label: "Thu", transactions: 220, fraud: 18, legit: 202 },
-    { label: "Fri", transactions: 180, fraud: 12, legit: 168 },
-    { label: "Sat", transactions: 210, fraud: 20, legit: 190 },
-    { label: "Sun", transactions: 165, fraud: 9, legit: 156 },
-  ],
+  transaction_trend: Array.from({ length: 24 }, (_, h) => ({
+    hour: h,
+    total:
+      h >= 8 && h <= 21
+        ? Math.round(80 + Math.random() * 60)
+        : Math.round(5 + Math.random() * 15),
+    fraud: Math.round(Math.random() * 3),
+  })),
+  fraud_distribution: { total: 1290, fraud: 56, legit: 1234 },
   recent_alerts: [],
-  alerts_summary: { high: 0, medium: 0, low: 0 },
-  recent_transactions: [
-    {
-      id: "#TXN-001234",
-      amount: "Rp 2.450.000",
-      date: "Jan 21, 2026",
-      status: "safe",
-      risk_level: "low",
-    },
-    {
-      id: "#TXN-001233",
-      amount: "Rp 12.450.000",
-      date: "Jan 21, 2026",
-      status: "fraud",
-      risk_level: "high",
-    },
-    {
-      id: "#TXN-001232",
-      amount: "Rp 850.000",
-      date: "Jan 21, 2026",
-      status: "safe",
-      risk_level: "low",
-    },
-    {
-      id: "#TXN-001231",
-      amount: "Rp 5.230.000",
-      date: "Jan 20, 2026",
-      status: "review",
-      risk_level: "medium",
-    },
-    {
-      id: "#TXN-001230",
-      amount: "Rp 1.100.000",
-      date: "Jan 20, 2026",
-      status: "safe",
-      risk_level: "low",
-    },
-  ],
-};
+  top_patterns: [],
+  activity: [],
+});
 
 const PANEL_CARDS = [
   {
@@ -113,7 +226,6 @@ const Dashboard = () => {
   const [dataSource, setDataSource] = useState("api");
   const [apiError, setApiError] = useState(null);
   const [activeModal, setActiveModal] = useState(null);
-
   const [rangeData, setRangeData] = useState(null);
 
   const handleRangeChange = useCallback((range, payload) => {
@@ -128,10 +240,8 @@ const Dashboard = () => {
     setLoading(true);
     setApiError(null);
     try {
-      const res = await fetch(`${API_BASE}/dashboard/all`, { signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setDashData(data);
+      const raw = await api.get("/dashboard/summary", { signal });
+      setDashData(normalizeApiResponse(raw));
       setDataSource("api");
     } catch (err) {
       if (err.name === "AbortError") return;
@@ -168,7 +278,18 @@ const Dashboard = () => {
 
   if (loading || !dashData) return <PageLoader message="Memuat dashboard..." />;
 
-  const { stats, transactions_daily, recent_alerts, alerts_summary } = dashData;
+  const {
+    stats,
+    transactions_daily,
+    recent_alerts,
+    alerts_summary,
+    fraud_distribution,
+    top_patterns,
+    activity_preview,
+  } = dashData;
+
+  const fraudTotal = fraud_distribution?.total ?? stats.total_transactions;
+  const fraudCount = fraud_distribution?.fraud ?? stats.total_fraud;
 
   return (
     <div className="dashboard-simple">
@@ -214,7 +335,11 @@ const Dashboard = () => {
           <i className="bi bi-wifi-off"></i>
           <span>
             <strong>API tidak dapat dijangkau.</strong> Menampilkan data statis.
-            Pastikan server berjalan di <code>{API_BASE}</code>.
+            Pastikan server berjalan di{" "}
+            <code>
+              {process.env.REACT_APP_API_URL || "http://localhost:8000"}
+            </code>
+            .
           </span>
         </div>
       )}
@@ -225,36 +350,28 @@ const Dashboard = () => {
       >
         <StatCard
           title="Total Agenusa"
-          value={(
-            stats.total_agenusa ?? Math.round(stats.total_transactions * 0.558)
-          ).toLocaleString()}
+          value={(stats.total_agenusa ?? 0).toLocaleString()}
           icon="bi bi-building"
           type="secondary"
           change={10.2}
         />
         <StatCard
           title="Total Nusabill"
-          value={(
-            stats.total_nusabill ?? Math.round(stats.total_transactions * 0.442)
-          ).toLocaleString()}
+          value={(stats.total_nusabill ?? 0).toLocaleString()}
           icon="bi bi-receipt-cutoff"
           type="secondary"
           change={8.7}
         />
         <StatCard
           title="Agenusa Fraud"
-          value={(
-            stats.agenusa_fraud ?? Math.round(stats.total_fraud * 0.554)
-          ).toLocaleString()}
+          value={(stats.agenusa_fraud ?? 0).toLocaleString()}
           icon="bi bi-shield-fill-exclamation"
           type="primary"
           change={-5.1}
         />
         <StatCard
           title="Nusabill Fraud"
-          value={(
-            stats.nusabill_fraud ?? Math.round(stats.total_fraud * 0.446)
-          ).toLocaleString()}
+          value={(stats.nusabill_fraud ?? 0).toLocaleString()}
           icon="bi bi-shield-fill-x"
           type="primary"
           change={-3.8}
@@ -287,8 +404,8 @@ const Dashboard = () => {
           onRangeChange={handleRangeChange}
         />
         <FraudChart
-          total={stats.total_transactions}
-          fraudCount={stats.total_fraud}
+          total={fraudTotal}
+          fraudCount={fraudCount}
           rangeData={rangeData}
         />
       </div>
@@ -519,13 +636,13 @@ const Dashboard = () => {
             <div style={{ overflowY: "auto", flex: 1 }}>
               {activeModal === "health" && <SystemHealth />}
               {activeModal === "patterns" && (
-                <TopFraudPatterns patterns={dashData.top_patterns} />
+                <TopFraudPatterns patterns={top_patterns} />
               )}
               {activeModal === "alerts" && (
                 <RecentAlerts alerts={recent_alerts} summary={alerts_summary} />
               )}
               {activeModal === "timeline" && (
-                <ActivityTimeline activities={dashData.activity_preview} />
+                <ActivityTimeline activities={activity_preview} />
               )}
             </div>
           </div>

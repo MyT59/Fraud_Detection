@@ -143,7 +143,7 @@ const ProfileSettings = ({ data, onSave }) => {
                 disabled
               />
               <small className="text-muted">
-                Contact administrator to change role
+                Contact Super Admin to change role
               </small>
             </div>
           </div>
