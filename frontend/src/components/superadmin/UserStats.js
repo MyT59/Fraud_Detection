@@ -4,7 +4,7 @@ import "./UserStats.css";
 const UserStats = ({ users }) => {
   const total = users.length;
   const superadmins = users.filter((u) => u.role === "superadmin").length;
-  const admins = users.filter((u) => u.role === "admin").length;
+  const riskmanagers = users.filter((u) => u.role === "risk manager").length;
   const analysts = users.filter((u) => u.role === "analyst").length;
   const active = users.filter((u) => u.status === "active").length;
 
@@ -25,9 +25,9 @@ const UserStats = ({ users }) => {
     },
     {
       icon: "bi-person-badge-fill",
-      iconClass: "icon-admin",
-      value: admins,
-      label: "Admin",
+      iconClass: "icon-risk-manager",
+      value: riskmanagers,
+      label: "Risk Manager",
       sub: "Hak akses penuh",
     },
     {

@@ -1,13 +1,23 @@
-import { useState, useCallback } from "react";
-import {
-  INITIAL_SCHEDULES,
-  EMPTY_FORM,
-  getNextId,
-  getNowString,
-} from "./scheduleConstants";
+import { useState, useCallback, useEffect } from "react";
+import api from "../../services/apiService";
+import { EMPTY_FORM, adaptSchedule, buildCronExpr } from "./scheduleConstants";
+
+const parseError = (err) => {
+  if (err?.data?.detail) {
+    if (typeof err.data.detail === "string") return err.data.detail;
+    if (Array.isArray(err.data.detail)) {
+      return err.data.detail
+        .map((e) => e.msg || e.message || JSON.stringify(e))
+        .join(", ");
+    }
+  }
+  return err?.message || "Terjadi kesalahan, silakan coba lagi.";
+};
 
 export function useSchedule() {
-  const [schedules, setSchedules] = useState(INITIAL_SCHEDULES);
+  const [schedules, setSchedules] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editTargetId, setEditTargetId] = useState(null);
@@ -17,6 +27,7 @@ export function useSchedule() {
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState({});
+  const [submitLoading, setSubmitLoading] = useState(false);
 
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterFreq, setFilterFreq] = useState("all");
@@ -29,6 +40,25 @@ export function useSchedule() {
     setTimeout(() => setToast(null), 3200);
   }, []);
 
+  const fetchSchedules = useCallback(async () => {
+    setDataLoading(true);
+    setDataError(null);
+    try {
+      const raw = await api.get("/retrain/schedules");
+      setSchedules((raw || []).map(adaptSchedule));
+    } catch (err) {
+      const msg = parseError(err);
+      setDataError(msg);
+      showToast(`Gagal memuat data: ${msg}`, "danger");
+    } finally {
+      setDataLoading(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    fetchSchedules();
+  }, [fetchSchedules]);
+
   const updateForm = useCallback((field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setFormErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -37,7 +67,7 @@ export function useSchedule() {
   const validateForm = (f) => {
     const errors = {};
     if (!f.name.trim()) errors.name = "Nama schedule wajib diisi.";
-    if (!f.model) errors.model = "Pilih model.";
+    if (!f.domain) errors.domain = "Pilih domain.";
     if (!f.time) errors.time = "Waktu wajib diisi.";
     return errors;
   };
@@ -53,13 +83,13 @@ export function useSchedule() {
     setEditTargetId(schedule.id);
     setForm({
       name: schedule.name,
-      model: schedule.model,
+      domain: schedule.domain || "agenusa",
       frequency: schedule.frequency,
       dayOfWeek: schedule.dayOfWeek ?? "Monday",
       dayOfMonth: schedule.dayOfMonth ?? "1",
       time: schedule.time,
-      status: schedule.status,
-      description: schedule.description,
+      is_active: schedule.is_active,
+      description: schedule.description || "",
     });
     setFormErrors({});
     setModalOpen(true);
@@ -71,104 +101,106 @@ export function useSchedule() {
     setFormErrors({});
   }, []);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     const errors = validateForm(form);
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    setSubmitLoading(true);
+    const cron_expr = buildCronExpr(form);
+    const payload = {
+      name: form.name.trim(),
+      cron_expr,
+      domain: form.domain,
+      is_active: form.is_active,
+    };
 
-    if (editTargetId !== null) {
-      setSchedules((prev) =>
-        prev.map((s) =>
-          s.id === editTargetId
-            ? {
-                ...s,
-                name: form.name,
-                model: form.model,
-                frequency: form.frequency,
-                dayOfWeek: form.frequency === "weekly" ? form.dayOfWeek : null,
-                dayOfMonth:
-                  form.frequency === "monthly" ? form.dayOfMonth : null,
-                time: form.time,
-                status: form.status,
-                description: form.description,
-              }
-            : s,
-        ),
-      );
-      showToast(`Schedule "${form.name}" berhasil diperbarui.`, "success");
-    } else {
-      const newSchedule = {
-        id: getNextId(),
-        name: form.name,
-        model: form.model,
-        frequency: form.frequency,
-        dayOfWeek: form.frequency === "weekly" ? form.dayOfWeek : null,
-        dayOfMonth: form.frequency === "monthly" ? form.dayOfMonth : null,
-        time: form.time,
-        status: form.status,
-        description: form.description,
-        lastRun: "—",
-        nextRun: form.status === "active" ? `${today} ${form.time}` : "—",
-        createdAt: today,
-      };
-      setSchedules((prev) => [...prev, newSchedule]);
-      showToast(`Schedule "${form.name}" berhasil dibuat.`, "success");
+    try {
+      if (editTargetId !== null) {
+        const updated = await api.put(
+          `/retrain/schedules/${editTargetId}`,
+          payload,
+        );
+        setSchedules((prev) =>
+          prev.map((s) => (s.id === editTargetId ? adaptSchedule(updated) : s)),
+        );
+        showToast(`Schedule "${form.name}" berhasil diperbarui.`, "success");
+      } else {
+        const created = await api.post("/retrain/schedules", payload);
+        setSchedules((prev) => [...prev, adaptSchedule(created)]);
+        showToast(`Schedule "${form.name}" berhasil dibuat.`, "success");
+      }
+      closeModal();
+    } catch (err) {
+      const msg = parseError(err);
+      showToast(`Gagal menyimpan: ${msg}`, "danger");
+    } finally {
+      setSubmitLoading(false);
     }
-
-    closeModal();
   }, [form, editTargetId, closeModal, showToast]);
 
-  const openDelete = useCallback((schedule) => {
-    setDeleteTarget(schedule);
-  }, []);
-
-  const confirmDelete = useCallback(() => {
-    if (!deleteTarget) return;
-    const name = deleteTarget.name;
-    setSchedules((prev) => prev.filter((s) => s.id !== deleteTarget.id));
-    setDeleteTarget(null);
-    showToast(`Schedule "${name}" berhasil dihapus.`, "danger");
-  }, [deleteTarget, showToast]);
-
+  const openDelete = useCallback((schedule) => setDeleteTarget(schedule), []);
   const cancelDelete = useCallback(() => setDeleteTarget(null), []);
 
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const { id, name } = deleteTarget;
+    setDeleteTarget(null);
+    try {
+      await api.delete(`/retrain/schedules/${id}`);
+      setSchedules((prev) => prev.filter((s) => s.id !== id));
+      showToast(`Schedule "${name}" berhasil dihapus.`, "danger");
+    } catch (err) {
+      showToast(`Gagal menghapus: ${parseError(err)}`, "danger");
+    }
+  }, [deleteTarget, showToast]);
+
   const toggleStatus = useCallback(
-    (schedule) => {
-      const nextStatus = schedule.status === "active" ? "paused" : "active";
-      setSchedules((prev) =>
-        prev.map((s) =>
-          s.id === schedule.id
-            ? {
-                ...s,
-                status: nextStatus,
-                nextRun: nextStatus === "paused" ? "—" : s.nextRun,
-              }
-            : s,
-        ),
-      );
-      const verb = nextStatus === "active" ? "diaktifkan kembali" : "di-pause";
-      showToast(`Schedule "${schedule.name}" ${verb}.`, "info");
+    async (schedule) => {
+      const newIsActive = schedule.status !== "active";
+      try {
+        await api.patch(`/retrain/schedules/${schedule.id}/status`, {
+          is_active: newIsActive,
+        });
+        setSchedules((prev) =>
+          prev.map((s) =>
+            s.id === schedule.id
+              ? {
+                  ...s,
+                  is_active: newIsActive,
+                  status: newIsActive ? "active" : "paused",
+                  nextRun: newIsActive ? s.nextRun : "—",
+                }
+              : s,
+          ),
+        );
+        const verb = newIsActive ? "diaktifkan kembali" : "di-pause";
+        showToast(`Schedule "${schedule.name}" ${verb}.`, "info");
+      } catch (err) {
+        showToast(`Gagal mengubah status: ${parseError(err)}`, "danger");
+      }
     },
     [showToast],
   );
 
   const openManualRun = useCallback((schedule) => setRunTarget(schedule), []);
-
-  const confirmManualRun = useCallback(() => {
-    if (!runTarget) return;
-    const nowStr = getNowString();
-    setSchedules((prev) =>
-      prev.map((s) => (s.id === runTarget.id ? { ...s, lastRun: nowStr } : s)),
-    );
-    showToast(`"${runTarget.name}" dijalankan secara manual!`, "run");
-    setRunTarget(null);
-  }, [runTarget, showToast]);
-
   const cancelManualRun = useCallback(() => setRunTarget(null), []);
+
+  const confirmManualRun = useCallback(async () => {
+    if (!runTarget) return;
+    const { id, name } = runTarget;
+    setRunTarget(null);
+    try {
+      await api.post(`/retrain/schedules/${id}/run`);
+
+      showToast(`"${name}" dijalankan secara manual!`, "run");
+      fetchSchedules();
+    } catch (err) {
+      showToast(`Gagal menjalankan: ${parseError(err)}`, "danger");
+    }
+  }, [runTarget, showToast, fetchSchedules]);
 
   const openDetail = useCallback((s) => setDetailTarget(s), []);
   const closeDetail = useCallback(() => setDetailTarget(null), []);
@@ -180,7 +212,8 @@ export function useSchedule() {
       const q = searchQuery.toLowerCase();
       if (
         !s.name.toLowerCase().includes(q) &&
-        !s.model.toLowerCase().includes(q)
+        !s.model.toLowerCase().includes(q) &&
+        !(s.domain || "").toLowerCase().includes(q)
       )
         return false;
     }
@@ -200,6 +233,9 @@ export function useSchedule() {
     schedules,
     filteredSchedules,
     stats,
+    dataLoading,
+    dataError,
+    fetchSchedules,
 
     modalOpen,
     editTargetId,
@@ -210,6 +246,7 @@ export function useSchedule() {
     form,
     formErrors,
     updateForm,
+    submitLoading,
 
     filterStatus,
     setFilterStatus,

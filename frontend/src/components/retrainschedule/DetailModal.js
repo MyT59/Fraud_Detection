@@ -4,6 +4,7 @@ import {
   getFrequencyIcon,
   getStatusClass,
   getStatusLabel,
+  getDomainLabel,
   formatScheduleTime,
 } from "./scheduleConstants";
 
@@ -49,14 +50,52 @@ const DetailModal = ({ schedule, onClose, onEdit }) => {
               <span className="rs-badge__dot" />
               {getStatusLabel(schedule.status)}
             </span>
+
+            {schedule.lastRunStatus && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "3px 10px",
+                  borderRadius: "20px",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  background:
+                    schedule.lastRunStatus === "SUCCESS"
+                      ? "#f0fdf4"
+                      : "#fef2f2",
+                  color:
+                    schedule.lastRunStatus === "SUCCESS"
+                      ? "#16a34a"
+                      : "#dc2626",
+                }}
+              >
+                <i
+                  className={`bi ${
+                    schedule.lastRunStatus === "SUCCESS"
+                      ? "bi-check-circle-fill"
+                      : "bi-x-circle-fill"
+                  }`}
+                  style={{ fontSize: "11px" }}
+                />
+                Last run: {schedule.lastRunStatus}
+              </span>
+            )}
           </div>
 
-          {schedule.description && (
-            <p className="rs-detail-desc">{schedule.description}</p>
-          )}
-
           <div className="rs-detail-grid">
-            <Row icon="bi-cpu" label="Model ML" value={schedule.model} />
+            <Row icon="bi-server" label="Domain">
+              <span
+                style={{
+                  fontWeight: 600,
+                  color: schedule.domain === "agenusa" ? "#16a34a" : "#2563eb",
+                }}
+              >
+                {getDomainLabel(schedule.domain)}
+              </span>
+            </Row>
+            <Row icon="bi-cpu" label="Model ML" value="Isolation Forest" />
             <Row icon={getFrequencyIcon(schedule.frequency)} label="Frekuensi">
               <span className="rs-freq-badge">
                 <i className={`bi ${getFrequencyIcon(schedule.frequency)}`} />
@@ -68,6 +107,20 @@ const DetailModal = ({ schedule, onClose, onEdit }) => {
               label="Waktu Eksekusi"
               value={formatScheduleTime(schedule)}
             />
+            <Row icon="bi-terminal" label="Cron Expression">
+              <code
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: "0.82rem",
+                  background: "#f1f5f9",
+                  padding: "2px 8px",
+                  borderRadius: "5px",
+                  color: "#334155",
+                }}
+              >
+                {schedule.cron_expr}
+              </code>
+            </Row>
             <Row
               icon="bi-play-circle"
               label="Last Run"
@@ -83,6 +136,18 @@ const DetailModal = ({ schedule, onClose, onEdit }) => {
               label="Dibuat"
               value={schedule.createdAt}
             />
+            <Row icon="bi-fingerprint" label="Schedule ID">
+              <span
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: "0.72rem",
+                  color: "#94a3b8",
+                  wordBreak: "break-all",
+                }}
+              >
+                {schedule.id}
+              </span>
+            </Row>
           </div>
         </div>
 

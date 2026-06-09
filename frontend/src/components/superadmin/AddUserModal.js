@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./AddUserModal.css";
+import { api } from "../../services/apiService";
 
 const ROLES = [
   {
     value: "superadmin",
+    roleId: 1,
     label: "Super Admin",
     desc: "Kontrol penuh sistem",
     icon: "bi-shield-fill",
@@ -11,6 +13,7 @@ const ROLES = [
   },
   {
     value: "admin",
+    roleId: 2,
     label: "Admin",
     desc: "Akses penuh sistem",
     icon: "bi-person-badge-fill",
@@ -18,6 +21,7 @@ const ROLES = [
   },
   {
     value: "analyst",
+    roleId: 3,
     label: "Fraud Analyst",
     desc: "Review & investigasi",
     icon: "bi-search",
@@ -25,6 +29,7 @@ const ROLES = [
   },
 ];
 
+const ROLE_TO_ID = { superadmin: 1, admin: 2, analyst: 3 };
 const DEPARTMENTS = ["Risk Management", "Fraud Prevention"];
 
 const EMPTY = {
@@ -71,8 +76,8 @@ const AddUserModal = ({
   const nameRef = useRef(null);
 
   const isEdit = Boolean(editData);
-  const isSelf = isEdit && editData?.id === currentUser?.id;
 
+  const isSelf = isEdit && editData?.id === currentUser?.id;
   const lockRole =
     isSelf && editData?.role === "superadmin" && superadminCount <= 1;
 
@@ -87,7 +92,6 @@ const AddUserModal = ({
       setApiError("");
       setShowPw(false);
       setShowCpw(false);
-
       setTimeout(() => nameRef.current?.focus(), 50);
     }
   }, [isOpen, isEdit, editData]);
@@ -110,9 +114,9 @@ const AddUserModal = ({
     if (!isEdit) {
       if (!form.password) e.password = "Password wajib diisi.";
       else if (form.password.length < 8) e.password = "Minimal 8 karakter.";
+      if (form.password !== form.confirmPassword)
+        e.confirmPassword = "Password tidak cocok.";
     }
-    if ((form.password || !isEdit) && form.password !== form.confirmPassword)
-      e.confirmPassword = "Password tidak cocok.";
     return e;
   };
 
@@ -126,41 +130,36 @@ const AddUserModal = ({
     setApiError("");
 
     try {
-      const url = isEdit ? `/users/${editData.id}` : "/users";
-      const method = isEdit ? "PUT" : "POST";
-      const body = { ...form };
-      delete body.confirmPassword;
-      if (isEdit && !body.password) delete body.password;
+      let data;
 
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Actor-Role": currentUser?.role || "superadmin",
-          "X-Actor-Id": currentUser?.id || "",
-        },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        setApiError(data.detail || "Terjadi kesalahan pada server.");
-        setLoading(false);
-        return;
+      if (isEdit) {
+        data = await api.patch(`/accounts/${editData.id}`, {
+          full_name: form.name.trim(),
+          role_id: ROLE_TO_ID[form.role],
+          department: form.department || null,
+          phone_number: form.phone || null,
+          notes: form.notes || null,
+        });
+      } else {
+        data = await api.post("/accounts/", {
+          full_name: form.name.trim(),
+          email: form.email.trim(),
+          password: form.password,
+          confirm_password: form.confirmPassword,
+          role_id: ROLE_TO_ID[form.role],
+          department: form.department || null,
+          phone_number: form.phone || null,
+          notes: form.notes || null,
+        });
       }
-      onSubmit(data.user);
+
+      onSubmit(data);
       onClose();
-    } catch {
-      onSubmit({
-        ...form,
-        id: editData?.id || `usr-${Date.now()}`,
-        status: "active",
-        createdAt: "Baru saja",
-        lastActive: "Baru saja",
-      });
-      onClose();
+    } catch (err) {
+      setApiError(err.message || "Terjadi kesalahan pada server.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -219,6 +218,8 @@ const AddUserModal = ({
                 type="email"
                 placeholder="cth: budi@company.com"
                 value={form.email}
+                disabled={isEdit}
+                style={isEdit ? { opacity: 0.6, cursor: "not-allowed" } : {}}
                 onChange={(e) => set("email", e.target.value)}
               />
             </F>
@@ -300,60 +301,57 @@ const AddUserModal = ({
             )}
           </div>
 
-          <div className="aum-section">
-            <span>{isEdit ? "Ubah Password" : "Keamanan Akun"}</span>
-          </div>
-          <div className="aum-row">
-            <F
-              label="Password"
-              req={!isEdit}
-              opt={isEdit}
-              err={errors.password}
-            >
-              <div className="aum-pw-wrap">
-                <input
-                  className={`aum-input ${errors.password ? "is-error" : ""}`}
-                  type={showPw ? "text" : "password"}
-                  placeholder={
-                    isEdit ? "Kosongkan jika tidak diubah" : "Min. 8 karakter"
-                  }
-                  value={form.password}
-                  onChange={(e) => set("password", e.target.value)}
-                />
-                <button
-                  className="aum-pw-toggle"
-                  type="button"
-                  tabIndex={-1}
-                  onClick={() => setShowPw((v) => !v)}
-                >
-                  <i className={`bi ${showPw ? "bi-eye-slash" : "bi-eye"}`} />
-                </button>
+          {!isEdit && (
+            <>
+              <div className="aum-section">
+                <span>Keamanan Akun</span>
               </div>
-            </F>
-            <F
-              label="Konfirmasi Password"
-              req={!isEdit}
-              err={errors.confirmPassword}
-            >
-              <div className="aum-pw-wrap">
-                <input
-                  className={`aum-input ${errors.confirmPassword ? "is-error" : ""}`}
-                  type={showCpw ? "text" : "password"}
-                  placeholder="Ulangi password"
-                  value={form.confirmPassword}
-                  onChange={(e) => set("confirmPassword", e.target.value)}
-                />
-                <button
-                  className="aum-pw-toggle"
-                  type="button"
-                  tabIndex={-1}
-                  onClick={() => setShowCpw((v) => !v)}
-                >
-                  <i className={`bi ${showCpw ? "bi-eye-slash" : "bi-eye"}`} />
-                </button>
+              <div className="aum-row">
+                <F label="Password" req err={errors.password}>
+                  <div className="aum-pw-wrap">
+                    <input
+                      className={`aum-input ${errors.password ? "is-error" : ""}`}
+                      type={showPw ? "text" : "password"}
+                      placeholder="Min. 8 karakter"
+                      value={form.password}
+                      onChange={(e) => set("password", e.target.value)}
+                    />
+                    <button
+                      className="aum-pw-toggle"
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowPw((v) => !v)}
+                    >
+                      <i
+                        className={`bi ${showPw ? "bi-eye-slash" : "bi-eye"}`}
+                      />
+                    </button>
+                  </div>
+                </F>
+                <F label="Konfirmasi Password" req err={errors.confirmPassword}>
+                  <div className="aum-pw-wrap">
+                    <input
+                      className={`aum-input ${errors.confirmPassword ? "is-error" : ""}`}
+                      type={showCpw ? "text" : "password"}
+                      placeholder="Ulangi password"
+                      value={form.confirmPassword}
+                      onChange={(e) => set("confirmPassword", e.target.value)}
+                    />
+                    <button
+                      className="aum-pw-toggle"
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowCpw((v) => !v)}
+                    >
+                      <i
+                        className={`bi ${showCpw ? "bi-eye-slash" : "bi-eye"}`}
+                      />
+                    </button>
+                  </div>
+                </F>
               </div>
-            </F>
-          </div>
+            </>
+          )}
 
           <F label="Catatan" opt>
             <textarea

@@ -310,7 +310,7 @@ const UserTable = ({
   const [page, setPage] = useState(1);
   const [confirmId, setConfirmId] = useState(null);
 
-  const isSuperAdmin = currentUser?.role === "superadmin";
+  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
 
   const handleSort = (field) => {
     setSort((prev) =>
@@ -349,15 +349,6 @@ const UserTable = ({
 
   const handleDelete = async (id) => {
     if (confirmId === id) {
-      try {
-        await fetch(`/users/${id}`, {
-          method: "DELETE",
-          headers: {
-            "X-Actor-Role": currentUser?.role || "superadmin",
-            "X-Actor-Id": currentUser?.id || "",
-          },
-        });
-      } catch {}
       onDelete(id);
       setConfirmId(null);
     } else {
@@ -390,18 +381,7 @@ const UserTable = ({
     }
   };
 
-  const handleToggle = async (user) => {
-    const newStatus = user.status === "suspended" ? "active" : "suspended";
-    try {
-      await fetch(`/users/${user.id}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Actor-Role": currentUser?.role || "superadmin",
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-    } catch {}
+  const handleToggle = (user) => {
     onToggleStatus(user.id);
   };
 

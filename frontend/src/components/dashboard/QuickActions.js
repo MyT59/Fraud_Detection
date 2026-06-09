@@ -57,10 +57,10 @@ const QuickActions = () => {
     },
     {
       id: 6,
-      title: "Super Admin",
+      title: "Account Management",
       icon: "bi-shield-lock-fill",
       color: "secondary",
-      route: "/super-admin",
+      route: "/account-management",
     },
     {
       id: 7,

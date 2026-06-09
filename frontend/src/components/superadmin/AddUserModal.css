@@ -358,7 +358,7 @@
   background: #fef2f2;
   color: #dc2626;
 }
-.aum-role-card:not(.is-selected) .aum-role-icon.c-admin {
+.aum-role-card:not(.is-selected) .aum-role-icon.c-risk-manager {
   background: #eff6ff;
   color: #2563eb;
 }

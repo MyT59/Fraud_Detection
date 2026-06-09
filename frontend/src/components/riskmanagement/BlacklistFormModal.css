@@ -480,3 +480,81 @@
     grid-template-columns: 1fr;
   }
 }
+
+.bfm-section-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding-top: 10px;
+  margin-top: 2px;
+  border-top: 1px solid #f3f4f6;
+}
+.bfm-section-label.first {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.bfm-scope-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bfm-scope-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid #e5e7eb;
+  color: #6b7280;
+  background: transparent;
+  font-family: inherit;
+  transition: all 0.15s;
+  user-select: none;
+}
+.bfm-scope-pill:hover {
+  border-color: #d1d5db;
+  color: #374151;
+  background: #f9fafb;
+}
+.bfm-scope-pill.active-ALL {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  color: #111827;
+}
+.bfm-scope-pill.active-AGENUSA {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.bfm-scope-pill.active-NUSABILL {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.bfm-norm-chip {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  font-family: "Courier New", monospace;
+  letter-spacing: 0.02em;
+}
+
+.bfm-info-badge--warning {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+}

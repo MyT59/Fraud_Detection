@@ -4,6 +4,7 @@ import {
   getFrequencyIcon,
   getStatusClass,
   getStatusLabel,
+  getDomainLabel,
   formatScheduleTime,
 } from "./scheduleConstants";
 
@@ -19,6 +20,11 @@ const STATUS_OPTIONS = [
   { value: "active", label: "Aktif" },
   { value: "paused", label: "Paused" },
 ];
+
+const DOMAIN_COLORS = {
+  agenusa: { bg: "#f0fdf4", color: "#16a34a" },
+  nusabill: { bg: "#eff6ff", color: "#2563eb" },
+};
 
 const ColumnDropdown = ({ options, value, onChange, label }) => {
   const [open, setOpen] = useState(false);
@@ -105,7 +111,7 @@ const ScheduleTable = ({
         <thead>
           <tr>
             <th>Schedule</th>
-            <th>Model ML</th>
+            <th>Domain</th>
             <th>
               <ColumnDropdown
                 label="Frekuensi"
@@ -129,102 +135,149 @@ const ScheduleTable = ({
           </tr>
         </thead>
         <tbody>
-          {schedules.map((s) => (
-            <tr key={s.id} className="rs-table__row">
-              <td>
-                <div className="rs-cell-name">
+          {schedules.map((s) => {
+            const domStyle = DOMAIN_COLORS[s.domain] || {
+              bg: "#f8fafc",
+              color: "#475569",
+            };
+            return (
+              <tr key={s.id} className="rs-table__row">
+                <td>
+                  <div className="rs-cell-name">
+                    <span
+                      className="rs-cell-name__text"
+                      onClick={() => onDetail(s)}
+                      title="Lihat detail"
+                    >
+                      {s.name}
+                    </span>
+                  </div>
+                </td>
+
+                <td>
                   <span
-                    className="rs-cell-name__text"
-                    onClick={() => onDetail(s)}
-                    title="Lihat detail"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      background: domStyle.bg,
+                      color: domStyle.color,
+                      padding: "3px 9px",
+                      borderRadius: "20px",
+                      fontSize: "0.775rem",
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                    }}
                   >
-                    {s.name}
+                    <i className="bi bi-server" style={{ fontSize: "11px" }} />
+                    {getDomainLabel(s.domain)}
                   </span>
-                </div>
-              </td>
+                </td>
 
-              <td>
-                <span className="rs-model-tag">
-                  <i className="bi bi-cpu" />
-                  {s.model}
-                </span>
-              </td>
+                <td>
+                  <span className="rs-freq-badge">
+                    <i className={`bi ${getFrequencyIcon(s.frequency)}`} />
+                    {getFrequencyLabel(s.frequency)}
+                  </span>
+                </td>
 
-              <td>
-                <span className="rs-freq-badge">
-                  <i className={`bi ${getFrequencyIcon(s.frequency)}`} />
-                  {getFrequencyLabel(s.frequency)}
-                </span>
-              </td>
+                <td className="rs-cell-time">{formatScheduleTime(s)}</td>
 
-              <td className="rs-cell-time">{formatScheduleTime(s)}</td>
-
-              <td className="rs-cell-muted">{s.lastRun}</td>
-
-              <td
-                className={`rs-cell-next ${s.nextRun === "—" ? "rs-cell-muted" : ""}`}
-              >
-                {s.nextRun}
-              </td>
-
-              <td>
-                <span className={`rs-badge ${getStatusClass(s.status)}`}>
-                  <span className="rs-badge__dot" />
-                  {getStatusLabel(s.status)}
-                </span>
-              </td>
-
-              <td>
-                <div className="rs-actions">
-                  <button
-                    className="rs-action-btn rs-action-btn--info"
-                    onClick={() => onDetail(s)}
-                    title="Detail"
+                <td className="rs-cell-muted">
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "2px",
+                    }}
                   >
-                    <i className="bi bi-eye" />
-                  </button>
+                    <span>{s.lastRun}</span>
+                    {s.lastRunStatus && (
+                      <span
+                        style={{
+                          fontSize: "0.7rem",
+                          fontWeight: 600,
+                          color:
+                            s.lastRunStatus === "SUCCESS"
+                              ? "#16a34a"
+                              : "#dc2626",
+                        }}
+                      >
+                        {s.lastRunStatus}
+                      </span>
+                    )}
+                  </div>
+                </td>
 
-                  <button
-                    className="rs-action-btn rs-action-btn--run"
-                    onClick={() => onManualRun(s)}
-                    title="Jalankan manual"
-                  >
-                    <i className="bi bi-play-fill" />
-                  </button>
+                <td
+                  className={`rs-cell-next ${s.nextRun === "—" ? "rs-cell-muted" : ""}`}
+                >
+                  {s.nextRun}
+                </td>
 
-                  <button
-                    className="rs-action-btn rs-action-btn--edit"
-                    onClick={() => onEdit(s)}
-                    title="Edit"
-                  >
-                    <i className="bi bi-pencil" />
-                  </button>
+                <td>
+                  <span className={`rs-badge ${getStatusClass(s.status)}`}>
+                    <span className="rs-badge__dot" />
+                    {getStatusLabel(s.status)}
+                  </span>
+                </td>
 
-                  <button
-                    className={`rs-action-btn ${
-                      s.status === "active"
-                        ? "rs-action-btn--pause"
-                        : "rs-action-btn--resume"
-                    }`}
-                    onClick={() => onToggleStatus(s)}
-                    title={s.status === "active" ? "Pause" : "Aktifkan"}
-                  >
-                    <i
-                      className={`bi ${s.status === "active" ? "bi-pause-fill" : "bi-play-fill"}`}
-                    />
-                  </button>
+                <td>
+                  <div className="rs-actions">
+                    <button
+                      className="rs-action-btn rs-action-btn--info"
+                      onClick={() => onDetail(s)}
+                      title="Detail"
+                    >
+                      <i className="bi bi-eye" />
+                    </button>
 
-                  <button
-                    className="rs-action-btn rs-action-btn--delete"
-                    onClick={() => onDelete(s)}
-                    title="Hapus"
-                  >
-                    <i className="bi bi-trash" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
+                    <button
+                      className="rs-action-btn rs-action-btn--run"
+                      onClick={() => onManualRun(s)}
+                      title="Jalankan manual"
+                    >
+                      <i className="bi bi-play-fill" />
+                    </button>
+
+                    <button
+                      className="rs-action-btn rs-action-btn--edit"
+                      onClick={() => onEdit(s)}
+                      title="Edit"
+                    >
+                      <i className="bi bi-pencil" />
+                    </button>
+
+                    <button
+                      className={`rs-action-btn ${
+                        s.status === "active"
+                          ? "rs-action-btn--pause"
+                          : "rs-action-btn--resume"
+                      }`}
+                      onClick={() => onToggleStatus(s)}
+                      title={s.status === "active" ? "Pause" : "Aktifkan"}
+                    >
+                      <i
+                        className={`bi ${
+                          s.status === "active"
+                            ? "bi-pause-fill"
+                            : "bi-play-fill"
+                        }`}
+                      />
+                    </button>
+
+                    <button
+                      className="rs-action-btn rs-action-btn--delete"
+                      onClick={() => onDelete(s)}
+                      title="Hapus"
+                    >
+                      <i className="bi bi-trash" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

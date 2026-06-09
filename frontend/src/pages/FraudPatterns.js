@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import PatternStats from "../components/fraudpatterns/PatternStats";
 import PatternFilter from "../components/fraudpatterns/PatternFilter";
 import PatternCard from "../components/fraudpatterns/PatternCard";
@@ -6,239 +6,176 @@ import PatternDetailModal from "../components/fraudpatterns/PatternDetailModal";
 import PatternTrendChart from "../components/fraudpatterns/PatternTrendChart";
 import ExportModal from "../components/fraudpatterns/ExportModal";
 import PageLoader from "../components/common/PageLoader";
+import api from "../services/apiService";
 import "./FraudPatterns.css";
 
-const ALL_PATTERNS = [
-  {
-    id: 1,
-    mlKey: "bruteforce_pin_pattern",
-    name: "Multiple Failed Logins",
+const CATEGORY_MAP = {
+  DECLINE_VELOCITY: "Transaction",
+  VELOCITY: "Transaction",
+  AMOUNT: "Transaction",
+  AMOUNT_ANOMALY: "Transaction",
+  NETWORK_FAN_IN: "Network",
+  NETWORK_FAN_OUT: "Network",
+  BRUTE_FORCE: "Credential",
+  UNUSUAL_TIME: "Behavioral",
+  BURST_ATTACK: "Transaction",
+  SUPER_PATTERN: "Transaction",
+  BEHAVIORAL: "Behavioral",
+  LOCATION: "Location",
+  DEVICE: "Device",
+};
+
+const RISK_LEVEL_MAP = {};
+
+function riskScoreToLevel(score) {
+  if (score >= 75) return "high";
+  if (score >= 45) return "medium";
+  return "low";
+}
+
+function formatAvgLoss(avgAmount) {
+  if (!avgAmount && avgAmount !== 0) return "N/A";
+  const juta = avgAmount / 1_000_000;
+  if (juta >= 1) return `${juta.toFixed(1)} Jt`;
+  const ribu = avgAmount / 1_000;
+  return `${ribu.toFixed(0)} Rb`;
+}
+
+function formatLastUpdated(isoStr) {
+  if (!isoStr) return "-";
+  try {
+    return new Date(isoStr).toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return isoStr;
+  }
+}
+
+function mapBackendPattern(bp, index) {
+  const category =
+    CATEGORY_MAP[bp.category?.toUpperCase()] || bp.category || "Transaction";
+
+  const riskLevel = riskScoreToLevel(bp.risk_score ?? 50);
+
+  let status = "inactive";
+  if (bp.is_active) {
+    status = "active";
+  }
+
+  const accuracy =
+    bp.accuracy != null
+      ? bp.accuracy > 1
+        ? parseFloat(bp.accuracy.toFixed(1))
+        : parseFloat((bp.accuracy * 100).toFixed(1))
+      : 0;
+
+  const falsePositiveRate =
+    bp.false_positive_rate != null
+      ? bp.false_positive_rate > 1
+        ? parseFloat(bp.false_positive_rate.toFixed(1))
+        : parseFloat((bp.false_positive_rate * 100).toFixed(1))
+      : 0;
+
+  const trend =
+    bp.trend != null ? parseFloat(parseFloat(bp.trend).toFixed(1)) : 0;
+
+  return {
+    id: bp.id ?? 1000 + index,
+    mlKey: bp.pattern_name ?? null,
+    name: bp.pattern_name ?? `Pattern #${bp.id}`,
     description:
-      "Repeated failed authentication attempts on a single account within a short time window, indicating brute-force or credential stuffing attacks.",
-    category: "Credential",
-    riskLevel: "high",
-    status: "active",
-    occurrences: 156,
-    accuracy: 94.2,
-    falsePositiveRate: 3.1,
-    avgLossIDR: "18.5 Jt",
-    trend: 12,
-    lastUpdated: "15 Feb 2026",
-    indicators: [
-      "More than 5 failed login attempts in 10 minutes",
-      "Attempts from different IP addresses",
-      "Sequential password guessing patterns detected",
-      "Unusual geographic distribution of attempts",
+      bp.description ?? `${category} fraud pattern — ${bp.pattern_name ?? ""}`,
+    category,
+    riskLevel,
+    status,
+    occurrences: bp.occurrences ?? bp.hit_count ?? 0,
+    accuracy,
+    falsePositiveRate,
+    avgLossIDR: formatAvgLoss(bp.avg_amount),
+    trend,
+    lastUpdated: formatLastUpdated(bp.last_updated ?? bp.updated_at),
+
+    indicators: bp.indicators ?? generateIndicators(bp, category),
+    recommendedActions: bp.recommended_actions ?? generateActions(bp, category),
+
+    _raw: bp,
+  };
+}
+
+function generateIndicators(bp, category) {
+  const base = {
+    Transaction: [
+      `Occurrences tercatat: ${bp.occurrences ?? bp.hit_count ?? 0} deteksi`,
+      `Risk score: ${bp.risk_score ?? 50}/100`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `Rata-rata nominal terdampak: ${formatAvgLoss(bp.avg_amount)}`,
     ],
-    recommendedActions: [
-      "Temporarily lock account after threshold exceeded",
-      "Send OTP verification to registered phone/email",
-      "Flag IP address for enhanced monitoring",
-      "Require CAPTCHA for subsequent login attempts",
+    Credential: [
+      `Percobaan autentikasi berulang terdeteksi`,
+      `Risk score: ${bp.risk_score ?? 50}/100`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
-  },
-  {
-    id: 2,
-    mlKey: "high_amount_spike",
-    name: "Unusual Transaction Amount",
-    description:
-      "Transaction amount significantly deviates (≥3× standard deviation) from the user's historical average, suggesting account takeover or unauthorized use.",
-    category: "Transaction",
-    riskLevel: "high",
-    status: "active",
-    occurrences: 98,
-    accuracy: 91.5,
-    falsePositiveRate: 5.2,
-    avgLossIDR: "32.1 Jt",
-    trend: 8,
-    lastUpdated: "14 Feb 2026",
-    indicators: [
-      "Amount exceeds 3× user's 90-day average",
-      "First large transaction from new device",
-      "Transaction to a new or unverified recipient",
-      "Multiple high-value transactions in one session",
+    Location: [
+      `Lokasi transaksi tidak konsisten dengan profil pengguna`,
+      `Risk score: ${bp.risk_score ?? 50}/100`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
-    recommendedActions: [
-      "Require additional authentication for large transfers",
-      "Send real-time notification to account owner",
-      "Temporarily hold transaction for manual review",
-      "Verify recipient account ownership",
+    Device: [
+      `Device fingerprint tidak dikenali`,
+      `Risk score: ${bp.risk_score ?? 50}/100`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
-  },
-  {
-    id: 3,
-    mlKey: "impossible_travel_terminal_switch",
-    name: "Location Mismatch",
-    description:
-      "Transaction originates from a geographic location inconsistent with the user's registered address or recent login history, especially across international borders.",
-    category: "Location",
-    riskLevel: "medium",
-    status: "active",
-    occurrences: 87,
-    accuracy: 88.7,
-    falsePositiveRate: 7.4,
-    avgLossIDR: "12.8 Jt",
-    trend: 5,
-    lastUpdated: "13 Feb 2026",
-    indicators: [
-      "IP geolocation differs from registered city by >200 km",
-      "VPN or proxy server detected",
-      "Transaction from a high-risk country",
-      "Login from multiple countries within 24 hours",
+    Behavioral: [
+      `Pola perilaku menyimpang dari histori pengguna`,
+      `Risk score: ${bp.risk_score ?? 50}/100`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
-    recommendedActions: [
-      "Verify location with user via SMS/email",
-      "Block transactions from blacklisted regions",
-      "Enable geo-fencing for high-risk users",
-      "Log and flag all VPN-originated transactions",
+    Network: [
+      `Aktivitas jaringan mencurigakan terdeteksi`,
+      `Risk score: ${bp.risk_score ?? 50}/100`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
-  },
-  {
-    id: 4,
-    mlKey: "rapid_retry_declined",
-    name: "Rapid Successive Transactions",
-    description:
-      "Multiple transactions executed in quick succession within a very short time window, characteristic of automated fraud scripts or compromised account exploitation.",
-    category: "Transaction",
-    riskLevel: "medium",
-    status: "active",
-    occurrences: 65,
-    accuracy: 86.3,
-    falsePositiveRate: 8.1,
-    avgLossIDR: "9.4 Jt",
-    trend: -3,
-    lastUpdated: "12 Feb 2026",
-    indicators: [
-      "More than 3 transactions within 5 minutes",
-      "Identical or incrementally increasing amounts",
-      "Transactions to multiple different recipients",
-      "No user interaction between transactions",
+  };
+  return base[category] ?? base.Transaction;
+}
+
+function generateActions(bp, category) {
+  const action = bp.action ?? "FLAG";
+  const base = {
+    BLOCK: [
+      "Transaksi otomatis diblokir oleh sistem",
+      "Kirim notifikasi real-time ke pemilik akun",
+      "Catat insiden ke log audit forensik",
+      "Lakukan review manual jika diperlukan",
     ],
-    recommendedActions: [
-      "Implement transaction rate limiting per account",
-      "Require re-authentication after rapid transactions",
-      "Alert user and request confirmation for burst activity",
-      "Temporarily freeze account pending review",
+    REVIEW: [
+      "Tahan transaksi untuk manual review analis",
+      "Kirim notifikasi ke tim fraud analyst",
+      "Verifikasi identitas pemilik akun",
+      "Dokumentasikan temuan untuk pelatihan model",
     ],
-  },
-  {
-    id: 5,
-    mlKey: null,
-    name: "New Device Detected",
-    description:
-      "Account accessed from a device fingerprint that has never been associated with the user, particularly concerning when combined with high-value transactions.",
-    category: "Device",
-    riskLevel: "low",
-    status: "active",
-    occurrences: 54,
-    accuracy: 82.9,
-    falsePositiveRate: 12.5,
-    avgLossIDR: "5.2 Jt",
-    trend: 2,
-    lastUpdated: "11 Feb 2026",
-    indicators: [
-      "Device fingerprint not in user's device history",
-      "New device OS or browser version",
-      "No biometric/saved credential link to device",
-      "First transaction within minutes of account login",
+    FLAG: [
+      "Tandai transaksi untuk pemantauan lanjutan",
+      "Tingkatkan skor risiko akun terkait",
+      "Monitor aktivitas berikutnya secara intensif",
+      "Eskalasi ke risk manager jika pola berlanjut",
     ],
-    recommendedActions: [
-      "Send device registration OTP to user",
-      "Limit transaction value on unverified devices",
-      "Enable 30-day device trust period with monitoring",
-      "Alert user about new device access",
-    ],
-  },
-  {
-    id: 6,
-    mlKey: "midnight_unusual_amount",
-    name: "Abnormal Transaction Time",
-    description:
-      "Transactions occurring at unusual hours inconsistent with the user's established behavioral patterns (e.g., 2–5 AM local time for dormant accounts).",
-    category: "Behavioral",
-    riskLevel: "low",
-    status: "active",
-    occurrences: 43,
-    accuracy: 79.4,
-    falsePositiveRate: 14.8,
-    avgLossIDR: "4.1 Jt",
-    trend: -1,
-    lastUpdated: "10 Feb 2026",
-    indicators: [
-      "Transaction between 01:00–05:00 local time",
-      "Account historically inactive during these hours",
-      "High-value transaction at abnormal hour",
-      "Combined with new device or location mismatch",
-    ],
-    recommendedActions: [
-      "Apply enhanced scrutiny to late-night transactions",
-      "Send push notification to user for confirmation",
-      "Allow users to set custom transaction time restrictions",
-      "Monitor accounts with persistent off-hours activity",
-    ],
-  },
-  {
-    id: 7,
-    mlKey: null,
-    name: "Blacklisted IP Address",
-    description:
-      "Transaction or login originating from an IP address that appears on known fraud databases, Tor exit nodes, or previously flagged sources.",
-    category: "Network",
-    riskLevel: "high",
-    status: "active",
-    occurrences: 72,
-    accuracy: 97.1,
-    falsePositiveRate: 1.8,
-    avgLossIDR: "27.6 Jt",
-    trend: 15,
-    lastUpdated: "15 Feb 2026",
-    indicators: [
-      "IP found in threat intelligence blacklist",
-      "Tor exit node or known VPN server IP",
-      "IP associated with previous fraud cases",
-      "IP from sanctioned country or region",
-    ],
-    recommendedActions: [
-      "Automatically block transactions from blacklisted IPs",
-      "Add IP to internal permanent blocklist",
-      "Report IP to shared fraud intelligence network",
-      "Conduct full account audit for any related transactions",
-    ],
-  },
-  {
-    id: 8,
-    mlKey: "money_mule_destination",
-    name: "Account Age Anomaly",
-    description:
-      "High-value transactions initiated by accounts less than 7 days old — a classic indicator of synthetic identity fraud or money mule accounts.",
-    category: "Behavioral",
-    riskLevel: "high",
-    status: "review",
-    occurrences: 38,
-    accuracy: 89.6,
-    falsePositiveRate: 6.7,
-    avgLossIDR: "41.3 Jt",
-    trend: 22,
-    lastUpdated: "13 Feb 2026",
-    indicators: [
-      "Account less than 7 days old",
-      "Transaction amount exceeds 10× average new-account transaction",
-      "No prior transaction history to benchmark against",
-      "KYC documents not fully verified",
-    ],
-    recommendedActions: [
-      "Enforce 7-day cooling period for new high-value transfers",
-      "Require enhanced KYC for new accounts over threshold",
-      "Manual review mandatory for all flagged new-account transactions",
-      "Cross-reference with known money mule network patterns",
-    ],
-  },
-];
+  };
+  return base[action] ?? base.FLAG;
+}
 
 const FraudPatterns = () => {
   const [loading, setLoading] = useState(true);
-  const [patterns, setPatterns] = useState(ALL_PATTERNS);
-  const [apiError, setApiError] = useState(false);
+  const [patterns, setPatterns] = useState([]);
+  const [apiError, setApiError] = useState(null);
   const [riskFilter, setRiskFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -247,63 +184,49 @@ const FraudPatterns = () => {
   const [viewMode, setViewMode] = useState("grid");
   const [showExport, setShowExport] = useState(false);
 
-  useEffect(() => {
-    const fetchPatternStats = async () => {
-      try {
-        setLoading(true);
-        const BASE_URL =
-          process.env.REACT_APP_ML_API_URL || "http://localhost:8000";
-        const res = await fetch(`${BASE_URL}/patterns/stats`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+  const fetchPatterns = useCallback(async () => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const data = await api.get("/patterns/stats");
 
-        const merged = ALL_PATTERNS.map((p) => {
-          const mlPattern = data.patterns.find((mp) => mp.key === p.mlKey);
-          if (!mlPattern) return p;
-          return {
-            ...p,
-            occurrences: mlPattern.occurrences,
-            avgLossIDR: mlPattern.avg_loss_idr,
-            lastUpdated: mlPattern.last_updated,
-          };
-        });
-
-        const extraPatterns = data.patterns
-          .filter((mp) => !ALL_PATTERNS.some((p) => p.mlKey === mp.key))
-          .map((mp, i) => ({
-            id: 100 + i,
-            mlKey: mp.key,
-            name: mp.name,
-            description: mp.description,
-            category: mp.category,
-            riskLevel: mp.riskLevel,
-            status: "active",
-            occurrences: mp.occurrences,
-            accuracy: mp.accuracy,
-            falsePositiveRate: mp.falsePositiveRate,
-            avgLossIDR: mp.avg_loss_idr,
-            trend: mp.trend,
-            lastUpdated: mp.last_updated,
-            indicators: mp.indicators || [],
-            recommendedActions: mp.recommendedActions || [],
-          }));
-
-        setPatterns([...merged, ...extraPatterns]);
-        setApiError(false);
-      } catch (err) {
-        console.warn(
-          "Pattern stats API offline, pakai data statis:",
-          err.message,
-        );
-        setApiError(true);
-        setPatterns(ALL_PATTERNS);
-      } finally {
-        setLoading(false);
+      if (!data || !Array.isArray(data.patterns)) {
+        throw new Error("Format respons tidak valid dari server.");
       }
-    };
 
-    fetchPatternStats();
+      const mapped = data.patterns.map((bp, i) => mapBackendPattern(bp, i));
+      setPatterns(mapped);
+    } catch (err) {
+      console.error("[FraudPatterns] fetch error:", err);
+
+      try {
+        const fallback = await api.get("/patterns/");
+        if (Array.isArray(fallback) && fallback.length > 0) {
+          const mapped = fallback.map((bp, i) => mapBackendPattern(bp, i));
+          setPatterns(mapped);
+          setApiError(
+            "Data parsial — endpoint /patterns/stats tidak tersedia, menampilkan active patterns saja.",
+          );
+        } else {
+          throw new Error("Fallback juga tidak mengembalikan data.");
+        }
+      } catch (fallbackErr) {
+        console.error("[FraudPatterns] fallback error:", fallbackErr);
+        setApiError(
+          err.message?.includes("401") || err.status === 401
+            ? "Sesi habis. Silakan login ulang."
+            : `Gagal memuat data pola fraud: ${err.message ?? "Server tidak dapat dihubungi."}`,
+        );
+        setPatterns([]);
+      }
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchPatterns();
+  }, [fetchPatterns]);
 
   const filtered = useMemo(() => {
     let result = patterns.filter((p) => {
@@ -373,7 +296,26 @@ const FraudPatterns = () => {
             </button>
           </div>
 
-          <button className="fp-export-btn" onClick={() => setShowExport(true)}>
+          <button
+            className="fp-view-btn"
+            style={{
+              border: "1px solid #e2e8f0",
+              borderRadius: "8px",
+              background: "#fff",
+              width: 38,
+              height: 38,
+            }}
+            onClick={fetchPatterns}
+            title="Refresh data"
+          >
+            <i className="bi bi-arrow-clockwise"></i>
+          </button>
+
+          <button
+            className="fp-export-btn"
+            onClick={() => setShowExport(true)}
+            disabled={patterns.length === 0}
+          >
             <i className="bi bi-download"></i>
             Export Patterns List
           </button>
@@ -384,59 +326,99 @@ const FraudPatterns = () => {
         <div
           style={{
             display: "flex",
-            alignItems: "center",
-            gap: ".5rem",
-            padding: ".5rem 1rem",
+            alignItems: "flex-start",
+            gap: ".6rem",
+            padding: ".75rem 1rem",
             marginBottom: "1rem",
-            background: "#fef3c7",
-            border: "1px solid #fde68a",
+            background: patterns.length === 0 ? "#fef2f2" : "#fef3c7",
+            border: `1px solid ${patterns.length === 0 ? "#fecaca" : "#fde68a"}`,
             borderRadius: "8px",
-            fontSize: ".8rem",
-            color: "#92400e",
+            fontSize: ".82rem",
+            color: patterns.length === 0 ? "#991b1b" : "#92400e",
             fontWeight: 600,
           }}
         >
-          <i className="bi bi-exclamation-triangle-fill"></i>
-          ML API offline — menampilkan data statis
+          <i
+            className={`bi ${
+              patterns.length === 0
+                ? "bi-x-circle-fill"
+                : "bi-exclamation-triangle-fill"
+            }`}
+            style={{ marginTop: "1px", flexShrink: 0 }}
+          ></i>
+          <span>{apiError}</span>
+          {patterns.length === 0 && (
+            <button
+              onClick={fetchPatterns}
+              style={{
+                marginLeft: "auto",
+                background: "transparent",
+                border: "none",
+                color: "#991b1b",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: ".82rem",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <i className="bi bi-arrow-clockwise"></i> Coba lagi
+            </button>
+          )}
         </div>
       )}
 
-      <PatternStats patterns={patterns} />
+      {patterns.length > 0 && <PatternStats patterns={patterns} />}
 
-      <PatternFilter
-        riskFilter={riskFilter}
-        setRiskFilter={setRiskFilter}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        sortBy={sortBy}
-        setSortBy={setSortBy}
-        totalResults={filtered.length}
-      />
+      {patterns.length === 0 && !loading && (
+        <div className="fp-empty-state" style={{ marginTop: "2rem" }}>
+          <i className="bi bi-cloud-slash"></i>
+          <p>Data pola fraud tidak tersedia</p>
+          <span>
+            Pastikan backend berjalan dan Anda memiliki akses yang sesuai
+          </span>
+        </div>
+      )}
 
-      {viewMode === "chart" ? (
-        <PatternTrendChart
-          patterns={filtered.length > 0 ? filtered : patterns}
-        />
-      ) : (
+      {patterns.length > 0 && (
         <>
-          {filtered.length === 0 ? (
-            <div className="fp-empty-state">
-              <i className="bi bi-inbox"></i>
-              <p>No patterns match the current filters</p>
-              <span>Try adjusting the risk level, status, or search term</span>
-            </div>
+          <PatternFilter
+            riskFilter={riskFilter}
+            setRiskFilter={setRiskFilter}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            sortBy={sortBy}
+            setSortBy={setSortBy}
+            totalResults={filtered.length}
+          />
+
+          {viewMode === "chart" ? (
+            <PatternTrendChart
+              patterns={filtered.length > 0 ? filtered : patterns}
+            />
           ) : (
-            <div className="fp-cards-grid">
-              {filtered.map((pattern) => (
-                <PatternCard
-                  key={pattern.id}
-                  pattern={pattern}
-                  onViewDetail={setSelectedPattern}
-                />
-              ))}
-            </div>
+            <>
+              {filtered.length === 0 ? (
+                <div className="fp-empty-state">
+                  <i className="bi bi-inbox"></i>
+                  <p>No patterns match the current filters</p>
+                  <span>
+                    Try adjusting the risk level, status, or search term
+                  </span>
+                </div>
+              ) : (
+                <div className="fp-cards-grid">
+                  {filtered.map((pattern) => (
+                    <PatternCard
+                      key={pattern.id}
+                      pattern={pattern}
+                      onViewDetail={setSelectedPattern}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </>
       )}

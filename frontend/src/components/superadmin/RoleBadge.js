@@ -7,10 +7,10 @@ const ROLE_CONFIG = {
     icon: "bi-shield-fill",
     className: "role-superadmin",
   },
-  admin: {
-    label: "Admin",
+  riskmanager: {
+    label: "Risk Manager",
     icon: "bi-person-badge-fill",
-    className: "role-admin",
+    className: "role-riskmanager",
   },
   analyst: {
     label: "Fraud Analyst",

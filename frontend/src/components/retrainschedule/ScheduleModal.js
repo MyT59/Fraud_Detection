@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  MODELS,
+  DOMAINS,
   DAYS_OF_WEEK,
   DAYS_OF_MONTH,
   FREQUENCIES,
@@ -14,6 +14,7 @@ const ScheduleModal = ({
   onClose,
   onSubmit,
   updateForm,
+  submitLoading,
 }) => {
   if (!isOpen) return null;
 
@@ -57,6 +58,7 @@ const ScheduleModal = ({
                 placeholder="cth. Weekly Full Retrain"
                 value={form.name}
                 onChange={(e) => updateForm("name", e.target.value)}
+                disabled={submitLoading}
               />
               {formErrors.name && (
                 <span className="rs-form-error">{formErrors.name}</span>
@@ -65,21 +67,22 @@ const ScheduleModal = ({
 
             <div className="rs-form-group">
               <label className="rs-form-label">
-                Model ML <span className="rs-required">*</span>
+                Domain <span className="rs-required">*</span>
               </label>
               <select
-                className={`rs-form-select ${formErrors.model ? "rs-form-input--error" : ""}`}
-                value={form.model}
-                onChange={(e) => updateForm("model", e.target.value)}
+                className={`rs-form-select ${formErrors.domain ? "rs-form-input--error" : ""}`}
+                value={form.domain}
+                onChange={(e) => updateForm("domain", e.target.value)}
+                disabled={submitLoading}
               >
-                {MODELS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
+                {DOMAINS.map((d) => (
+                  <option key={d.value} value={d.value}>
+                    {d.label}
                   </option>
                 ))}
               </select>
-              {formErrors.model && (
-                <span className="rs-form-error">{formErrors.model}</span>
+              {formErrors.domain && (
+                <span className="rs-form-error">{formErrors.domain}</span>
               )}
             </div>
           </div>
@@ -98,6 +101,7 @@ const ScheduleModal = ({
                     value={f.value}
                     checked={form.frequency === f.value}
                     onChange={() => updateForm("frequency", f.value)}
+                    disabled={submitLoading}
                   />
                   <i className={`bi ${f.icon}`} />
                   <span>{f.label}</span>
@@ -114,6 +118,7 @@ const ScheduleModal = ({
                   className="rs-form-select"
                   value={form.dayOfWeek}
                   onChange={(e) => updateForm("dayOfWeek", e.target.value)}
+                  disabled={submitLoading}
                 >
                   {DAYS_OF_WEEK.map((d) => (
                     <option key={d} value={d}>
@@ -131,6 +136,7 @@ const ScheduleModal = ({
                   className="rs-form-select"
                   value={form.dayOfMonth}
                   onChange={(e) => updateForm("dayOfMonth", e.target.value)}
+                  disabled={submitLoading}
                 >
                   {DAYS_OF_MONTH.map((d) => (
                     <option key={d} value={d}>
@@ -150,6 +156,7 @@ const ScheduleModal = ({
                 type="time"
                 value={form.time}
                 onChange={(e) => updateForm("time", e.target.value)}
+                disabled={submitLoading}
               />
               {formErrors.time && (
                 <span className="rs-form-error">{formErrors.time}</span>
@@ -160,41 +167,82 @@ const ScheduleModal = ({
           <div className="rs-form-group">
             <label className="rs-form-label">Status Awal</label>
             <div className="rs-toggle-group">
-              {["active", "paused"].map((st) => (
+              {[
+                { val: true, label: "Aktif", icon: "bi-play-circle" },
+                { val: false, label: "Paused", icon: "bi-pause-circle" },
+              ].map(({ val, label, icon }) => (
                 <button
-                  key={st}
+                  key={String(val)}
                   type="button"
-                  className={`rs-toggle-btn ${form.status === st ? "rs-toggle-btn--active" : ""}`}
-                  onClick={() => updateForm("status", st)}
+                  className={`rs-toggle-btn ${form.is_active === val ? "rs-toggle-btn--active" : ""}`}
+                  onClick={() => updateForm("is_active", val)}
+                  disabled={submitLoading}
                 >
-                  <i
-                    className={`bi ${st === "active" ? "bi-play-circle" : "bi-pause-circle"}`}
-                  />
-                  {st === "active" ? "Aktif" : "Paused"}
+                  <i className={`bi ${icon}`} />
+                  {label}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="rs-form-group">
-            <label className="rs-form-label">Deskripsi</label>
-            <textarea
-              className="rs-form-textarea"
-              rows={3}
-              placeholder="Deskripsi singkat tentang schedule ini..."
-              value={form.description}
-              onChange={(e) => updateForm("description", e.target.value)}
-            />
+            <label className="rs-form-label">Cron Expression (preview)</label>
+            <div
+              style={{
+                fontFamily: "monospace",
+                fontSize: "0.8rem",
+                background: "#f1f5f9",
+                padding: "8px 12px",
+                borderRadius: "7px",
+                color: "#475569",
+                letterSpacing: "0.05em",
+              }}
+            >
+              {(() => {
+                const { buildCronExpr: build } = require("./scheduleConstants");
+                return build(form);
+              })()}
+            </div>
+            <p
+              style={{
+                fontSize: "0.72rem",
+                color: "#94a3b8",
+                marginTop: "4px",
+              }}
+            >
+              Format: menit jam dom bulan dow — sesuai standar Linux/Quartz
+            </p>
           </div>
         </div>
 
         <div className="rs-modal__footer">
-          <button className="rs-btn rs-btn--ghost" onClick={onClose}>
+          <button
+            className="rs-btn rs-btn--ghost"
+            onClick={onClose}
+            disabled={submitLoading}
+          >
             Batal
           </button>
-          <button className="rs-btn rs-btn--primary" onClick={onSubmit}>
-            <i className={`bi ${isEdit ? "bi-check-lg" : "bi-plus-lg"}`} />
-            {isEdit ? "Simpan Perubahan" : "Buat Schedule"}
+          <button
+            className="rs-btn rs-btn--primary"
+            onClick={onSubmit}
+            disabled={submitLoading}
+          >
+            {submitLoading ? (
+              <>
+                <span
+                  className="spinner-border spinner-border-sm"
+                  role="status"
+                  style={{ width: "14px", height: "14px" }}
+                />
+                Menyimpan...
+              </>
+            ) : (
+              <>
+                <i className={`bi ${isEdit ? "bi-check-lg" : "bi-plus-lg"}`} />
+                {isEdit ? "Simpan Perubahan" : "Buat Schedule"}
+              </>
+            )}
           </button>
         </div>
       </div>
