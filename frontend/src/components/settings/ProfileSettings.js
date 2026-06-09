@@ -1,20 +1,34 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+
+const DEPARTMENT_OPTIONS = [
+  "Risk Management",
+  "Fraud Prevention",
+  "Security",
+  "IT",
+  "Operations",
+];
 
 const ProfileSettings = ({ data, onSave }) => {
   const [formData, setFormData] = useState(data);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setFormData(data);
+    }
+  }, [data, isEditing]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave(formData);
+    setIsSaving(true);
+    await onSave(formData);
+    setIsSaving(false);
     setIsEditing(false);
   };
 
@@ -22,6 +36,14 @@ const ProfileSettings = ({ data, onSave }) => {
     setFormData(data);
     setIsEditing(false);
   };
+
+  const getInitials = (name = "") =>
+    name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
 
   return (
     <div className="card settings-card">
@@ -50,7 +72,7 @@ const ProfileSettings = ({ data, onSave }) => {
                 {formData.avatar ? (
                   <img src={formData.avatar} alt="Profile" />
                 ) : (
-                  <span>{formData.name.charAt(0).toUpperCase()}</span>
+                  <span>{getInitials(formData.name)}</span>
                 )}
               </div>
               {isEditing && (
@@ -60,8 +82,12 @@ const ProfileSettings = ({ data, onSave }) => {
               )}
             </div>
             <div className="avatar-info">
-              <h6>{formData.name}</h6>
-              <p className="text-muted">{formData.role}</p>
+              <h6>{formData.name || "—"}</h6>
+              <p className="text-muted">{formData.role || "—"}</p>
+              <p className="text-muted" style={{ fontSize: "0.8rem" }}>
+                <i className="bi bi-envelope me-1"></i>
+                {formData.email || "—"}
+              </p>
             </div>
           </div>
 
@@ -75,7 +101,7 @@ const ProfileSettings = ({ data, onSave }) => {
                 type="text"
                 className="form-control"
                 name="name"
-                value={formData.name}
+                value={formData.name || ""}
                 onChange={handleInputChange}
                 disabled={!isEditing}
                 required
@@ -91,11 +117,10 @@ const ProfileSettings = ({ data, onSave }) => {
                 type="email"
                 className="form-control"
                 name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                disabled={!isEditing}
-                required
+                value={formData.email || ""}
+                disabled
               />
+              <small className="text-muted">Email tidak dapat diubah</small>
             </div>
 
             <div className="col-md-6 mb-3">
@@ -107,9 +132,10 @@ const ProfileSettings = ({ data, onSave }) => {
                 type="tel"
                 className="form-control"
                 name="phone"
-                value={formData.phone}
+                value={formData.phone || ""}
                 onChange={handleInputChange}
                 disabled={!isEditing}
+                placeholder="Belum diisi"
               />
             </div>
 
@@ -118,16 +144,28 @@ const ProfileSettings = ({ data, onSave }) => {
                 <i className="bi bi-building me-1"></i>
                 Department
               </label>
-              <select
-                className="form-select"
-                name="department"
-                value={formData.department}
-                onChange={handleInputChange}
-                disabled={!isEditing}
-              >
-                <option value="Risk Management">Risk Management</option>
-                <option value="Fraud Prevention">Fraud Prevention</option>
-              </select>
+              {isEditing ? (
+                <select
+                  className="form-select"
+                  name="department"
+                  value={formData.department || ""}
+                  onChange={handleInputChange}
+                >
+                  <option value="">— Pilih Department —</option>
+                  {DEPARTMENT_OPTIONS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  className="form-control"
+                  value={formData.department || "Belum diisi"}
+                  disabled
+                />
+              )}
             </div>
 
             <div className="col-md-6 mb-3">
@@ -138,12 +176,11 @@ const ProfileSettings = ({ data, onSave }) => {
               <input
                 type="text"
                 className="form-control"
-                name="role"
-                value={formData.role}
+                value={formData.role || ""}
                 disabled
               />
               <small className="text-muted">
-                Contact Super Admin to change role
+                Hubungi Super Admin untuk mengubah role
               </small>
             </div>
           </div>
@@ -154,13 +191,30 @@ const ProfileSettings = ({ data, onSave }) => {
                 type="button"
                 className="btn btn-outline-secondary"
                 onClick={handleCancel}
+                disabled={isSaving}
               >
                 <i className="bi bi-x-circle me-1"></i>
                 Cancel
               </button>
-              <button type="submit" className="btn btn-danger">
-                <i className="bi bi-check-circle me-1"></i>
-                Save Changes
+              <button
+                type="submit"
+                className="btn btn-danger"
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                    />
+                    Menyimpan...
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-check-circle me-1"></i>
+                    Save Changes
+                  </>
+                )}
               </button>
             </div>
           )}

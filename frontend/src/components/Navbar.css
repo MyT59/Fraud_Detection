@@ -144,13 +144,17 @@
 .user-avatar {
   width: 32px;
   height: 32px;
-  background: #262626;
+  background: #dc2626;
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  font-size: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+  user-select: none;
 }
 
 .user-info {

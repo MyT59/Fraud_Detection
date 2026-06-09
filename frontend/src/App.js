@@ -5,7 +5,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { authService } from "./services/apiService";
+import { authService, storage } from "./services/apiService";
 
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
@@ -42,7 +42,9 @@ const ProtectedRoute = ({ children }) => {
 // Tidak redirect agar user tahu kenapa tidak bisa akses.
 
 const RoleGuard = ({ allowedRoles, children }) => {
-  const user = authService.getCurrentUser();
+  // FIX: gunakan storage.getUser() dari apiService (key "user"),
+  // bukan authService.getCurrentUser() yang baca dari key "current_user" (AuthService.js lama)
+  const user = storage.getUser();
   const role = user?.role || null;
 
   if (!allowedRoles.includes(role)) {

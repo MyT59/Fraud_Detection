@@ -51,6 +51,11 @@ const useToast = () => {
   return { toasts, push };
 };
 
+const checkIsSuperAdmin = (user) => {
+  if (!user) return false;
+  return user.role === "SUPER_ADMIN" || user.role === "superadmin";
+};
+
 const SuperAdmin = () => {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
@@ -58,9 +63,9 @@ const SuperAdmin = () => {
   const [editData, setEditData] = useState(null);
   const { toasts, push: pushToast } = useToast();
 
-  const [currentUser] = useState(() => storage.getUser());
+  const [currentUser, setCurrentUser] = useState(() => storage.getUser());
 
-  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+  const isSuperAdmin = checkIsSuperAdmin(currentUser);
   const superadminCount = users.filter((u) => u.role === "superadmin").length;
 
   const fetchUsers = useCallback(async () => {
@@ -71,10 +76,24 @@ const SuperAdmin = () => {
       console.error("Gagal memuat akun:", err);
       pushToast(err.message || "Gagal memuat data pengguna.", "error");
     }
-  }, []);
+  }, [pushToast]);
 
   useEffect(() => {
-    fetchUsers().finally(() => setLoading(false));
+    const init = async () => {
+      let user = storage.getUser();
+      if (!user) {
+        try {
+          user = await api.get("/accounts/me");
+          storage.setUser(user);
+          setCurrentUser(user);
+        } catch (err) {
+          console.error("Gagal memuat profil:", err);
+        }
+      }
+      await fetchUsers();
+      setLoading(false);
+    };
+    init();
   }, [fetchUsers]);
 
   const handleSubmit = (apiUser) => {
@@ -169,19 +188,17 @@ const SuperAdmin = () => {
         currentUser={currentUser}
       />
 
-      {isSuperAdmin && (
-        <AddUserModal
-          isOpen={modalOpen}
-          onClose={() => {
-            setModalOpen(false);
-            setEditData(null);
-          }}
-          onSubmit={handleSubmit}
-          editData={editData}
-          currentUser={currentUser}
-          superadminCount={superadminCount}
-        />
-      )}
+      <AddUserModal
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setEditData(null);
+        }}
+        onSubmit={handleSubmit}
+        editData={editData}
+        currentUser={currentUser}
+        superadminCount={superadminCount}
+      />
 
       <div className="toast-container">
         {toasts.map((t) => (

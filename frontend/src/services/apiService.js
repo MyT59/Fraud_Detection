@@ -153,7 +153,13 @@ export const authService = {
     const data = await api.post(`/login?${params.toString()}`);
 
     storage.setTokens(data.access_token, data.refresh_token);
-    storage.setUser(data.user);
+
+    try {
+      const me = await api.get("/accounts/me");
+      storage.setUser(me);
+    } catch {
+      if (data.user) storage.setUser(data.user);
+    }
 
     return data;
   },

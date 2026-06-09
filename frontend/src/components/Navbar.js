@@ -1,9 +1,35 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { storage } from "../services/apiService";
 import "./Navbar.css";
+
+const ROLE_LABEL = {
+  SUPER_ADMIN: "Super Admin",
+  RISK_MANAGER: "Risk Manager",
+  FRAUD_ANALYST: "Fraud Analyst",
+};
+
+const getInitials = (name = "") =>
+  name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
 const Navbar = ({ onToggleSidebar }) => {
   const navigate = useNavigate();
+  const [user, setUser] = useState(() => storage.getUser());
+
+  useEffect(() => {
+    const syncUser = () => setUser(storage.getUser());
+    window.addEventListener("storage", syncUser);
+    return () => window.removeEventListener("storage", syncUser);
+  }, []);
+
+  const displayName = user?.full_name || "Admin User";
+  const displayRole = ROLE_LABEL[user?.role] || user?.role || "Administrator";
+  const initials = getInitials(displayName);
 
   return (
     <nav className="navbar-simple">
@@ -34,12 +60,12 @@ const Navbar = ({ onToggleSidebar }) => {
             <i className="bi bi-gear"></i>
           </button>
           <div className="user-profile" onClick={() => navigate("/settings")}>
-            <div className="user-avatar">
-              <i className="bi bi-person"></i>
+            <div className="user-avatar" title={displayName}>
+              {initials}
             </div>
             <div className="user-info">
-              <span className="user-name">Admin User</span>
-              <span className="user-role">Administrator</span>
+              <span className="user-name">{displayName}</span>
+              <span className="user-role">{displayRole}</span>
             </div>
           </div>
         </div>

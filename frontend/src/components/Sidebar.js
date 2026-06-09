@@ -35,7 +35,11 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
   ];
 
   const adminMenu = [
-    { path: "/account-management", icon: "bi-shield-lock-fill", label: "Account Management" },
+    {
+      path: "/super-admin",
+      icon: "bi-shield-lock-fill",
+      label: "Account Management",
+    },
     { path: "/audit-log", icon: "bi-clock-history", label: "Audit Log" },
     { path: "/fraud-patterns", icon: "bi-bug-fill", label: "Fraud Patterns" },
     { path: "/retrain-schedule", icon: "bi-cpu", label: "Retrain Schedule" },

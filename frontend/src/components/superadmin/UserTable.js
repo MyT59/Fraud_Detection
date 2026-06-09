@@ -310,7 +310,8 @@ const UserTable = ({
   const [page, setPage] = useState(1);
   const [confirmId, setConfirmId] = useState(null);
 
-  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+  const isSuperAdmin =
+    currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "superadmin";
 
   const handleSort = (field) => {
     setSort((prev) =>

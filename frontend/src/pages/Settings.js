@@ -7,6 +7,13 @@ import ApiSettings from "../components/settings/ApiSettings";
 import SettingsTabs from "../components/settings/SettingsTabs";
 import "./Settings.css";
 import PageLoader from "../components/common/PageLoader";
+import api, { storage } from "../services/apiService";
+
+const ROLE_LABEL = {
+  SUPER_ADMIN: "Super Admin",
+  RISK_MANAGER: "Risk Manager",
+  FRAUD_ANALYST: "Fraud Analyst",
+};
 
 const Settings = () => {
   const [loading, setLoading] = useState(true);
@@ -14,28 +21,16 @@ const Settings = () => {
   const [saveStatus, setSaveStatus] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  const [userData, setUserData] = useState({
-    name: "Admin User",
-    email: "admin@frauddetection.com",
-    role: "Administrator",
-    department: "Security",
-    phone: "+62 812-3456-7890",
-    avatar: null,
-  });
-
-  const [securityData, setSecurityData] = useState({
-    twoFactorEnabled: true,
-    sessionTimeout: 30,
-    passwordLastChanged: "2024-01-15",
-    loginNotifications: true,
-  });
-
-  const [notificationData, setNotificationData] = useState({
-    emailNotifications: true,
-    fraudAlerts: true,
-    weeklyReports: true,
-    systemUpdates: false,
-    pushNotifications: true,
+  const [userData, setUserData] = useState(() => {
+    const u = storage.getUser();
+    return {
+      name: u?.full_name || "Admin User",
+      email: u?.email || "",
+      role: ROLE_LABEL[u?.role] || u?.role || "Administrator",
+      department: u?.department || "",
+      phone: u?.phone_number || "",
+      avatar: null,
+    };
   });
 
   const [systemData, setSystemData] = useState({
@@ -53,19 +48,67 @@ const Settings = () => {
     apiEnabled: true,
   });
 
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const data = await api.get("/accounts/me");
+        const updated = {
+          name: data.full_name || "",
+          email: data.email || "",
+          role: ROLE_LABEL[data.role] || data.role || "Administrator",
+          department: data.department || "",
+          phone: data.phone_number || "",
+          avatar: null,
+        };
+        setUserData(updated);
+
+        storage.setUser({ ...storage.getUser(), ...data });
+      } catch {
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  const handleSaveProfile = async (formData) => {
+    setSaveStatus("saving");
+    try {
+      const payload = {
+        full_name: formData.name,
+        phone_number: formData.phone,
+        department: formData.department,
+      };
+      const data = await api.patch("/accounts/me", payload);
+      const updated = {
+        name: data.full_name || formData.name,
+        email: data.email || formData.email,
+        role: ROLE_LABEL[data.role] || data.role || formData.role,
+        department: data.department || formData.department,
+        phone: data.phone_number || formData.phone,
+        avatar: null,
+      };
+      setUserData(updated);
+
+      storage.setUser({ ...storage.getUser(), ...data });
+
+      window.dispatchEvent(new Event("storage"));
+      setSaveStatus("success");
+    } catch {
+      setSaveStatus("error");
+    } finally {
+      setTimeout(() => setSaveStatus(null), 3000);
+    }
+  };
+
   const handleSave = (tab, data) => {
+    if (tab === "profile") {
+      handleSaveProfile(data);
+      return;
+    }
     setSaveStatus("saving");
     setTimeout(() => {
       switch (tab) {
-        case "profile":
-          setUserData(data);
-          break;
-        case "security":
-          setSecurityData(data);
-          break;
-        case "notifications":
-          setNotificationData(data);
-          break;
         case "system":
           setSystemData(data);
           break;
@@ -99,19 +142,9 @@ const Settings = () => {
           />
         );
       case "security":
-        return (
-          <SecuritySettings
-            data={securityData}
-            onSave={(d) => handleSave("security", d)}
-          />
-        );
+        return <SecuritySettings />;
       case "notifications":
-        return (
-          <NotificationSettings
-            data={notificationData}
-            onSave={(d) => handleSave("notifications", d)}
-          />
-        );
+        return <NotificationSettings />;
       case "system":
         return (
           <SystemSettings
@@ -128,11 +161,6 @@ const Settings = () => {
     }
   };
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(timer);
-  }, []);
-
   if (loading) return <PageLoader message="Memuat pengaturan..." />;
 
   return (
@@ -146,14 +174,28 @@ const Settings = () => {
 
         {saveStatus && (
           <div
-            className={`alert alert-${saveStatus === "success" ? "success" : "info"} alert-dismissible fade show`}
+            className={`alert alert-${
+              saveStatus === "success"
+                ? "success"
+                : saveStatus === "error"
+                  ? "danger"
+                  : "info"
+            } alert-dismissible fade show`}
           >
             <i
-              className={`bi bi-${saveStatus === "success" ? "check-circle" : "hourglass-split"} me-2`}
+              className={`bi bi-${
+                saveStatus === "success"
+                  ? "check-circle"
+                  : saveStatus === "error"
+                    ? "x-circle"
+                    : "hourglass-split"
+              } me-2`}
             ></i>
             {saveStatus === "success"
               ? "Pengaturan berhasil disimpan!"
-              : "Menyimpan pengaturan..."}
+              : saveStatus === "error"
+                ? "Gagal menyimpan pengaturan. Coba lagi."
+                : "Menyimpan pengaturan..."}
             <button
               type="button"
               className="btn-close"
