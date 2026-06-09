@@ -4,7 +4,7 @@ import "./UserStats.css";
 const UserStats = ({ users }) => {
   const total = users.length;
   const superadmins = users.filter((u) => u.role === "superadmin").length;
-  const riskmanagers = users.filter((u) => u.role === "admin").length;
+  const riskmanagers = users.filter((u) => u.role === "riskmanager").length;
   const analysts = users.filter((u) => u.role === "analyst").length;
   const active = users.filter((u) => u.status === "active").length;
 

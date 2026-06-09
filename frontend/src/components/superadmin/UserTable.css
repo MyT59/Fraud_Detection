@@ -504,3 +504,13 @@
     width: 100%;
   }
 }
+
+.ghost-row td {
+  height: 52px;
+  border-bottom: 1px solid #f3f4f6;
+  background: transparent;
+  pointer-events: none;
+}
+.ghost-row:last-child td {
+  border-bottom: none;
+}

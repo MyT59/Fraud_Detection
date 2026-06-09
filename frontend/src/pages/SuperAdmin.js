@@ -8,7 +8,7 @@ import { api, storage } from "../services/apiService";
 
 const ROLE_FROM_API = {
   SUPER_ADMIN: "superadmin",
-  RISK_MANAGER: "admin",
+  RISK_MANAGER: "riskmanager",
   FRAUD_ANALYST: "analyst",
 };
 

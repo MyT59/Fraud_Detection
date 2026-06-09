@@ -12,12 +12,12 @@ const ROLES = [
     colorClass: "c-superadmin",
   },
   {
-    value: "admin",
+    value: "riskmanager",
     roleId: 2,
-    label: "Admin",
-    desc: "Akses penuh sistem",
+    label: "Risk Manager",
+    desc: "Hak akses penuh",
     icon: "bi-person-badge-fill",
-    colorClass: "c-admin",
+    colorClass: "c-risk-manager",
   },
   {
     value: "analyst",
@@ -29,7 +29,7 @@ const ROLES = [
   },
 ];
 
-const ROLE_TO_ID = { superadmin: 1, admin: 2, analyst: 3 };
+const ROLE_TO_ID = { superadmin: 1, riskmanager: 2, analyst: 3 };
 const DEPARTMENTS = ["Risk Management", "Fraud Prevention"];
 
 const EMPTY = {

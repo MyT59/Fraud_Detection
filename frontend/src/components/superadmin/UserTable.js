@@ -276,8 +276,8 @@ const ROLE_OPTIONS = [
     iconColor: "#dc2626",
   },
   {
-    value: "admin",
-    label: "Admin",
+    value: "riskmanager",
+    label: "Risk Manager",
     icon: "bi-person-badge-fill",
     iconColor: "#2563eb",
   },
@@ -557,6 +557,16 @@ const UserTable = ({
                 </tr>
               ))
             )}
+
+            {paginated.length > 0 &&
+              paginated.length < PAGE_SIZE &&
+              Array.from({ length: PAGE_SIZE - paginated.length }).map(
+                (_, i) => (
+                  <tr key={`ghost-${i}`} className="ghost-row">
+                    <td colSpan={isSuperAdmin ? 6 : 5} />
+                  </tr>
+                ),
+              )}
           </tbody>
         </table>
       </div>
