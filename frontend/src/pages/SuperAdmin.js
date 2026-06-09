@@ -115,6 +115,19 @@ const SuperAdmin = () => {
     setModalOpen(true);
   };
 
+  const handleResetPassword = async (id) => {
+    const user = users.find((u) => u.id === id);
+    try {
+      await api.post(`/accounts/${id}/reset-password`);
+      pushToast(
+        `Password ${user?.name} berhasil direset. Email konfirmasi dikirim.`,
+        "info",
+      );
+    } catch (err) {
+      pushToast(err.message || "Gagal mereset password.", "error");
+    }
+  };
+
   const handleDelete = async (id) => {
     const user = users.find((u) => u.id === id);
     try {
@@ -184,6 +197,7 @@ const SuperAdmin = () => {
         users={users}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        onResetPassword={handleResetPassword}
         onToggleStatus={handleToggleStatus}
         currentUser={currentUser}
       />

@@ -7,7 +7,7 @@ import ApiSettings from "../components/settings/ApiSettings";
 import SettingsTabs from "../components/settings/SettingsTabs";
 import "./Settings.css";
 import PageLoader from "../components/common/PageLoader";
-import api, { storage } from "../services/apiService";
+import api, { storage, authService } from "../services/apiService";
 
 const ROLE_LABEL = {
   SUPER_ADMIN: "Super Admin",
@@ -127,9 +127,13 @@ const Settings = () => {
     setShowLogoutConfirm(true);
   };
 
-  const confirmLogout = () => {
-    localStorage.removeItem("isLoggedIn");
-    window.location.href = "/login";
+  const confirmLogout = async () => {
+    try {
+      await authService.logout();
+    } catch {
+      storage.clear();
+      window.location.href = "/login";
+    }
   };
 
   const renderTabContent = () => {

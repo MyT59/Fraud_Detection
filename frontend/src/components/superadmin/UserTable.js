@@ -10,8 +10,8 @@ const ROLE_LABEL_MAP = {
     bg: "#fef2f2",
     border: "#fecaca",
   },
-  admin: {
-    label: "Admin",
+  riskmanager: {
+    label: "Risk Manager",
     icon: "bi-person-badge-fill",
     color: "#2563eb",
     bg: "#eff6ff",
@@ -301,6 +301,7 @@ const UserTable = ({
   onEdit,
   onDelete,
   onToggleStatus,
+  onResetPassword,
   currentUser,
 }) => {
   const [search, setSearch] = useState("");
@@ -529,6 +530,13 @@ const UserTable = ({
                             onClick={() => onEdit(user)}
                           >
                             <i className="bi bi-pencil" />
+                          </button>
+                          <button
+                            className="btn-action btn-reset"
+                            title="Reset password"
+                            onClick={() => onResetPassword(user.id)}
+                          >
+                            <i className="bi bi-key" />
                           </button>
                           <button
                             className="btn-action btn-suspend"

@@ -420,6 +420,11 @@
   color: #2563eb;
   border-color: #bfdbfe;
 }
+.btn-action.btn-reset:hover {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border-color: #ddd6fe;
+}
 .btn-action.btn-suspend:hover {
   background: #fff7ed;
   color: #ea580c;
