@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
+from typing import List, Optional
 
 from app.infrastructure.database.session import get_db
 from app.application.services.activity_log_service import get_activity_logs
@@ -12,17 +13,22 @@ router = APIRouter(prefix="/activity-logs")
 
 @router.get("/", response_model=ActivityLogPaginatedResponse)
 def get_logs(
-    # 🎯 QUICK WIN FIX: Ubah 'skip' menjadi 'page' agar seragam di seluruh dashboard frontend! 
     page: int = Query(1, ge=1),
-    limit: int = Query(50, ge=1),
-    action_type: str = Query(None),
-    start_date: datetime = Query(None),
-    end_date: datetime = Query(None),
-    email: str = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    action_type: Optional[str] = Query(None),           # backward compat — single
+    action_types: Optional[List[str]] = Query(None),    # baru — multi
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    email: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),                # baru — global search
     db: Session = Depends(get_db),
     current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST"))
 ):
-    # Konversi page ke nilai offset offset (skip) yang dimengerti oleh kueri repository
+    # Merge action_type (lama) dan action_types (baru) jadi satu list
+    combined_action_types = list(action_types or [])
+    if action_type and action_type not in combined_action_types:
+        combined_action_types.append(action_type)
+
     calculated_skip = (page - 1) * limit
 
     return get_activity_logs(
@@ -30,8 +36,9 @@ def get_logs(
         current_admin=current_admin,
         skip=calculated_skip,
         limit=limit,
-        action_type=action_type,
+        action_types=combined_action_types or None,
         start_date=start_date,
         end_date=end_date,
-        email=email
+        email=email,
+        search=search,
     )

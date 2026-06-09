@@ -1,104 +1,97 @@
 import React from "react";
 import "./HistoryStats.css";
 
-const HistoryStats = ({
-  data = [],
-  metrics = null,
-  metricsLoading = false,
-}) => {
-  const total = metrics ? metrics.total_reviews : data.length;
-  const approved = metrics
-    ? metrics.safe_count
-    : data.filter((d) => d.action === "approved").length;
-  const rejected = metrics
-    ? metrics.fraud_count
-    : data.filter((d) => d.action === "rejected").length;
+/**
+ * HistoryStats
+ * Menampilkan statistik dari GET /reviews/metrics.
+ * Tidak menghitung lokal dari array items — data lokal tidak reliable
+ * karena items hanya 1 page (10 record), bukan total keseluruhan.
+ * Jika metrics null (API gagal), tampilkan "—".
+ */
+const HistoryStats = ({ metrics = null, metricsLoading = false }) => {
+  const fraudRate =
+    metrics?.fraud_confirmation_rate != null
+      ? `${metrics.fraud_confirmation_rate.toFixed(1)}%`
+      : "—";
 
-  const approvalRate = metrics
-    ? (100 - metrics.fraud_confirmation_rate).toFixed(1)
-    : total > 0
-      ? ((approved / total) * 100).toFixed(1)
-      : "0.0";
+  const approvalRate =
+    metrics?.fraud_confirmation_rate != null
+      ? `${(100 - metrics.fraud_confirmation_rate).toFixed(1)}%`
+      : "—";
 
-  const fraudRate = metrics
-    ? metrics.fraud_confirmation_rate.toFixed(1)
-    : total > 0
-      ? ((rejected / total) * 100).toFixed(1)
-      : "0.0";
-
-  const avgDuration = metrics
-    ? metrics.avg_review_duration_minutes != null
+  const avgDuration =
+    metrics?.avg_review_duration_minutes != null
       ? `${metrics.avg_review_duration_minutes.toFixed(1)} min avg`
-      : "—"
-    : null;
-
-  const openAlerts = metrics?.open_alerts ?? null;
-  const inProgressAlerts = metrics?.in_progress_alerts ?? null;
+      : "—";
 
   const cards = [
     {
-      id: 1,
+      id: "total",
       label: "Total Reviewed",
-      value: total,
+      value: metrics?.total_reviews ?? "—",
       icon: "bi-clipboard-check",
       color: "purple",
-      sub: avgDuration ?? "All-time entries",
+      sub: avgDuration,
     },
     {
-      id: 2,
+      id: "safe",
       label: "Safe (Approved)",
-      value: approved,
+      value: metrics?.safe_count ?? "—",
       icon: "bi-check-circle-fill",
       color: "success",
-      sub: `${approvalRate}% approval rate`,
+      sub: `${approvalRate} approval rate`,
     },
     {
-      id: 3,
+      id: "fraud",
       label: "Fraud (Rejected)",
-      value: rejected,
+      value: metrics?.fraud_count ?? "—",
       icon: "bi-x-circle-fill",
       color: "danger",
-      sub: `${fraudRate}% fraud confirmation`,
+      sub: `${fraudRate} fraud confirmation`,
     },
   ];
+
+  const hasQueueData =
+    metrics &&
+    (metrics.open_alerts != null || metrics.in_progress_alerts != null);
 
   return (
     <div className="history-stats-container">
       {cards.map((card) => (
         <div key={card.id} className={`hstat-card hstat-${card.color}`}>
           <div className={`hstat-icon bg-${card.color}`}>
-            <i className={`bi ${card.icon}`}></i>
+            <i className={`bi ${card.icon}`} />
           </div>
           <div className="hstat-content">
             <span className="hstat-label">{card.label}</span>
-
             {metricsLoading ? (
-              <span className="hstat-value hstat-skeleton">—</span>
+              <span className="hstat-value hstat-skeleton" />
             ) : (
               <span className="hstat-value">{card.value}</span>
             )}
-
             <span className="hstat-sub">{card.sub}</span>
           </div>
         </div>
       ))}
 
-      {metrics && (openAlerts !== null || inProgressAlerts !== null) && (
+      {/* Alert Queue card — hanya tampil jika metrics tersedia */}
+      {hasQueueData && (
         <div className="hstat-card hstat-info">
           <div className="hstat-icon bg-info">
-            <i className="bi bi-hourglass-split"></i>
+            <i className="bi bi-hourglass-split" />
           </div>
           <div className="hstat-content">
             <span className="hstat-label">Alert Queue</span>
             {metricsLoading ? (
-              <span className="hstat-value hstat-skeleton">—</span>
+              <span className="hstat-value hstat-skeleton" />
             ) : (
               <span className="hstat-value">
-                {(openAlerts ?? 0) + (inProgressAlerts ?? 0)}
+                {(metrics.open_alerts ?? 0) + (metrics.in_progress_alerts ?? 0)}
               </span>
             )}
             <span className="hstat-sub">
-              {openAlerts ?? 0} open · {inProgressAlerts ?? 0} in-progress
+              {metrics.open_alerts ?? 0} open ·{" "}
+              {metrics.in_progress_alerts ?? 0} in-progress
             </span>
           </div>
         </div>

@@ -96,14 +96,16 @@ class TransactionFeatureSnapshotService:
                 "response_code": details.get("response_code"),
                 "processing_code": details.get("processing_code"),
                 "dest_account_number": details.get("dest_account_number"),
+                "mti": details.get("mti"),
                 
                 # --- NUSABILL ---
                 "customer_id": getattr(transaction, "user_account_id", None), 
-                "bill_date": getattr(transaction, "transaction_time", None), 
-                "payment_date": getattr(transaction, "transaction_time", None), 
-                "bill_amount": float(transaction.amount or 0), 
-                "payment_amount": float(transaction.amount or 0), 
-                "channel": details.get("channel", "API")
+                "bill_date": details.get("bill_date") or getattr(transaction, "transaction_time", None),
+                "payment_date": details.get("payment_date") or getattr(transaction, "transaction_time", None),
+                "bill_amount": float(details.get("bill_amount") or transaction.amount or 0), 
+                "payment_amount": float(details.get("payment_amount") or transaction.amount or 0), 
+                "channel": details.get("channel", "API"),
+                "bill_status": details.get("bill_status", "terbayar")
             },
             "historical_context": {
                 "recent_account_transactions": recent_account_transactions,
@@ -125,16 +127,19 @@ class TransactionFeatureSnapshotService:
     # INTERNAL HELPERS
     # =============================================================
     def _detect_transaction_domain(self, transaction):
-        """
-        Detect normalized ML domain.
-        """
+        source = (
+            getattr(transaction, "service_source", "")
+            .strip()
+            .lower()
+        )
 
-        try:
-            return detect_domain(
-                getattr(transaction, "service_source", None)
-            )
-        except Exception:
-            return "unknown"
+        if source == "agenusa":
+            return "agenusa"
+        
+        if source == "nusabill":
+            return "nusabill"
+        
+        return None
 
     def _get_recent_account_transactions(
         self,
@@ -233,47 +238,17 @@ class TransactionFeatureSnapshotService:
 
         return {
             "id": transaction.id,
-            "account_number": getattr(
-                transaction,
-                "account_number",
-                None,
-            ),
+            "account_number": getattr(transaction, "account_number", None),
             "amount": float(getattr(transaction, "amount", 0) or 0),
-            "transaction_time": getattr(
-                transaction,
-                "transaction_time",
-                None,
-            ),
-            "merchant_id": getattr(
-                transaction,
-                "merchant_id",
-                None,
-            ),
-            "terminal_id": getattr(
-                transaction,
-                "terminal_id",
-                None,
-            ),
-            "device_id": getattr(
-                transaction,
-                "device_id",
-                None,
-            ),
-            "ip_address": getattr(
-                transaction,
-                "ip_address",
-                None,
-            ),
-            "risk_score": getattr(
-                transaction,
-                "risk_score",
-                None,
-            ),
-            "is_flagged_ml": getattr(
-                transaction,
-                "is_flagged_ml",
-                None,
-            ),
+            "transaction_time": getattr(transaction, "transaction_time", None),
+            "merchant_id": getattr(transaction, "merchant_id", None),
+            "terminal_id": getattr(transaction, "terminal_id", None),
+            "device_id": getattr(transaction, "device_id", None),
+            "ip_address": getattr(transaction, "ip_address", None),
+            "risk_score": getattr(transaction, "risk_score", None),
+            "is_flagged_ml": getattr(transaction, "is_flagged_ml", None),
+            # Nusabill: dibutuhkan untuk CHANNEL_SWITCH_TO_API feature
+            "channel": (getattr(transaction, "transaction_details", None) or {}).get("channel"),
         }
 
 

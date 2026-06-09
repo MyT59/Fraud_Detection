@@ -12,7 +12,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import IsolationForest
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from ...paths import DATA_DIR, MODELS_DIR, PROJECT_ROOT
 from .feature_builder import build_features
@@ -25,15 +25,20 @@ def _build_pipeline(feature_df: pd.DataFrame, contamination: float) -> tuple[Pip
 
     preprocessor = ColumnTransformer(
         transformers=[
-            ("num", Pipeline([("imputer", SimpleImputer(strategy="median"))]), numeric_cols),
+            (
+                "num", 
+                Pipeline([
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler())  # 🔥 WAJIB DITAMBAHKAN
+                ]), 
+                numeric_cols
+            ),
             (
                 "cat",
-                Pipeline(
-                    [
-                        ("imputer", SimpleImputer(strategy="most_frequent")),
-                        ("onehot", OneHotEncoder(handle_unknown="ignore")),
-                    ]
-                ),
+                Pipeline([
+                    ("imputer", SimpleImputer(strategy="most_frequent")),
+                    ("onehot", OneHotEncoder(handle_unknown="ignore")),
+                ]),
                 categorical_cols,
             ),
         ]
@@ -133,3 +138,58 @@ def train_all(output_dir: Path | None = None) -> dict[str, Any]:
     summary_path = target_dir / "isolation_training_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return summary
+
+def train_from_dataframe(domain: str, df: pd.DataFrame, contamination: float, output_dir: Path | None = None) -> dict[str, Any]:
+    """Fungsi khusus untuk Retrain Service yang mengirimkan Dataframe gabungan (CSV + DB)"""
+    output_dir = MODELS_DIR if output_dir is None else output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    config = DOMAIN_ISO_CONFIG[domain]
+    
+    # Feature builder biasanya sudah dipanggil di retrain_service, 
+    # tapi kita pastikan kolom yang tidak perlu di-drop
+    x = df.drop(columns=["IS_FRAUD", *config["drop_cols"]], errors="ignore")
+
+    pipeline, numeric_cols, categorical_cols = _build_pipeline(x, contamination=contamination)
+    pipeline.fit(x)
+
+    scores = pipeline.decision_function(x)
+    pred = pipeline.predict(x)
+    anomaly_rate = float((pred == -1).mean())
+    
+    # Hitung threshold
+    high_risk_th = _round_threshold(float(np.quantile(scores, 0.03)), decimals=4)
+    review_th = _round_threshold(float(np.quantile(scores, 0.10)), decimals=4)
+
+    # Identifikasi baris mana yang dianggap anomali untuk pattern discovery
+    df_result = df.copy()
+    df_result["IS_ANOMALY"] = (pred == -1).astype(int)
+    anomaly_df = df_result[df_result["IS_ANOMALY"] == 1]
+
+    # Save model
+    model_path = output_dir / f"{domain}_isolation_forest.pkl"
+    meta_path = output_dir / f"{domain}_isolation_meta.json"
+    joblib.dump(pipeline, model_path)
+
+    meta = {
+        "domain": domain,
+        "dataset": "retrain_hybrid_dataset",
+        "rows": int(len(x)),
+        "contamination": contamination,
+        "anomaly_rate_fit_data": anomaly_rate,
+        "thresholds": {
+            "review_score_threshold": review_th,
+            "high_risk_score_threshold": high_risk_th,
+        },
+        "numeric_features": numeric_cols,
+        "categorical_features": categorical_cols,
+        "model_path": str(model_path.relative_to(PROJECT_ROOT)),
+    }
+    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    
+    return {
+        "meta": meta,
+        "model_path": str(model_path),
+        "anomaly_df": anomaly_df,
+        "anomalies_found": len(anomaly_df)
+    }

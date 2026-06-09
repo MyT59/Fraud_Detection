@@ -1,63 +1,46 @@
 import React from "react";
 
-const AlertsStats = ({ alerts, stats }) => {
-  const data = stats || {
-    total: (alerts || []).length,
-    critical: (alerts || []).filter((a) => a.severity === "critical").length,
-    high: (alerts || []).filter((a) => a.severity === "high").length,
-    medium: (alerts || []).filter((a) => a.severity === "medium").length,
-    low: (alerts || []).filter((a) => a.severity === "low").length,
-    approved: (alerts || []).filter((a) => a.status === "approved").length,
-    rejected: (alerts || []).filter((a) => a.status === "rejected").length,
-    unread: (alerts || []).filter((a) => a.status === "unread").length,
-  };
-
+/**
+ * AlertsStats
+ * Menampilkan statistik alert dari data API.
+ * Tidak lagi menghitung lokal dari dummy data.
+ * Jika API gagal (props null), tampilkan 0 atau "—".
+ */
+const AlertsStats = ({ stats, priorityData }) => {
   const statList = [
     {
       label: "Total Alerts",
-      value: data.total,
+      value: stats?.total_alerts ?? "—",
       icon: "bi-bell",
       colorClass: "stat-primary",
     },
     {
       label: "Critical",
-      value: data.critical,
+      value: priorityData?.critical ?? "—",
       icon: "bi-exclamation-octagon",
       colorClass: "stat-danger",
     },
     {
       label: "High",
-      value: data.high,
+      value: priorityData?.high ?? "—",
       icon: "bi-exclamation-triangle",
       colorClass: "stat-orange",
     },
     {
       label: "Medium",
-      value: data.medium,
+      value: priorityData?.medium ?? "—",
       icon: "bi-dash-circle",
       colorClass: "stat-warning",
     },
     {
       label: "Low",
-      value: data.low,
+      value: priorityData?.low ?? "—",
       icon: "bi-info-circle",
       colorClass: "stat-success",
     },
     {
-      label: "Approved",
-      value: data.approved,
-      icon: "bi-check-circle",
-      colorClass: "stat-teal",
-    },
-    {
-      label: "Rejected",
-      value: data.rejected,
-      icon: "bi-x-circle",
-      colorClass: "stat-red",
-    },
-    {
-      label: "Belum Dibaca",
-      value: data.unread,
+      label: "Open",
+      value: stats?.open_alerts ?? "—",
       icon: "bi-envelope",
       colorClass: "stat-warning",
     },
@@ -68,10 +51,10 @@ const AlertsStats = ({ alerts, stats }) => {
       {statList.map((s) => (
         <div key={s.label} className={`alerts-stat-card ${s.colorClass}`}>
           <div className="alerts-stat-icon">
-            <i className={`bi ${s.icon}`}></i>
+            <i className={`bi ${s.icon}`} />
           </div>
           <div className="alerts-stat-content">
-            <div className="alerts-stat-value">{s.value ?? 0}</div>
+            <div className="alerts-stat-value">{s.value}</div>
             <div className="alerts-stat-label">{s.label}</div>
           </div>
         </div>

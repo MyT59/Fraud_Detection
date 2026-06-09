@@ -1,412 +1,596 @@
-import React, {
-  useState,
-  useMemo,
-  useEffect,
-  useCallback,
-  useRef,
-} from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import AlertsHeader from "../components/alerts/AlertsHeader";
 import AlertsStats from "../components/alerts/AlertsStats";
 import AlertsFilter from "../components/alerts/AlertsFilter";
 import AlertsFeed from "../components/alerts/AlertsFeed";
 import PageLoader from "../components/common/PageLoader";
-import { SEED_ALERTS } from "../components/alerts/alertsData";
-import { api } from "../services/apiService";
+import AlertDetailModal from "../components/alerts/AlertDetailModal";
 import "./AlertsLog.css";
+
+// Import API Service
+import {
+  fetchAlerts as fetchAlertsService,
+  fetchAlertMetrics,
+  fetchAlertCount,
+  fetchPriorityDistribution,
+  fetchOpenQueue,
+  fetchAlertDetail,
+  resolveAlert,
+  claimAlert,
+} from "../services/AlertsService";
+
+// ─── Konstanta ────────────────────────────────────────────────────
 
 const DEFAULT_FILTERS = {
   search: "",
   type: "all",
   severity: "all",
   status: "all",
+  sortBy: "priority_desc",
 };
 
+// Mapping filter FE → enum BE (langsung pakai nilai BE)
 const SEVERITY_MAP = {
   all: null,
-  critical: "CRITICAL",
-  high: "HIGH",
-  medium: "MEDIUM",
-  low: "LOW",
+  CRITICAL: "CRITICAL",
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
 };
+
 const STATUS_MAP = {
   all: null,
-  unread: "OPEN",
-  read: "OPEN",
-  resolved: "RESOLVED",
-  approved: "RESOLVED",
-  rejected: "OPEN",
+  OPEN: "OPEN",
+  IN_PROGRESS: "IN_PROGRESS",
+  RESOLVED: "RESOLVED",
 };
 
+// ─── Normalisasi data BE → format internal FE ─────────────────────
+// Tidak lagi menggunakan string lama (unread/read).
+// Status disimpan apa adanya dari BE: OPEN | IN_PROGRESS | RESOLVED | REOPENED | OVERRIDDEN
 const normalizeAlert = (raw) => ({
-  id: String(raw.id),
+  id: String(raw.id ?? Math.random()),
   _backendId: raw.id,
-  type: detectType(raw),
-  severity: (raw.severity || "LOW").toLowerCase(),
-  status: detectStatus(raw),
+  type: (raw.type || raw.alert_type || "UNKNOWN").toUpperCase(),
+  severity: (raw.severity || "LOW").toUpperCase(),
+  status: (raw.status || "OPEN").toUpperCase(),
   title: raw.title || "Alert",
-  message: raw.description || raw.message_raw || raw.title || "",
-  txnId: raw.trx_id || null,
-  time: raw.created_at,
-  _raw: raw,
+  message: raw.message || "",
+  transaction_id: raw.transaction_id ?? null,
+  created_at: raw.created_at || null,
+  priority: raw.priority ?? 0,
+  priority_label: raw.priority_label || "",
+  service: raw.service || "",
 });
 
-const detectType = (raw) => {
-  const t = (raw.type || "").toUpperCase();
-  if (t === "FRAUD" || t === "COMBINED") return "fraud";
-  if (t === "RULE" || t === "VELOCITY") return "rule";
-  if (t === "BLACKLIST") return "blacklist";
-  if (t === "REVIEW") return "review";
-  return "system";
-};
-
-const detectStatus = (raw) => {
-  const s = (raw.status || "").toUpperCase();
-  if (s === "RESOLVED" || s === "OVERRIDDEN") return "resolved";
-  if (s === "IN_PROGRESS") return "read";
-  return "unread";
-};
+// ─── Komponen Utama ───────────────────────────────────────────────
 
 const AlertsLog = () => {
-  const [loading, setLoading] = useState(true);
+  // Tab: "all" | "open"
+  // My Queue DIHAPUS dari halaman ini — pindah ke ManualReview
+  const [activeTab, setActiveTab] = useState("all");
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [page, setPage] = useState(1);
+  const LIMIT = 10;
+
+  // State Data
   const [apiAlerts, setApiAlerts] = useState(null);
   const [apiStats, setApiStats] = useState(null);
-  const [apiError, setApiError] = useState(false);
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-
-  const [page, setPage] = useState(1);
+  const [priorityStats, setPriorityStats] = useState(null);
   const [totalCount, setTotalCount] = useState(0);
-  const LIMIT = 20;
 
+  // State Loading & Error
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState(false);
+
+  // State aksi lokal (optimistic UI)
   const [localOverride, setLocalOverride] = useState({});
   const [pendingOps, setPendingOps] = useState({});
-
   const abortRef = useRef(null);
 
-  const fetchAlerts = useCallback(
+  // State Modal Detail
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalDetail, setModalDetail] = useState(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState(null);
+  const [modalPendingOp, setModalPendingOp] = useState(null);
+
+  // ─── Load Data ───────────────────────────────────────────────────
+
+  const loadData = useCallback(
     async (signal) => {
       setLoading(true);
       setApiError(false);
 
       try {
-        const params = new URLSearchParams({ page, limit: LIMIT });
-        if (SEVERITY_MAP[filters.severity])
-          params.set("severity", SEVERITY_MAP[filters.severity]);
-        if (STATUS_MAP[filters.status])
-          params.set("status", STATUS_MAP[filters.status]);
-
-        const [feedData, metricsData, countData] = await Promise.all([
-          api.get(`/alerts/?${params}`, { signal }),
-          api.get("/alerts/metrics", { signal }),
-          api.get("/alerts/count", { signal }),
+        const [metricsData, countData, priorityData] = await Promise.all([
+          fetchAlertMetrics(signal).catch(() => null),
+          fetchAlertCount(signal).catch(() => null),
+          fetchPriorityDistribution(signal).catch(() => null),
         ]);
 
-        const items = feedData?.items || feedData?.alerts || feedData || [];
-        setApiAlerts(Array.isArray(items) ? items.map(normalizeAlert) : []);
-        setTotalCount(feedData?.total || countData?.count || items.length);
-        setApiStats(metricsData);
+        let feedData;
+
+        if (activeTab === "open") {
+          // Open Queue: hanya alert OPEN, untuk aksi Claim
+          feedData = await fetchOpenQueue({ page, limit: LIMIT, signal });
+        } else {
+          // All Alerts: semua alert dengan filter
+          const queryParams = {
+            page,
+            limit: LIMIT,
+            severity: SEVERITY_MAP[filters.severity] || undefined,
+            status: STATUS_MAP[filters.status] || undefined,
+            type: filters.type !== "all" ? filters.type : undefined,
+            signal,
+          };
+          feedData = await fetchAlertsService(queryParams);
+        }
+
+        // Ekstrak items dari berbagai bentuk response BE
+        let items = [];
+        if (Array.isArray(feedData)) {
+          items = feedData;
+        } else if (Array.isArray(feedData?.items)) {
+          items = feedData.items;
+        } else if (Array.isArray(feedData?.data)) {
+          items = feedData.data;
+        } else if (Array.isArray(feedData?.alerts)) {
+          items = feedData.alerts;
+        }
+
+        setApiAlerts(items.map(normalizeAlert));
+        setTotalCount(feedData?.total ?? countData?.count ?? items.length);
+        setApiStats(metricsData?.data ?? metricsData ?? null);
+        setPriorityStats(priorityData?.data ?? priorityData ?? null);
       } catch (err) {
         if (err.name === "AbortError") return;
-        console.warn("[AlertsLog] API offline, pakai seed data.", err.message);
+        console.error("[AlertsLog] Gagal memuat data dari API:", err.message);
+        // ❌ TIDAK fallback ke dummy data — tampilkan error state
         setApiError(true);
-        setApiAlerts(null);
+        setApiAlerts([]);
         setApiStats(null);
+        setPriorityStats(null);
+        setTotalCount(0);
       } finally {
         setLoading(false);
       }
     },
-    [page, filters.severity, filters.status],
+    [activeTab, page, filters.severity, filters.status, filters.type],
   );
 
   useEffect(() => {
     if (abortRef.current) abortRef.current.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-    fetchAlerts(ctrl.signal);
+    loadData(ctrl.signal);
     return () => ctrl.abort();
-  }, [fetchAlerts]);
+  }, [loadData]);
 
-  const baseAlerts = apiAlerts ?? SEED_ALERTS;
-
-  const alerts = useMemo(() => {
-    const seen = new Set();
-    return baseAlerts
-      .map((a) => (localOverride[a.id] ? { ...a, ...localOverride[a.id] } : a))
-      .filter((a) => {
-        if (seen.has(a.id)) return false;
-        seen.add(a.id);
-        return true;
-      });
-  }, [baseAlerts, localOverride]);
-
-  const computedStats = useMemo(
-    () => ({
-      total: alerts.length,
-      critical: alerts.filter((a) => a.severity === "critical").length,
-      high: alerts.filter((a) => a.severity === "high").length,
-      medium: alerts.filter((a) => a.severity === "medium").length,
-      low: alerts.filter((a) => a.severity === "low").length,
-      approved: alerts.filter((a) => a.status === "approved").length,
-      rejected: alerts.filter((a) => a.status === "rejected").length,
-      unread: alerts.filter((a) => a.status === "unread").length,
-      resolved: alerts.filter((a) => a.status === "resolved").length,
-    }),
-    [alerts],
-  );
-
-  const displayStats = useMemo(() => {
-    if (!apiStats) return computedStats;
-    return {
-      total: apiStats.total_alerts ?? computedStats.total,
-      critical: computedStats.critical,
-      high: computedStats.high,
-      medium: computedStats.medium,
-      low: computedStats.low,
-      approved: apiStats.resolved_alerts ?? computedStats.approved,
-      rejected: computedStats.rejected,
-      unread: apiStats.open_alerts ?? computedStats.unread,
-      resolved: apiStats.resolved_alerts ?? computedStats.resolved,
-    };
-  }, [apiStats, computedStats]);
-
-  const filtered = useMemo(() => {
-    return alerts.filter((a) => {
-      if (filters.type !== "all" && a.type !== filters.type) return false;
-      if (filters.severity !== "all" && a.severity !== filters.severity)
-        return false;
-      if (filters.status !== "all" && a.status !== filters.status) return false;
-      if (filters.search) {
-        const q = filters.search.toLowerCase();
-        if (
-          !a.title.toLowerCase().includes(q) &&
-          !(a.message || "").toLowerCase().includes(q) &&
-          !(a.txnId || "").toLowerCase().includes(q)
-        )
-          return false;
-      }
-      return true;
-    });
-  }, [alerts, filters]);
-
-  const visibleFiltered = filtered.filter(
-    (a) => !localOverride[a.id]?._deleted,
-  );
-
-  const totalUnread = alerts.filter(
-    (a) => a.status === "unread" && !localOverride[a.id]?._deleted,
-  ).length;
-
-  const patchLocal = (id, patch) =>
-    setLocalOverride((prev) => ({
-      ...prev,
-      [id]: { ...(prev[id] || {}), ...patch },
-    }));
-
-  const setPending = (id, op) =>
-    setPendingOps((prev) => ({ ...prev, [id]: op }));
-  const clearPending = (id) =>
-    setPendingOps((prev) => {
-      const n = { ...prev };
-      delete n[id];
-      return n;
-    });
-
-  const handleMarkRead = useCallback((id) => {
-    patchLocal(id, { status: "read" });
-  }, []);
-
-  const handleResolve = useCallback(
-    async (id) => {
-      const alert = alerts.find((a) => a.id === id);
-      if (!alert || alert.status === "resolved") return;
-
-      patchLocal(id, { status: "resolved" });
-      setPending(id, "resolving");
-
-      if (!apiError && alert._backendId) {
-        try {
-          await api.patch(`/alerts/${alert._backendId}/resolve`);
-        } catch (err) {
-          console.warn("[AlertsLog] resolve failed:", err.message);
-
-          patchLocal(id, { status: alert.status });
-        } finally {
-          clearPending(id);
-        }
-      } else {
-        clearPending(id);
-      }
-    },
-    [alerts, apiError],
-  );
-
-  const handleClaim = useCallback(
-    async (id) => {
-      const alert = alerts.find((a) => a.id === id);
-      if (!alert) return;
-
-      patchLocal(id, { status: "read" });
-      setPending(id, "claiming");
-
-      if (!apiError && alert._backendId) {
-        try {
-          await api.post(`/alerts/${alert._backendId}/claim`);
-        } catch (err) {
-          console.warn("[AlertsLog] claim failed:", err.message);
-          patchLocal(id, { status: alert.status });
-        } finally {
-          clearPending(id);
-        }
-      } else {
-        clearPending(id);
-      }
-    },
-    [alerts, apiError],
-  );
-
-  const handleDelete = useCallback((id) => {
-    setLocalOverride((prev) => ({
-      ...prev,
-      [id]: { ...prev[id], _deleted: true },
-    }));
-  }, []);
-
-  const handleMarkAllRead = useCallback(() => {
-    const patch = {};
-    alerts.forEach((a) => {
-      if (a.status === "unread") patch[a.id] = { status: "read" };
-    });
-    setLocalOverride((prev) => ({ ...prev, ...patch }));
-  }, [alerts]);
-
-  const handleClearAll = useCallback(() => {
-    const patch = {};
-    alerts.forEach((a) => {
-      patch[a.id] = { _deleted: true };
-    });
-    setLocalOverride((prev) => ({ ...prev, ...patch }));
-  }, [alerts]);
+  // ─── Handlers ────────────────────────────────────────────────────
 
   const handleRetry = useCallback(() => {
     setLocalOverride({});
     setPendingOps({});
+    setApiError(false);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-    fetchAlerts(ctrl.signal);
-  }, [fetchAlerts]);
+    loadData(ctrl.signal);
+  }, [loadData]);
 
-  const totalPages = Math.ceil(totalCount / LIMIT);
-  const handlePageChange = (newPage) => {
-    setPage(newPage);
+  const handleFilterChange = useCallback((newFilters) => {
+    setFilters((prev) => ({ ...prev, ...newFilters }));
+    setPage(1);
     setLocalOverride({});
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const handleFilterReset = useCallback(() => {
+    setFilters(DEFAULT_FILTERS);
+    setPage(1);
+    setLocalOverride({});
+  }, []);
+
+  // ─── Modal Detail ─────────────────────────────────────────────────
+
+  const handleOpenDetail = useCallback(
+    async (id) => {
+      const target = apiAlerts?.find(
+        (a) => a.id === String(id) || a._backendId === id,
+      );
+      const backendId = target?._backendId ?? id;
+
+      setModalDetail(null);
+      setModalError(null);
+      setModalPendingOp(null);
+      setModalOpen(true);
+      setModalLoading(true);
+
+      try {
+        const data = await fetchAlertDetail(backendId);
+        setModalDetail(data?.data ?? data);
+      } catch (err) {
+        console.error("[AlertsLog] Gagal memuat detail alert:", err);
+        setModalError("Gagal memuat detail alert. Silakan coba lagi.");
+      } finally {
+        setModalLoading(false);
+      }
+    },
+    [apiAlerts],
+  );
+
+  const handleCloseModal = useCallback(() => {
+    setModalOpen(false);
+    setModalDetail(null);
+    setModalError(null);
+    setModalPendingOp(null);
+  }, []);
+
+  // ─── Resolve Alert ────────────────────────────────────────────────
+
+  const handleResolve = useCallback(
+    async (id) => {
+      const target = apiAlerts?.find(
+        (a) => a.id === String(id) || a._backendId === id,
+      );
+      if (!target) return;
+
+      const frontendId = target.id;
+      setPendingOps((prev) => ({ ...prev, [frontendId]: "resolving" }));
+      if (modalOpen && modalDetail?.id === id) setModalPendingOp("resolving");
+
+      try {
+        await resolveAlert(target._backendId);
+        setLocalOverride((prev) => ({
+          ...prev,
+          [frontendId]: { ...target, status: "RESOLVED" },
+        }));
+        if (modalOpen && modalDetail?.id === id) {
+          setModalDetail((prev) =>
+            prev ? { ...prev, status: "RESOLVED" } : prev,
+          );
+        }
+      } catch (err) {
+        console.error("[AlertsLog] Gagal resolve alert:", err);
+        alert("Gagal menyelesaikan alert. Silakan coba lagi.");
+      } finally {
+        setPendingOps((prev) => {
+          const next = { ...prev };
+          delete next[frontendId];
+          return next;
+        });
+        if (modalOpen) setModalPendingOp(null);
+      }
+    },
+    [apiAlerts, modalOpen, modalDetail],
+  );
+
+  // ─── Claim Alert ──────────────────────────────────────────────────
+  // Claim hanya tersedia di tab Open Queue.
+  // Setelah claim berhasil, alert disembunyikan dari Open Queue
+  // dan analis harus lanjut ke halaman Manual Review (My Queue).
+
+  const handleClaim = useCallback(
+    async (id) => {
+      const target = apiAlerts?.find(
+        (a) => a.id === String(id) || a._backendId === id,
+      );
+      if (!target) return;
+
+      const frontendId = target.id;
+      setPendingOps((prev) => ({ ...prev, [frontendId]: "claiming" }));
+      if (modalOpen && modalDetail?.id === id) setModalPendingOp("claiming");
+
+      try {
+        await claimAlert(target._backendId);
+
+        // Setelah claim, sembunyikan dari Open Queue (sudah pindah ke My Queue)
+        setLocalOverride((prev) => ({
+          ...prev,
+          [frontendId]: {
+            ...target,
+            status: "IN_PROGRESS",
+            _hidden: activeTab === "open",
+          },
+        }));
+
+        if (modalOpen && modalDetail?.id === id) {
+          setModalDetail((prev) =>
+            prev ? { ...prev, status: "IN_PROGRESS" } : prev,
+          );
+        }
+      } catch (err) {
+        console.error("[AlertsLog] Gagal claim alert:", err);
+        alert("Gagal mengklaim alert. Mungkin sudah diambil analis lain.");
+      } finally {
+        setPendingOps((prev) => {
+          const next = { ...prev };
+          delete next[frontendId];
+          return next;
+        });
+        if (modalOpen) setModalPendingOp(null);
+      }
+    },
+    [apiAlerts, modalOpen, modalDetail, activeTab],
+  );
+
+  // ─── Pemrosesan Data untuk Render ────────────────────────────────
+
+  const combined = (apiAlerts || []).map((a) => ({
+    ...a,
+    ...(localOverride[a.id] || {}),
+  }));
+
+  const visibleAlerts = combined.filter((a) => !a._hidden);
+
+  const filteredAlerts = visibleAlerts.filter((a) => {
+    if (filters.type !== "all" && a.type !== filters.type) return false;
+    if (filters.severity !== "all" && a.severity !== filters.severity)
+      return false;
+    if (filters.status !== "all" && a.status !== filters.status) return false;
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      if (
+        !a.title?.toLowerCase().includes(q) &&
+        !a.message?.toLowerCase().includes(q) &&
+        !String(a.transaction_id || "")
+          .toLowerCase()
+          .includes(q)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  // Sorting
+  const sortedAlerts = [...filteredAlerts].sort((a, b) => {
+    switch (filters.sortBy) {
+      case "oldest":
+        return new Date(a.created_at) - new Date(b.created_at);
+      case "priority_desc":
+        return (b.priority || 0) - (a.priority || 0);
+      case "priority_asc":
+        return (a.priority || 0) - (b.priority || 0);
+      case "newest":
+      default:
+        return new Date(b.created_at) - new Date(a.created_at);
+    }
+  });
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / LIMIT));
+  const totalUnread = visibleAlerts.filter((a) => a.status === "OPEN").length;
+
+  const getVisiblePages = () => {
+    const delta = 2;
+    const range = [];
+    for (
+      let i = Math.max(1, page - delta);
+      i <= Math.min(totalPages, page + delta);
+      i++
+    ) {
+      range.push(i);
+    }
+    return range;
   };
 
-  if (loading) return <PageLoader message="Memuat Alerts Log..." />;
+  if (loading && !apiAlerts) return <PageLoader text="Memuat Log Alert..." />;
+
+  // ─── Render ───────────────────────────────────────────────────────
 
   return (
     <div className="alerts-page">
+      <AlertsHeader totalUnread={totalUnread} isLive={!apiError} />
+
+      <AlertsStats stats={apiStats} priorityData={priorityStats} />
+
+      {/* Banner Error API */}
       {apiError && (
         <div
           style={{
+            backgroundColor: "#fef2f2",
+            border: "1px solid #fca5a5",
+            padding: "12px 16px",
+            borderRadius: "8px",
+            color: "#b91c1c",
+            marginBottom: "20px",
             display: "flex",
+            justifyContent: "space-between",
             alignItems: "center",
-            gap: 8,
-            padding: "10px 16px",
-            marginBottom: 16,
-            borderRadius: 8,
-            background: "#fffbeb",
-            border: "1px solid #fde68a",
-            fontSize: "0.85rem",
-            color: "#92400e",
           }}
         >
-          <i className="bi bi-wifi-off"></i>
-          <span>
-            <strong>API tidak dapat dijangkau.</strong> Menampilkan data contoh.
-          </span>
+          <div>
+            <i
+              className="bi bi-exclamation-triangle-fill"
+              style={{ marginRight: 8 }}
+            />
+            <strong>Gagal memuat data.</strong> Tidak dapat terhubung ke server.
+          </div>
           <button
             onClick={handleRetry}
             style={{
-              marginLeft: "auto",
-              background: "none",
-              border: "1px solid #d97706",
-              borderRadius: 6,
-              padding: "4px 10px",
-              color: "#d97706",
+              background: "#dc2626",
+              color: "#fff",
+              border: "none",
+              padding: "6px 12px",
+              borderRadius: "6px",
               cursor: "pointer",
-              fontSize: "0.8rem",
               fontWeight: 600,
             }}
           >
-            <i className="bi bi-arrow-clockwise me-1"></i> Retry
+            <i className="bi bi-arrow-clockwise" style={{ marginRight: 6 }} />
+            Coba Lagi
           </button>
         </div>
       )}
 
-      <AlertsHeader
-        totalUnread={totalUnread}
-        onMarkAllRead={handleMarkAllRead}
-        onClearAll={handleClearAll}
-        isLive={!apiError && apiAlerts !== null}
-      />
-
-      <AlertsStats alerts={null} stats={displayStats} />
-
-      <AlertsFilter
-        filters={filters}
-        onFilterChange={(partial) => {
-          setFilters((prev) => ({ ...prev, ...partial }));
-          setPage(1);
-          setLocalOverride({});
+      {/* Navigasi Tab — hanya All Alerts & Open Queue */}
+      <div
+        style={{
+          display: "flex",
+          gap: "12px",
+          marginBottom: "20px",
+          borderBottom: "2px solid #e5e7eb",
+          paddingBottom: "10px",
         }}
-        onReset={() => {
-          setFilters(DEFAULT_FILTERS);
-          setPage(1);
-          setLocalOverride({});
-        }}
-        totalResults={visibleFiltered.length}
-      />
-
-      <AlertsFeed
-        alerts={visibleFiltered}
-        pendingOps={pendingOps}
-        onMarkRead={handleMarkRead}
-        onResolve={handleResolve}
-        onClaim={handleClaim}
-        onDelete={handleDelete}
-      />
-
-      {!apiError && totalPages > 1 && (
-        <div
+      >
+        <button
+          onClick={() => {
+            setActiveTab("all");
+            setPage(1);
+          }}
           style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 8,
-            padding: "24px 0",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontWeight: activeTab === "all" ? "bold" : "normal",
+            color: activeTab === "all" ? "#2563eb" : "#6b7280",
+            borderBottom: activeTab === "all" ? "2px solid #2563eb" : "none",
+            padding: "8px 4px",
+            fontSize: "0.9rem",
           }}
         >
-          <button
-            className="alerts-btn-outline"
-            onClick={() => handlePageChange(page - 1)}
-            disabled={page === 1}
-          >
-            <i className="bi bi-chevron-left"></i> Prev
-          </button>
+          <i className="bi bi-list-ul" style={{ marginRight: 6 }} />
+          All Alerts
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab("open");
+            setPage(1);
+            setLocalOverride({});
+          }}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontWeight: activeTab === "open" ? "bold" : "normal",
+            color: activeTab === "open" ? "#d97706" : "#6b7280",
+            borderBottom: activeTab === "open" ? "2px solid #d97706" : "none",
+            padding: "8px 4px",
+            fontSize: "0.9rem",
+          }}
+        >
+          <i className="bi bi-inbox-fill" style={{ marginRight: 6 }} />
+          Open Queue
           <span
-            style={{ fontSize: "0.9rem", color: "var(--text-muted, #6b7280)" }}
+            style={{
+              marginLeft: 6,
+              fontSize: "0.7rem",
+              background: "#fef3c7",
+              color: "#d97706",
+              border: "1px solid #fde68a",
+              borderRadius: 10,
+              padding: "1px 7px",
+              fontWeight: 700,
+            }}
           >
-            Halaman {page} / {totalPages}
+            Claim di sini
           </span>
+        </button>
+      </div>
+
+      {/* Filter — hanya tampil di tab All Alerts */}
+      {activeTab === "all" && (
+        <AlertsFilter
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          onReset={handleFilterReset}
+          totalResults={sortedAlerts.length}
+        />
+      )}
+
+      {/* Feed Data */}
+      {apiError ? (
+        <div className="alerts-empty">
+          <i className="bi bi-wifi-off" />
+          <h4>Data Tidak Tersedia</h4>
+          <p>Tidak dapat memuat alert. Periksa koneksi atau coba lagi.</p>
+        </div>
+      ) : (
+        <AlertsFeed
+          alerts={sortedAlerts}
+          pendingOps={pendingOps}
+          onResolve={handleResolve}
+          onClaim={activeTab === "open" ? handleClaim : null}
+          onViewDetail={handleOpenDetail}
+        />
+      )}
+
+      {/* Pagination */}
+      {!apiError && totalPages > 1 && (
+        <div className="alerts-pagination">
           <button
-            className="alerts-btn-outline"
-            onClick={() => handlePageChange(page + 1)}
-            disabled={page === totalPages}
+            className="alerts-page-btn"
+            disabled={page === 1}
+            onClick={() => setPage((p) => p - 1)}
           >
-            Next <i className="bi bi-chevron-right"></i>
+            <i className="bi bi-chevron-left" />
+          </button>
+
+          {page > 3 && (
+            <>
+              <button className="alerts-page-btn" onClick={() => setPage(1)}>
+                1
+              </button>
+              <span className="alerts-page-dots">...</span>
+            </>
+          )}
+
+          {getVisiblePages().map((num) => (
+            <button
+              key={num}
+              className={
+                page === num ? "alerts-page-btn active" : "alerts-page-btn"
+              }
+              onClick={() => setPage(num)}
+            >
+              {num}
+            </button>
+          ))}
+
+          {page < totalPages - 2 && (
+            <>
+              <span className="alerts-page-dots">...</span>
+              <button
+                className="alerts-page-btn"
+                onClick={() => setPage(totalPages)}
+              >
+                {totalPages}
+              </button>
+            </>
+          )}
+
+          <button
+            className="alerts-page-btn"
+            disabled={page === totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            <i className="bi bi-chevron-right" />
           </button>
         </div>
       )}
+
+      {/* Alert Detail Modal */}
+      <AlertDetailModal
+        open={modalOpen}
+        detail={modalDetail}
+        loading={modalLoading}
+        error={modalError}
+        onClose={handleCloseModal}
+        onResolve={handleResolve}
+        onClaim={handleClaim}
+        pendingOp={modalPendingOp}
+        onStatusUpdated={(alertId, newStatus) => {
+          const target = apiAlerts?.find(
+            (a) => a._backendId === alertId || a.id === String(alertId),
+          );
+          if (!target) return;
+          setLocalOverride((prev) => ({
+            ...prev,
+            [target.id]: { ...target, status: newStatus },
+          }));
+        }}
+      />
     </div>
   );
 };

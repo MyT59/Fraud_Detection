@@ -1,13 +1,13 @@
 {
   "agenusa": {
     "domain": "agenusa",
-    "dataset": "backend\\agenusa_isolation_dataset.csv",
+    "dataset": "Playground\\Data\\datasets\\agenusa_isolation_dataset.csv",
     "rows": 5000,
     "contamination": 0.08,
     "anomaly_rate_fit_data": 0.08,
     "thresholds": {
-      "review_score_threshold": 0.0013669213365814284,
-      "high_risk_score_threshold": -0.005264531101156511
+      "review_score_threshold": 0.0014,
+      "high_risk_score_threshold": -0.0053
     },
     "numeric_features": [
       "AMOUNT",
@@ -33,17 +33,17 @@
       "MERCHANT_ID",
       "DEST_ACCOUNT_NUMBER"
     ],
-    "model_path": "backend\\models\\agenusa_isolation_forest.pkl"
+    "model_path": "Playground\\models\\20260513_163820\\agenusa_isolation_forest.pkl"
   },
   "nusabill": {
     "domain": "nusabill",
-    "dataset": "backend\\nusabill_isolation_dataset.csv",
+    "dataset": "Playground\\Data\\datasets\\nusabill_isolation_dataset.csv",
     "rows": 5000,
     "contamination": 0.1,
     "anomaly_rate_fit_data": 0.1,
     "thresholds": {
-      "review_score_threshold": -5.2873490633507936e-17,
-      "high_risk_score_threshold": -0.06546683182589658
+      "review_score_threshold": 0.0,
+      "high_risk_score_threshold": -0.0655
     },
     "numeric_features": [
       "BILL_AMOUNT",
@@ -63,6 +63,6 @@
       "CHANNEL",
       "BILL_STATUS"
     ],
-    "model_path": "backend\\models\\nusabill_isolation_forest.pkl"
+    "model_path": "Playground\\models\\20260513_163820\\nusabill_isolation_forest.pkl"
   }
 }

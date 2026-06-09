@@ -1,10 +1,12 @@
+from ast import pattern
+
 from sqlalchemy import func, distinct
+from sqlalchemy.orm import Session
 from datetime import timedelta
 
 from app.infrastructure.database.models.transaction_model import Transaction
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
 
-# 🔥 IMPORT SERVICE LOG UTAMA & ENUM
 from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 
@@ -26,6 +28,40 @@ def evaluate_condition(value, operator, target):
     except (ValueError, TypeError):
         return False
     return False
+
+def detect_pattern_location_jump(db: Session, current_trx: Transaction) -> tuple[bool, str]:
+    # """
+    # Mendeteksi 'Pattern Location Jump' (Impossible Travel) menggunakan data GeoIP.
+    # Return: (is_violation: bool, reason: str)
+    # """
+    # if not current_trx.ip_address or not current_trx.country:
+    #     return False, ""
+
+    # # Cari transaksi terakhir dari user yang sama (yang punya data negara)
+    # last_trx = db.query(Transaction).filter(
+    #     Transaction.user_account_id == current_trx.user_account_id,
+    #     Transaction.id != current_trx.id,
+    #     Transaction.country.isnot(None)
+    # ).order_by(Transaction.transaction_time.desc()).first()
+
+    # if not last_trx:
+    #     return False, "" 
+
+    # time_diff = current_trx.transaction_time - last_trx.transaction_time
+
+    # # Skenario 1: Beda Negara tapi selisih kurang dari 12 jam (mustahil)
+    # if current_trx.country != last_trx.country:
+    #     if time_diff < timedelta(hours=12):
+    #         reason = f"Impossible Travel: {last_trx.country} to {current_trx.country} in {time_diff}"
+    #         return True, reason
+            
+    # # Skenario 2: Beda Kota tapi selisih kurang dari 1 jam (Sangat Cepat)
+    # if current_trx.city != last_trx.city and current_trx.country == last_trx.country:
+    #     if time_diff < timedelta(hours=1):
+    #         reason = f"Fast City Jump: {last_trx.city} to {current_trx.city} in {time_diff}"
+    #         return True, reason
+
+    return False, ""
 
 def run_pattern_engine(db, trx):
     violations = []
@@ -51,6 +87,19 @@ def run_pattern_engine(db, trx):
 
     for pattern in patterns:
         rules = pattern.pattern_rules or {}
+
+        # Normalisasi ke format Dictionary (Backward Compatibility)
+        if isinstance(rules, list):
+            rules = {
+                "logic": "AND",
+                "conditions": rules,
+                "time_window_minutes": None # Default kosong jika tipe array
+            }
+
+        # Guard clause jika struktur masih tidak valid
+        if not isinstance(rules, dict):
+            continue
+
         logic = rules.get("logic", "AND")
         conditions = rules.get("conditions", [])
         window_ms = rules.get("time_window_minutes")

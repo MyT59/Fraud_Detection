@@ -429,6 +429,7 @@
   max-width: 200px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -830,4 +831,9 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* No top radius when management banner is shown above filterbar */
+.rh-filterbar--no-top-radius {
+  border-radius: 0;
 }

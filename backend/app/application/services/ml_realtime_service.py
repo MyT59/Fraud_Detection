@@ -6,11 +6,25 @@ from sqlalchemy.orm import Session
 from app.infrastructure.repositories.transaction_repository import (
     TransactionRepository,
 )
+from app.infrastructure.database.models.fraud_alert_model import FraudAlert
 from app.application.services.transaction_feature_snapshot_service import (
     build_transaction_snapshot,
 )
 from app.infrastructure.ml.scoring import score_transaction_snapshot
 from app.application.services.alert_service import create_alert
+from app.infrastructure.database.session import SessionLocal
+
+# =====================================================================
+# CONCURRENCY LIMITER
+# =====================================================================
+# Batasi ML task yang jalan bersamaan.
+# Harus match dengan pool_size di connection.py agar tidak QueuePool overflow.
+# Rumus aman: semaphore <= pool_size (bukan pool_size + max_overflow)
+# karena setiap ML task pegang 1 koneksi selama durasi processing.
+#
+# connection.py: pool_size=10 → ML_SEMAPHORE = 8
+# Sisanya (2 slot) untuk request API non-ML yang tetap butuh DB.
+ML_SEMAPHORE = asyncio.Semaphore(8)
 
 
 class MLRealtimeService:
@@ -190,6 +204,9 @@ class MLRealtimeService:
         print(f"🔄 Starting async ML scoring untuk tx {transaction_id}...")
 
         scoring_result = await self._run_ml_scoring(transaction_id)
+        print("=== ML SCORING RESULT ===")
+        print(scoring_result)
+        print("========================")
 
         if not scoring_result:
             return {
@@ -205,10 +222,10 @@ class MLRealtimeService:
         thresholds = scoring_result.get("thresholds", {})
 
         # ===== UPDATE TRANSACTION ML FIELDS =====
-        transaction.unsupervised_score = ml_score
+        transaction.anomaly_score = ml_score
         transaction.is_flagged_ml = is_anomaly
 
-        existing_breakdown = transaction.score_breakdown or {}
+        existing_breakdown = dict(transaction.score_breakdown or {})    
 
         existing_breakdown.update(
             {
@@ -225,26 +242,35 @@ class MLRealtimeService:
         transaction.score_breakdown = existing_breakdown
 
         # ===== ALERT ESCALATION =====
-        critical_threshold = thresholds.get("critical", 0.7)
+        # Ambil threshold langsung dari hasil scoring meta JSON
+        high_risk_threshold = thresholds.get("high_risk_score_threshold", -0.0009)
 
-        if ml_score >= critical_threshold:
+        # Di Isolation Forest, semakin kecil/negatif nilainya, semakin berbahaya!
+        if ml_score <= high_risk_threshold:
             is_anomaly = True
 
         if is_anomaly:
             try:
-                create_alert(
-                    db=self.db,
-                    transaction_id=transaction.id,
-                    alert_type="ML_ANOMALY",
-                    severity="HIGH",
-                    title=f"ML Anomaly Detected ({risk_level.upper()})",
-                    description=(
-                        f"ML engine detected suspicious transaction behavior. "
-                        f"Score: {ml_score:.4f}, Risk: {risk_level}, "
-                        f"Patterns: {', '.join(patterns) if patterns else 'None'}"
-                    ),
-                    source="ML_RUNTIME",
+# 🔍 Cek apakah alert untuk transaksi ini sudah dibuat oleh engine lain
+                existing_alert = (
+                    self.db.query(FraudAlert)
+                    .filter(FraudAlert.transaction_id == transaction.id)
+                    .first()
                 )
+
+                if existing_alert:
+                    # Jika sudah ada (misal dari Rule/Pattern), naikkan level menjadi COMBINED_ML
+                    existing_alert.alert_type = "COMBINED_ML"
+                    existing_alert.title = "Fraud & ML Anomaly Detected"
+                    print(f"🔄 Alert updated to COMBINED_ML untuk tx {transaction_id}")
+                else:
+                    # Jika belum ada alert sama sekali, buat alert baru khusus ML
+                    create_alert(
+                        db=self.db,
+                        trx=transaction,
+                        background_tasks=None
+                    )
+                    print(f"🚨 New ML Alert escalated untuk tx {transaction_id}")
 
                 existing_breakdown.update(
                     {
@@ -265,6 +291,14 @@ class MLRealtimeService:
                 )
                 print(f"❌ Alert escalation error: {str(e)}")
 
+        print("=== BREAKDOWN BEFORE COMMIT ===")
+        print(existing_breakdown)
+        print("==============================")
+        print("=== BEFORE COMMIT ===")
+        print("anomaly_score:", transaction.anomaly_score)
+        print("is_flagged_ml:", transaction.is_flagged_ml)
+        print("score_breakdown:", transaction.score_breakdown)
+        print("=====================")
         self.db.commit()
         self.db.refresh(transaction)
 
@@ -320,10 +354,10 @@ class MLRealtimeService:
         thresholds = scoring_result.get("thresholds", {})
 
         # ===== UPDATE TRANSACTION ML FIELDS =====
-        transaction.unsupervised_score = ml_score
+        transaction.anomaly_score = ml_score
         transaction.is_flagged_ml = is_anomaly
 
-        existing_breakdown = transaction.score_breakdown or {}
+        existing_breakdown = dict(transaction.score_breakdown or {})
 
         existing_breakdown.update(
             {
@@ -340,26 +374,33 @@ class MLRealtimeService:
         transaction.score_breakdown = existing_breakdown
 
         # ===== ALERT ESCALATION =====
-        critical_threshold = thresholds.get("critical", 0.7)
+        # Ambil threshold langsung dari hasil scoring meta JSON
+        high_risk_threshold = thresholds.get("high_risk_score_threshold", -0.0009)
 
-        if ml_score >= critical_threshold:
+        # Di Isolation Forest, semakin kecil/negatif nilainya, semakin berbahaya!
+        if ml_score <= high_risk_threshold:
             is_anomaly = True
 
         if is_anomaly:
             try:
-                create_alert(
-                    db=self.db,
-                    transaction_id=transaction.id,
-                    alert_type="ML_ANOMALY",
-                    severity="HIGH",
-                    title=f"ML Anomaly Detected ({risk_level.upper()})",
-                    description=(
-                        f"ML engine detected suspicious transaction behavior. "
-                        f"Score: {ml_score:.4f}, Risk: {risk_level}, "
-                        f"Patterns: {', '.join(patterns) if patterns else 'None'}"
-                    ),
-                    source="ML_RUNTIME",
+# 🔍 Cek apakah alert untuk transaksi ini sudah dibuat oleh engine lain (Sync)
+                existing_alert = (
+                    self.db.query(FraudAlert)
+                    .filter(FraudAlert.transaction_id == transaction.id)
+                    .first()
                 )
+
+                if existing_alert:
+                    existing_alert.alert_type = "COMBINED_ML"
+                    existing_alert.title = "Fraud & ML Anomaly Detected"
+                    print(f"🔄 [Sync] Alert updated to COMBINED_ML untuk tx {transaction.id}")
+                else:
+                    create_alert(
+                        db=self.db,
+                        trx=transaction,
+                        background_tasks=None
+                    )
+                    print(f"🚨 [Sync] New ML Alert escalated untuk tx {transaction.id}")
 
                 existing_breakdown.update(
                     {
@@ -376,7 +417,11 @@ class MLRealtimeService:
                         "alert_escalation_error": str(e),
                     }
                 )
-
+        print("=== BEFORE COMMIT ===")
+        print("anomaly_score:", transaction.anomaly_score)
+        print("is_flagged_ml:", transaction.is_flagged_ml)
+        print("score_breakdown:", transaction.score_breakdown)
+        print("=====================")
         self.db.commit()
         self.db.refresh(transaction)
 
@@ -416,29 +461,35 @@ def process_transaction_ml(db: Session, transaction_id: int):
 
 
 async def process_transaction_ml_async(
-    db: Session,
     transaction_id: int,
+    db: Session = None,
 ) -> dict[str, Any]:
     """
     RECOMMENDED: Async ML runtime execution (non-blocking).
 
-    Gunakan ini di FastAPI endpoint untuk non-blocking ML scoring.
+    Setiap pemanggilan membuat Session DB sendiri agar aman untuk concurrent
+    access (asyncio.gather, background tasks, dll).
 
-    Example dalam FastAPI endpoint:
-        @app.post("/api/transactions/{tx_id}/score")
-        async def score_transaction(tx_id: int, db: Session = Depends(get_db)):
-            result = await process_transaction_ml_async(db, tx_id)
-            return result
+    db parameter dipertahankan untuk backward compatibility tapi TIDAK dipakai —
+    session selalu dibuat fresh di dalam fungsi ini.
+
+    Semaphore ML_SEMAPHORE membatasi jumlah task yang jalan bersamaan,
+    sehingga tidak pernah melebihi pool_size koneksi DB yang tersedia.
 
     Args:
-        db: Database session
         transaction_id: ID transaksi untuk di-score
+        db: Deprecated, diabaikan. Session dibuat internal.
 
     Returns:
         Dict hasil ML processing dengan score, risk_level, patterns
     """
-    service = MLRealtimeService(db)
-    return await service.process_transaction_ml_async(transaction_id)
+    async with ML_SEMAPHORE:
+        own_db = SessionLocal()
+        try:
+            service = MLRealtimeService(own_db)
+            return await service.process_transaction_ml_async(transaction_id)
+        finally:
+            own_db.close()
 
 
 # ================================================================

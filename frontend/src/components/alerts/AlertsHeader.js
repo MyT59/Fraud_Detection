@@ -1,6 +1,6 @@
 import React from "react";
 
-const AlertsHeader = ({ totalUnread, onMarkAllRead, onClearAll, isLive }) => {
+const AlertsHeader = ({ totalUnread, onClearAll, isLive }) => {
   return (
     <div className="alerts-page-header">
       <div className="alerts-header-left">
@@ -39,20 +39,10 @@ const AlertsHeader = ({ totalUnread, onMarkAllRead, onClearAll, isLive }) => {
           </h1>
           <p className="alerts-subtitle">
             {totalUnread > 0
-              ? `${totalUnread} notifikasi belum dibaca`
-              : "Semua notifikasi sudah dibaca"}
+              ? `${totalUnread} notifikasi menunggu`
+              : "Semua notifikasi sudah ditangani"}
           </p>
         </div>
-      </div>
-      <div className="alerts-header-actions">
-        <button className="alerts-btn-outline" onClick={onMarkAllRead}>
-          <i className="bi bi-check2-all"></i>
-          Tandai Semua Dibaca
-        </button>
-        <button className="alerts-btn-ghost" onClick={onClearAll}>
-          <i className="bi bi-trash3"></i>
-          Hapus Semua
-        </button>
       </div>
     </div>
   );

@@ -1,10 +1,17 @@
 import React from "react";
-import { STATS_BAR } from "./activityData";
+import { STATS_BAR, getActivityGroup } from "./activityData";
 
 const ActivityStatsBar = ({ activities = [] }) => {
+  // Count per group berdasarkan action_type
+  const groupCounts = {};
+  activities.forEach((a) => {
+    const group = getActivityGroup(a.action_type);
+    groupCounts[group] = (groupCounts[group] || 0) + 1;
+  });
+
   const counts = STATS_BAR.map((stat) => ({
     ...stat,
-    count: activities.filter((a) => a.type === stat.key).length,
+    count: groupCounts[stat.key] || 0,
   }));
 
   return (

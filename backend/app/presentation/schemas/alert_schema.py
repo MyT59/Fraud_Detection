@@ -23,9 +23,10 @@ class AlertResponse(BaseModel):
     title: str
     message: str
     created_at: datetime
+    type: str #
 
 class AlertPriorityDistributionResponse(BaseModel):
-    CRITICAL: int
-    HIGH: int
-    MEDIUM: int
-    LOW: int
+    critical: int # 🚀 Ubah ke huruf kecil semua
+    high: int
+    medium: int
+    low: int

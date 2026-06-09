@@ -1,26 +1,60 @@
 import React from "react";
+import "./alertItem.css";
 
 const TYPE_CONFIG = {
-  fraud: { icon: "bi-shield-x", label: "Fraud", colorClass: "type-fraud" },
-  blacklist: {
+  FRAUD: { icon: "bi-shield-x", label: "Fraud (ML)", colorClass: "type-fraud" }, // 🚀 TAMBAHKAN INI
+  PATTERN: {
+    icon: "bi-shield-x",
+    label: "Pattern Detection",
+    colorClass: "type-fraud",
+  },
+  RULE: { icon: "bi-gear-fill", label: "Rule Engine", colorClass: "type-rule" },
+  COMBINED: {
+    icon: "bi-shield-shaded",
+    label: "Kombinasi",
+    colorClass: "type-fraud",
+  },
+  BLACKLIST: {
     icon: "bi-ban",
     label: "Blacklist",
     colorClass: "type-blacklist",
   },
-  rule: { icon: "bi-gear-fill", label: "Rule Engine", colorClass: "type-rule" },
-  review: {
-    icon: "bi-clipboard-check",
-    label: "Manual Review",
-    colorClass: "type-review",
+  ML: {
+    icon: "bi-cpu-fill",
+    label: "ML Anomaly",
+    colorClass: "type-fraud",
   },
-  system: { icon: "bi-cpu", label: "System", colorClass: "type-system" },
+  RULE_ML: {
+    icon: "bi-gear-wide-connected",
+    label: "Rule + ML",
+    colorClass: "type-fraud",
+  },
+
+  PATTERN_ML: {
+    icon: "bi-diagram-3-fill",
+    label: "Pattern + ML",
+    colorClass: "type-fraud",
+  },
+
+  COMBINED_ML: {
+    icon: "bi-shield-fill-exclamation",
+    label: "Combined + ML",
+    colorClass: "type-fraud",
+  },
+  SYSTEM: { icon: "bi-cpu", label: "System", colorClass: "type-system" },
+  UNKNOWN: {
+    icon: "bi-question-circle",
+    label: "Unknown",
+    colorClass: "type-system",
+  },
 };
 
+// Ubah key menjadi UpperCase agar cocok dengan Backend
 const SEVERITY_CONFIG = {
-  critical: { label: "Critical", colorClass: "sev-critical" },
-  high: { label: "High", colorClass: "sev-high" },
-  medium: { label: "Medium", colorClass: "sev-medium" },
-  low: { label: "Low", colorClass: "sev-low" },
+  CRITICAL: { label: "Critical", colorClass: "sev-critical" },
+  HIGH: { label: "High", colorClass: "sev-high" },
+  MEDIUM: { label: "Medium", colorClass: "sev-medium" },
+  LOW: { label: "Low", colorClass: "sev-low" },
 };
 
 const PENDING_LABEL = {
@@ -31,8 +65,7 @@ const PENDING_LABEL = {
 
 const fmtTime = (ts) => {
   if (!ts) return "–";
-  const d = new Date(ts);
-  return d.toLocaleString("id-ID", {
+  return new Date(ts).toLocaleString("id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -44,93 +77,93 @@ const fmtTime = (ts) => {
 const AlertItem = ({
   alert,
   pending,
-  onMarkRead,
   onResolve,
   onClaim,
+  onRelease,
   onDelete,
+  onViewDetail,
 }) => {
-  const type = TYPE_CONFIG[alert.type] || TYPE_CONFIG.system;
-  const severity = SEVERITY_CONFIG[alert.severity] || SEVERITY_CONFIG.low;
-  const isUnread = alert.status === "unread";
-  const isBusy = !!pending;
+  // 🚀 PENGAMANAN DATA: Kebal dari beda huruf besar/kecil & fallback jika tidak ada data
+  const safeType = (alert.type || "UNKNOWN").toUpperCase();
+  const typeCfg = TYPE_CONFIG[safeType] || TYPE_CONFIG.UNKNOWN;
+
+  const safeSeverity = (alert.severity || "LOW").toUpperCase();
+  const sevCfg = SEVERITY_CONFIG[safeSeverity] || SEVERITY_CONFIG.LOW;
+
+  // Sinkronisasi status API dengan UI
+  const safeStatus = (alert.status || "OPEN").toUpperCase();
+  const isUnread = safeStatus === "OPEN" || safeStatus === "UNREAD";
+  const isInProgress = safeStatus === "IN_PROGRESS" || safeStatus === "READ";
 
   return (
     <div
-      className={`alert-item ${isUnread ? "alert-item-unread" : ""} ${isBusy ? "alert-item-busy" : ""}`}
-      style={isBusy ? { opacity: 0.75, pointerEvents: "none" } : undefined}
+      className={[
+        "alert-item",
+        isUnread ? "unread" : "",
+        pending ? "pending-op" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
-      {isUnread && <span className="alert-unread-dot"></span>}
-
-      <div className={`alert-type-icon ${type.colorClass}`}>
-        {isBusy ? (
-          <i className="bi bi-arrow-repeat alert-spin"></i>
-        ) : (
-          <i className={`bi ${type.icon}`}></i>
-        )}
-      </div>
-
-      <div className="alert-content">
-        <div className="alert-content-top">
-          <div className="alert-badges">
-            <span className={`alert-type-badge ${type.colorClass}`}>
-              {type.label}
-            </span>
-            <span className={`alert-severity-badge ${severity.colorClass}`}>
-              {severity.label}
-            </span>
-            {alert.txnId && (
-              <span className="alert-txn-badge">
-                <i className="bi bi-hash"></i>
-                {alert.txnId}
-              </span>
-            )}
+      <div className="alert-item-inner">
+        {/* Sisi Kiri: Ikon + Teks */}
+        <div className="alert-item-left">
+          <div className={`alert-icon ${typeCfg.colorClass}`}>
+            <i className={`bi ${typeCfg.icon}`}></i>
           </div>
 
-          <div className="alert-status-badge-wrap">
-            {alert.status === "resolved" && (
-              <span className="alert-status-resolved">
-                <i className="bi bi-check-circle-fill"></i> Resolved
+          <div className="alert-content-col">
+            <div className="alert-meta">
+              <span className={`alert-badge ${sevCfg.colorClass}`}>
+                {sevCfg.label}
               </span>
-            )}
-            {alert.status === "read" && (
-              <span className="alert-status-inprogress">
-                <i className="bi bi-clock-history"></i> In Progress
+              <span className="alert-type">{typeCfg.label}</span>
+              <span className="alert-time">
+                <i className="bi bi-clock"></i>{" "}
+                {/* Baca created_at dari BE atau time dari data dummy */}
+                {fmtTime(alert.created_at || alert.time)}
               </span>
+              <span className="alert-id">#{alert.id}</span>
+            </div>
+
+            <h3 className="alert-item-title">{alert.title}</h3>
+            <p className="alert-item-message">
+              {alert.message || alert.description}
+            </p>
+
+            {/* Baca transaction_id dari BE atau txnId dari data dummy */}
+            {(alert.transaction_id || alert.txnId) && (
+              <div className="alert-txn-ref">
+                <i className="bi bi-receipt"></i> Ref:{" "}
+                <strong>{alert.transaction_id || alert.txnId}</strong>
+              </div>
             )}
           </div>
         </div>
 
-        <h4 className="alert-item-title">{alert.title}</h4>
-        <p className="alert-item-message">{alert.message}</p>
+        {/* Separator */}
+        <div className="alert-separator" aria-hidden="true" />
 
-        <div className="alert-item-footer">
-          <span className="alert-time">
-            <i className="bi bi-clock"></i> {fmtTime(alert.time)}
-          </span>
-
-          {isBusy ? (
-            <span
-              style={{
-                fontSize: "0.8rem",
-                color: "#6b7280",
-                fontStyle: "italic",
-              }}
-            >
-              {PENDING_LABEL[pending] || "Memproses..."}
-            </span>
+        {/* Sisi Kanan: Tombol / Spinner */}
+        <div className="alert-actions-col">
+          {pending ? (
+            <div className="alert-spinner">
+              <div className="spinner"></div>
+              <span>{PENDING_LABEL[pending] || "Memproses..."}</span>
+            </div>
           ) : (
             <div className="alert-actions">
-              {alert.status === "unread" && (
+              {onViewDetail && (
                 <button
-                  className="alert-action-btn"
-                  onClick={() => onMarkRead(alert.id)}
-                  title="Tandai Dibaca"
+                  className="alert-action-btn alert-action-detail"
+                  onClick={() => onViewDetail(alert.id)}
+                  title="Lihat detail alert"
                 >
-                  <i className="bi bi-check2"></i> Tandai Dibaca
+                  <i className="bi bi-eye"></i> Detail
                 </button>
               )}
 
-              {alert.status === "unread" && onClaim && (
+              {isUnread && onClaim && (
                 <button
                   className="alert-action-btn alert-action-claim"
                   onClick={() => onClaim(alert.id)}
@@ -140,7 +173,17 @@ const AlertItem = ({
                 </button>
               )}
 
-              {alert.status !== "resolved" && (
+              {isInProgress && onRelease && (
+                <button
+                  className="alert-action-btn alert-action-release"
+                  onClick={() => onRelease(alert.id)}
+                  title="Batal klaim & kembalikan ke antrean"
+                >
+                  <i className="bi bi-arrow-return-left"></i> Release
+                </button>
+              )}
+
+              {isInProgress && onResolve && (
                 <button
                   className="alert-action-btn alert-action-resolve"
                   onClick={() => onResolve(alert.id)}
@@ -149,14 +192,6 @@ const AlertItem = ({
                   <i className="bi bi-check2-all"></i> Resolve
                 </button>
               )}
-
-              <button
-                className="alert-action-btn alert-action-delete"
-                onClick={() => onDelete(alert.id)}
-                title="Hapus dari tampilan"
-              >
-                <i className="bi bi-trash3"></i>
-              </button>
             </div>
           )}
         </div>

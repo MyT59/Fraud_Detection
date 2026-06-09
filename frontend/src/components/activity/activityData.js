@@ -1,209 +1,200 @@
-export const ALL_ACTIVITIES = [
-  {
-    id: 1,
-    type: "fraud_detected",
-    title: "High-Risk Transaction Blocked",
-    description:
-      "TRX001234 automatically blocked by system due to anomaly score exceeding threshold.",
-    user: "System",
-    time: "2 min ago",
-    timestamp: "2026-02-23 09:58",
+// activityData.js — config only, no static data
+// Field names sesuai ActivityLogResponse dari BE
+
+// Action groups inline — tidak import dari service untuk hindari circular dependency
+// PENTING: setiap action_type hanya boleh masuk SATU group (no overlap)
+const ACTION_GROUPS_MAP = {
+  fraud: [
+    "ALERT_CREATED",
+    "BLACKLIST_HIT",
+    "PATTERN_TRIGGERED",
+    "RULE_TRIGGERED",
+    "FLAG_TRANSACTION",
+  ],
+  reviews: [
+    "ALERT_CLAIMED",
+    "ALERT_RELEASED",
+    "REVIEW_APPROVED",
+    "REVIEW_REJECTED",
+    "REVIEW_OVERRIDDEN",
+  ],
+  system: [
+    "LOGIN",
+    "LOGIN_FAILED",
+    "LOGOUT",
+    "SESSION_REVOKED",
+    "TOKEN_REFRESHED",
+    "MANUAL_RUN_RETRAIN",
+  ],
+  rules: ["RULE_CREATED", "RULE_UPDATED", "RULE_DELETED"],
+  alerts: ["SLA_ESCALATION"],
+  patterns: [
+    "PATTERN_CREATED",
+    "PATTERN_AUTO_DISABLE",
+    "PATTERN_AUTO_PROMOTE",
+    "PATTERN_REACTIVATED",
+    "PATTERN_TRIGGERED",
+  ],
+  blacklist: ["BLACKLIST_ADD", "BLACKLIST_REMOVE"],
+  user_actions: [
+    "ACCOUNT_CREATED",
+    "ACCOUNT_SUSPENDED",
+    "ACCOUNT_ROLE_CHANGED",
+  ],
+};
+
+// Mapping action_type → display group
+export const getActivityGroup = (action_type) => {
+  for (const [group, actions] of Object.entries(ACTION_GROUPS_MAP)) {
+    if (actions.includes(action_type)) return group;
+  }
+  return "system";
+};
+
+// Mapping action_type → icon, color, title
+export const ACTION_META = {
+  ALERT_CREATED: {
     icon: "bi-shield-exclamation",
     color: "red",
-    details: { amount: "Rp 25.000.000", user: "USR12345" },
+    title: "Alert Created",
   },
-  {
-    id: 2,
-    type: "manual_review",
-    title: "Transaction Approved",
-    description: "TRX001230 approved after manual review by admin.",
-    user: "Admin User",
-    time: "15 min ago",
-    timestamp: "2026-02-23 09:45",
+  BLACKLIST_HIT: { icon: "bi-ban", color: "red", title: "Blacklist Hit" },
+  PATTERN_TRIGGERED: {
+    icon: "bi-diagram-3",
+    color: "red",
+    title: "Pattern Triggered",
+  },
+  RULE_TRIGGERED: {
+    icon: "bi-lightning-charge",
+    color: "orange",
+    title: "Rule Triggered",
+  },
+  REVIEW_APPROVED: {
     icon: "bi-check-circle",
     color: "green",
-    details: { reviewTime: "3 minutes", transactionId: "TRX001230" },
+    title: "Review Approved",
   },
-  {
-    id: 3,
-    type: "rule_update",
-    title: "Fraud Rule Updated",
-    description:
-      "Velocity check threshold increased to 10 transactions per hour.",
-    user: "Security Team",
-    time: "1 hr ago",
-    timestamp: "2026-02-23 09:00",
-    icon: "bi-gear",
-    color: "blue",
-    details: { rule: "Velocity Check", oldValue: "8", newValue: "10" },
-  },
-  {
-    id: 4,
-    type: "alert",
-    title: "Multiple Failed Login Attempts",
-    description:
-      "USR67890 had 5 consecutive failed login attempts from Jakarta.",
-    user: "System",
-    time: "2 hr ago",
-    timestamp: "2026-02-23 07:58",
-    icon: "bi-exclamation-triangle",
-    color: "orange",
-    details: { attempts: "5", userId: "USR67890", location: "Jakarta" },
-  },
-  {
-    id: 5,
-    type: "report",
-    title: "Monthly Report Generated",
-    description: "January 2026 fraud analysis report completed and dispatched.",
-    user: "System",
-    time: "3 hr ago",
-    timestamp: "2026-02-23 06:58",
-    icon: "bi-file-earmark-text",
-    color: "purple",
-    details: { reportId: "RPT0015", period: "January 2026" },
-  },
-  {
-    id: 6,
-    type: "user_action",
-    title: "User Settings Updated",
-    description:
-      "Email notifications enabled for high-risk transaction alerts.",
-    user: "Admin User",
-    time: "5 hr ago",
-    timestamp: "2026-02-23 04:58",
-    icon: "bi-person-gear",
-    color: "gray",
-    details: { setting: "Notifications", status: "Enabled" },
-  },
-  {
-    id: 7,
-    type: "fraud_detected",
-    title: "Suspicious Pattern Detected",
-    description:
-      "Geographic anomaly detected in TRX001225 — transaction origin inconsistent.",
-    user: "System",
-    time: "6 hr ago",
-    timestamp: "2026-02-23 03:58",
-    icon: "bi-geo-alt",
-    color: "red",
-    details: { location: "Unknown", transactionId: "TRX001225" },
-  },
-  {
-    id: 8,
-    type: "system",
-    title: "ML Model Retrained",
-    description:
-      "Fraud detection model updated with 5,000 new labeled samples.",
-    user: "System",
-    time: "8 hr ago",
-    timestamp: "2026-02-23 01:58",
-    icon: "bi-cpu",
-    color: "blue",
-    details: { accuracy: "98.9%", samples: "5,000" },
-  },
-  {
-    id: 9,
-    type: "alert",
-    title: "Unusual Transaction Volume",
-    description:
-      "Spike detected: 3x normal transaction volume from merchant MRC00123.",
-    user: "System",
-    time: "9 hr ago",
-    timestamp: "2026-02-23 00:58",
-    icon: "bi-graph-up-arrow",
-    color: "orange",
-    details: { merchant: "MRC00123", spike: "3x normal" },
-  },
-  {
-    id: 10,
-    type: "manual_review",
-    title: "Transaction Rejected",
-    description:
-      "TRX001220 rejected after manual review — insufficient evidence.",
-    user: "Analyst Team",
-    time: "10 hr ago",
-    timestamp: "2026-02-22 23:58",
+  REVIEW_REJECTED: {
     icon: "bi-x-circle",
     color: "red",
-    details: { transactionId: "TRX001220", reason: "Insufficient evidence" },
+    title: "Review Rejected",
   },
-  {
-    id: 11,
-    type: "rule_update",
-    title: "New Blacklist Rule Added",
-    description:
-      "IP range 192.168.x.x added to fraud blacklist by security team.",
-    user: "Security Team",
-    time: "12 hr ago",
-    timestamp: "2026-02-22 21:58",
-    icon: "bi-ban",
-    color: "blue",
-    details: { rule: "IP Blacklist", ipRange: "192.168.x.x" },
+  REVIEW_OVERRIDDEN: {
+    icon: "bi-arrow-repeat",
+    color: "orange",
+    title: "Review Overridden",
   },
-  {
-    id: 12,
-    type: "report",
-    title: "Daily Summary Dispatched",
-    description: "Daily fraud detection summary sent to all stakeholders.",
-    user: "System",
-    time: "14 hr ago",
-    timestamp: "2026-02-22 19:58",
-    icon: "bi-send",
-    color: "purple",
-    details: { recipients: "12", reportId: "DAILY-0223" },
+  ALERT_CLAIMED: {
+    icon: "bi-person-check",
+    color: "green",
+    title: "Alert Claimed",
   },
-  {
-    id: 13,
-    type: "system",
-    title: "Database Backup Completed",
-    description:
-      "Scheduled database backup completed successfully — 14.2 GB archived.",
-    user: "System",
-    time: "18 hr ago",
-    timestamp: "2026-02-22 15:58",
-    icon: "bi-hdd",
-    color: "blue",
-    details: { size: "14.2 GB", status: "Success" },
-  },
-  {
-    id: 14,
-    type: "user_action",
-    title: "New Admin Account Created",
-    description: "Administrator account created for new security analyst.",
-    user: "Super Admin",
-    time: "1 day ago",
-    timestamp: "2026-02-22 09:00",
-    icon: "bi-person-plus",
+  ALERT_RELEASED: {
+    icon: "bi-person-dash",
     color: "gray",
-    details: { role: "Analyst", createdBy: "Super Admin" },
+    title: "Alert Released",
   },
-  {
-    id: 15,
-    type: "fraud_detected",
-    title: "Card Cloning Attempt",
-    description:
-      "TRX001210 flagged for potential card cloning — dual-location transaction.",
-    user: "System",
-    time: "1 day ago",
-    timestamp: "2026-02-22 07:30",
-    icon: "bi-credit-card-2-front",
+  RULE_CREATED: {
+    icon: "bi-plus-circle",
+    color: "blue",
+    title: "Rule Created",
+  },
+  RULE_UPDATED: { icon: "bi-gear", color: "blue", title: "Rule Updated" },
+  RULE_DELETED: { icon: "bi-trash", color: "orange", title: "Rule Deleted" },
+  PATTERN_CREATED: {
+    icon: "bi-diagram-3",
+    color: "blue",
+    title: "Pattern Created",
+  },
+  PATTERN_AUTO_DISABLE: {
+    icon: "bi-pause-circle",
+    color: "orange",
+    title: "Pattern Auto-Disabled",
+  },
+  PATTERN_AUTO_PROMOTE: {
+    icon: "bi-arrow-up-circle",
+    color: "green",
+    title: "Pattern Promoted",
+  },
+  PATTERN_REACTIVATED: {
+    icon: "bi-play-circle",
+    color: "green",
+    title: "Pattern Reactivated",
+  },
+  BLACKLIST_ADD: {
+    icon: "bi-shield-plus",
+    color: "orange",
+    title: "Blacklist Added",
+  },
+  BLACKLIST_REMOVE: {
+    icon: "bi-shield-minus",
+    color: "gray",
+    title: "Blacklist Removed",
+  },
+  LOGIN: { icon: "bi-box-arrow-in-right", color: "green", title: "Login" },
+  LOGIN_FAILED: {
+    icon: "bi-exclamation-triangle",
     color: "red",
-    details: { transactionId: "TRX001210", type: "Card Cloning" },
+    title: "Login Failed",
   },
-];
+  LOGOUT: { icon: "bi-box-arrow-right", color: "gray", title: "Logout" },
+  SESSION_REVOKED: {
+    icon: "bi-slash-circle",
+    color: "orange",
+    title: "Session Revoked",
+  },
+  TOKEN_REFRESHED: {
+    icon: "bi-arrow-clockwise",
+    color: "blue",
+    title: "Token Refreshed",
+  },
+  ACCOUNT_CREATED: {
+    icon: "bi-person-plus",
+    color: "green",
+    title: "Account Created",
+  },
+  ACCOUNT_SUSPENDED: {
+    icon: "bi-person-slash",
+    color: "red",
+    title: "Account Suspended",
+  },
+  ACCOUNT_ROLE_CHANGED: {
+    icon: "bi-person-gear",
+    color: "blue",
+    title: "Role Changed",
+  },
+  // Extra — dari DB
+  FLAG_TRANSACTION: {
+    icon: "bi-flag-fill",
+    color: "red",
+    title: "Transaction Flagged",
+  },
+  SLA_ESCALATION: { icon: "bi-alarm", color: "orange", title: "SLA Escalated" },
+  MANUAL_RUN_RETRAIN: {
+    icon: "bi-cpu",
+    color: "blue",
+    title: "Manual Retrain",
+  },
+};
+
+export const DEFAULT_META = {
+  icon: "bi-activity",
+  color: "gray",
+  title: "System Event",
+};
 
 export const FILTER_CONFIG = [
   { label: "All", value: "all", icon: "bi-grid", color: "all", dot: null },
   {
     label: "Fraud",
-    value: "fraud_detected",
+    value: "fraud",
     icon: "bi-shield-exclamation",
     color: "fraud",
     dot: "red",
   },
   {
     label: "Reviews",
-    value: "manual_review",
+    value: "reviews",
     icon: "bi-eye",
     color: "review",
     dot: "green",
@@ -217,69 +208,178 @@ export const FILTER_CONFIG = [
   },
   {
     label: "Rules",
-    value: "rule_update",
+    value: "rules",
     icon: "bi-gear",
     color: "rule",
     dot: "blue",
   },
   {
     label: "Alerts",
-    value: "alert",
+    value: "alerts",
     icon: "bi-exclamation-triangle",
     color: "alert",
     dot: "orange",
   },
   {
-    label: "Reports",
-    value: "report",
-    icon: "bi-file-earmark-text",
+    label: "Patterns",
+    value: "patterns",
+    icon: "bi-diagram-3",
     color: "report",
     dot: "purple",
   },
   {
+    label: "Blacklist",
+    value: "blacklist",
+    icon: "bi-ban",
+    color: "rule",
+    dot: "orange",
+  },
+  {
     label: "User Actions",
-    value: "user_action",
+    value: "user_actions",
     icon: "bi-person-gear",
     color: "user",
     dot: "gray",
   },
 ];
 
-export const TYPE_BADGE_CLASS = {
-  fraud_detected: "tf-type-fraud",
-  manual_review: "tf-type-review",
-  system: "tf-type-system",
-  rule_update: "tf-type-rule",
-  alert: "tf-type-alert",
-  report: "tf-type-report",
-  user_action: "tf-type-user",
-};
-
-export const TYPE_LABEL = {
-  fraud_detected: "Fraud",
-  manual_review: "Review",
-  system: "System",
-  rule_update: "Rule",
-  alert: "Alert",
-  report: "Report",
-  user_action: "User",
-};
-
 export const STATS_BAR = [
   {
     label: "Fraud Events",
-    key: "fraud_detected",
+    key: "fraud",
     icon: "bi-shield-exclamation",
     color: "red",
   },
-  { label: "Reviews", key: "manual_review", icon: "bi-eye", color: "green" },
+  { label: "Reviews", key: "reviews", icon: "bi-eye", color: "green" },
   { label: "System Events", key: "system", icon: "bi-cpu", color: "blue" },
-  { label: "Alerts", key: "alert", icon: "bi-bell", color: "orange" },
-  { label: "Reports", key: "report", icon: "bi-file-text", color: "purple" },
+  { label: "Alerts", key: "alerts", icon: "bi-bell", color: "orange" },
+  { label: "Patterns", key: "patterns", icon: "bi-diagram-3", color: "purple" },
   {
     label: "User Actions",
-    key: "user_action",
+    key: "user_actions",
     icon: "bi-person",
     color: "gray",
+  },
+];
+
+export const GROUP_BADGE_CLASS = {
+  fraud: "tf-type-fraud",
+  reviews: "tf-type-review",
+  system: "tf-type-system",
+  rules: "tf-type-rule",
+  alerts: "tf-type-alert",
+  patterns: "tf-type-report",
+  blacklist: "tf-type-rule",
+  user_actions: "tf-type-user",
+};
+
+export const GROUP_LABEL = {
+  fraud: "Fraud",
+  reviews: "Review",
+  system: "System",
+  rules: "Rule",
+  alerts: "Alert",
+  patterns: "Pattern",
+  blacklist: "Blacklist",
+  user_actions: "User",
+};
+
+// Fallback data saat BE offline — BE field names
+export const FALLBACK_ACTIVITIES = [
+  {
+    id: 1,
+    action_type: "ALERT_CREATED",
+    module_source: "RULE_ENGINE",
+    severity: "HIGH",
+    admin_name: "System",
+    admin_email: null,
+    target_type: "TRANSACTION",
+    target_id: "TRX001234",
+    details: { amount: "Rp 25.000.000", user: "USR12345" },
+    created_at: new Date(Date.now() - 2 * 60000).toISOString(),
+  },
+  {
+    id: 2,
+    action_type: "REVIEW_APPROVED",
+    module_source: "MANUAL_REVIEW",
+    severity: "INFO",
+    admin_name: "Admin User",
+    admin_email: "admin@fds.id",
+    target_type: "TRANSACTION",
+    target_id: "TRX001230",
+    details: { review_time: "3 minutes" },
+    created_at: new Date(Date.now() - 15 * 60000).toISOString(),
+  },
+  {
+    id: 3,
+    action_type: "RULE_UPDATED",
+    module_source: "RULE_ENGINE",
+    severity: "INFO",
+    admin_name: "Security Team",
+    admin_email: null,
+    target_type: "RULE",
+    target_id: "Velocity Check",
+    details: { old_value: "8", new_value: "10" },
+    created_at: new Date(Date.now() - 60 * 60000).toISOString(),
+  },
+  {
+    id: 4,
+    action_type: "LOGIN_FAILED",
+    module_source: "AUTH",
+    severity: "WARNING",
+    admin_name: "System",
+    admin_email: null,
+    target_type: "ADMIN",
+    target_id: "USR67890",
+    details: { attempts: 5, location: "Jakarta" },
+    created_at: new Date(Date.now() - 2 * 60 * 60000).toISOString(),
+  },
+  {
+    id: 5,
+    action_type: "PATTERN_TRIGGERED",
+    module_source: "PATTERN_ENGINE",
+    severity: "HIGH",
+    admin_name: "System",
+    admin_email: null,
+    target_type: "TRANSACTION",
+    target_id: "TRX001225",
+    details: { location: "Unknown" },
+    created_at: new Date(Date.now() - 6 * 60 * 60000).toISOString(),
+  },
+  {
+    id: 6,
+    action_type: "ACCOUNT_CREATED",
+    module_source: "SYSTEM",
+    severity: "INFO",
+    admin_name: "Super Admin",
+    admin_email: "superadmin@fds.id",
+    target_type: "ADMIN",
+    target_id: "new_analyst",
+    details: { role: "Fraud Analyst" },
+    created_at: new Date(Date.now() - 24 * 60 * 60000).toISOString(),
+  },
+  {
+    id: 7,
+    action_type: "BLACKLIST_ADD",
+    module_source: "BLACKLIST",
+    severity: "WARNING",
+    admin_name: "Security Team",
+    admin_email: null,
+    target_type: "IP_ADDRESS",
+    target_id: "192.168.x.x",
+    details: { reason: "Fraud pattern" },
+    created_at: new Date(Date.now() - 12 * 60 * 60000).toISOString(),
+  },
+  {
+    id: 8,
+    action_type: "PATTERN_AUTO_PROMOTE",
+    module_source: "ML",
+    severity: "INFO",
+    admin_name: "System",
+    admin_email: null,
+    target_type: "PATTERN",
+    target_id: "PAT-042",
+    details: { accuracy: "98.9%", samples: 5000 },
+    created_at: new Date(Date.now() - 8 * 60 * 60000).toISOString(),
   },
 ];

@@ -3,11 +3,10 @@
  * ─────────────────────────────────────────────────────────────────
  * Lapisan integrasi API untuk modul Manual Review.
  *
- * Meng-cover seluruh endpoint yang relevan dari API Documentation:
- *  • GET  /alerts/open-queue          → ambil antrian alert terbuka
+ * Endpoint yang di-cover:
  *  • GET  /alerts/my-queue            → antrian yang sedang diklaim analis
- *  • POST /alerts/{id}/claim          → klaim alert (lock investigasi)
- *  • POST /alerts/{id}/release        → lepas klaim
+ *  • POST /alerts/{id}/claim          → klaim alert (OPEN → IN_PROGRESS)
+ *  • POST /alerts/{id}/release        → lepas klaim (IN_PROGRESS → OPEN)
  *  • GET  /alerts/{id}                → detail alert
  *  • POST /reviews/                   → submit vonis (SAFE / FRAUD)
  *  • GET  /reviews/history            → riwayat review (paginated)
@@ -16,65 +15,35 @@
  *  • GET  /reviews/timeline-analytics → timeline analitik
  *  • POST /reviews/{id}/override      → override vonis (admin)
  *  • POST /reviews/transactions/{id}/report-fraud → false-negative report
+ *
+ * CATATAN ARSITEKTUR:
+ *  - fetchOpenQueue() DIHAPUS dari file ini → gunakan AlertsService.js
+ *  - claimAndSubmitReview() DIHAPUS → claim & review harus dilakukan terpisah
+ *  - decision_confidence WAJIB dipilih user (LOW | MEDIUM | HIGH), tidak dihitung otomatis
+ *  - decision dikirim langsung sebagai "SAFE" | "FRAUD", tidak perlu mapping
  * ─────────────────────────────────────────────────────────────────
  */
 
-import api from "../services/apiService.js"; // pakai instance api yang sudah ada (auto token refresh)
+import api from "../services/apiService.js";
 
-// ─── Konstanta ──────────────────────────────────────────────────
-
-/**
- * Mapping confidence level berdasarkan fraud score transaksi.
- * Dipakai untuk mengisi field decision_confidence saat submit review.
- */
-export const resolveConfidence = (fraudScore) => {
-  if (fraudScore >= 80) return "HIGH";
-  if (fraudScore >= 55) return "MEDIUM";
-  return "LOW";
-};
+// ─── Alert Queue (My Queue only) ─────────────────────────────────
 
 /**
- * Map status frontend (approved/rejected) → enum backend (SAFE/FRAUD).
+ * Ambil antrian alert yang sedang diinvestigasi oleh analis yang login.
+ * Status alert: IN_PROGRESS, diklaim oleh user saat ini.
+ * Sumber data untuk halaman Manual Review.
+ *
+ * @param {object} params - { page?: number, limit?: number }
+ * @returns {Promise<object>} { items, total, page, limit }
  */
-export const toBackendDecision = (frontendDecision) => {
-  return frontendDecision === "approved" ? "SAFE" : "FRAUD";
-};
-
-/**
- * Map enum backend (SAFE/FRAUD) → status frontend (approved/rejected).
- */
-export const toFrontendStatus = (backendDecision) => {
-  if (!backendDecision) return "pending";
-  const d = backendDecision.toUpperCase();
-  if (d === "SAFE") return "approved";
-  if (d === "FRAUD") return "rejected";
-  return "pending";
-};
-
-// ─── Alert Queue ─────────────────────────────────────────────────
-
-/**
- * Ambil antrian alert terbuka (OPEN), diurutkan prioritas tertinggi dulu.
- * @param {object} params - { priority?: string, limit?: number }
- * @returns {Promise<Array>} list of alerts
- */
-export const fetchOpenQueue = async ({ priority = null, limit = 50 } = {}) => {
-  const qs = new URLSearchParams();
-  if (priority) qs.set("priority", priority);
-  qs.set("limit", String(limit));
-  return api.get(`/alerts/open-queue?${qs.toString()}`);
-};
-
-/**
- * Ambil antrian yang sedang diinvestigasi analis yang login (IN_PROGRESS).
- * @returns {Promise<Array>} list of in-progress alerts
- */
-export const fetchMyQueue = async () => {
-  return api.get("/alerts/my-queue");
+export const fetchMyQueue = async ({ page = 1, limit = 10 } = {}) => {
+  const params = new URLSearchParams({ page, limit });
+  return api.get(`/alerts/my-queue?${params.toString()}`);
 };
 
 /**
  * Ambil detail sebuah alert berdasarkan ID.
+ *
  * @param {number} alertId
  * @returns {Promise<object>} alert detail
  */
@@ -83,7 +52,10 @@ export const fetchAlertDetail = async (alertId) => {
 };
 
 /**
- * Klaim sebuah alert – mengunci ke analis yang sedang login (OPEN → IN_PROGRESS).
+ * Klaim sebuah alert — mengunci ke analis yang sedang login.
+ * Mengubah status alert: OPEN → IN_PROGRESS.
+ * Hanya bisa dilakukan dari halaman Alerts (Open Queue).
+ *
  * @param {number} alertId
  * @returns {Promise<object>} { message, alert_id }
  */
@@ -92,7 +64,9 @@ export const claimAlert = async (alertId) => {
 };
 
 /**
- * Lepaskan klaim alert – kembalikan ke antrian umum (IN_PROGRESS → OPEN).
+ * Lepaskan klaim alert — kembalikan ke antrian umum.
+ * Mengubah status alert: IN_PROGRESS → OPEN.
+ *
  * @param {number} alertId
  * @returns {Promise<object>} { message, alert_id }
  */
@@ -102,6 +76,7 @@ export const releaseAlert = async (alertId) => {
 
 /**
  * Update status alert (khusus SUPER_ADMIN / RISK_MANAGER).
+ *
  * @param {number} alertId
  * @param {string} status - "OPEN" | "IN_PROGRESS" | "RESOLVED"
  * @returns {Promise<object>}
@@ -115,29 +90,39 @@ export const updateAlertStatus = async (alertId, status) => {
 /**
  * Submit vonis manual review ke backend.
  *
- * Flow yang benar sesuai dokumentasi:
- *  1. Alert wajib sudah di-CLAIM (status IN_PROGRESS) sebelum submit.
- *  2. Keputusan: SAFE (approve) atau FRAUD (reject).
- *  3. Setelah submit, backend otomatis set alert → RESOLVED.
+ * PRE-CONDITION: Alert WAJIB sudah di-claim (status IN_PROGRESS) sebelum
+ * fungsi ini dipanggil. Review hanya boleh dilakukan dari My Queue.
+ *
+ * POST-CONDITION: Backend otomatis mengubah status alert → RESOLVED.
  *
  * @param {object} params
- * @param {number}  params.alertId          - ID alert yang sedang diklaim
- * @param {string}  params.frontendDecision - "approved" | "rejected"
- * @param {string}  [params.note]           - catatan opsional (max 500 char)
- * @param {number}  [params.fraudScore]     - skor fraud untuk resolve confidence
+ * @param {number} params.alert_id           - ID alert yang sedang diklaim
+ * @param {string} params.decision           - "SAFE" | "FRAUD"
+ * @param {string} params.decision_confidence - "LOW" | "MEDIUM" | "HIGH" (dipilih user)
+ * @param {string} [params.note]             - catatan opsional, max 500 karakter
  * @returns {Promise<object>} { status, message, review_id }
  */
 export const submitReview = async ({
-  alertId,
-  frontendDecision,
-  note = "",
-  fraudScore = 50,
+  alert_id,
+  decision,
+  decision_confidence,
+  note = null,
 }) => {
-  const decision = toBackendDecision(frontendDecision);
-  const decision_confidence = resolveConfidence(fraudScore);
+  // Validasi enum sebelum kirim ke BE
+  const validDecisions = ["SAFE", "FRAUD"];
+  const validConfidences = ["LOW", "MEDIUM", "HIGH"];
+
+  if (!validDecisions.includes(decision)) {
+    throw new Error(`Invalid decision: "${decision}". Must be SAFE or FRAUD.`);
+  }
+  if (!validConfidences.includes(decision_confidence)) {
+    throw new Error(
+      `Invalid confidence: "${decision_confidence}". Must be LOW, MEDIUM, or HIGH.`,
+    );
+  }
 
   const payload = {
-    alert_id: alertId,
+    alert_id,
     decision,
     note: note || null,
     decision_confidence,
@@ -148,6 +133,11 @@ export const submitReview = async ({
 
 /**
  * Ambil riwayat review (paginated).
+ *
+ * Response shape: { total, page, limit, items: ReviewHistoryItem[] }
+ * Field per item: id, transaction_id, alert_id, decision, review_note,
+ *                 previous_status, final_status, reviewed_by, created_at
+ *
  * @param {object} params - { page?: number, limit?: number }
  * @returns {Promise<{ total, page, limit, items }>}
  */
@@ -156,7 +146,9 @@ export const fetchReviewHistory = async ({ page = 1, limit = 10 } = {}) => {
 };
 
 /**
- * Ambil metrik agregat review hari ini.
+ * Ambil metrik agregat review.
+ * Hanya bisa diakses oleh SUPER_ADMIN dan RISK_MANAGER.
+ *
  * @returns {Promise<ReviewMetricsResponse>}
  */
 export const fetchReviewMetrics = async () => {
@@ -165,6 +157,8 @@ export const fetchReviewMetrics = async () => {
 
 /**
  * Ambil data performa masing-masing analis.
+ * Hanya bisa diakses oleh SUPER_ADMIN dan RISK_MANAGER.
+ *
  * @returns {Promise<Array<AnalystPerformanceResponse>>}
  */
 export const fetchAnalystPerformance = async () => {
@@ -173,6 +167,8 @@ export const fetchAnalystPerformance = async () => {
 
 /**
  * Ambil data analitik timeline (reviews/hour, fraud/day, queue growth).
+ * Hanya bisa diakses oleh SUPER_ADMIN dan RISK_MANAGER.
+ *
  * @returns {Promise<ReviewTimelineAnalyticsResponse>}
  */
 export const fetchTimelineAnalytics = async () => {
@@ -181,8 +177,11 @@ export const fetchTimelineAnalytics = async () => {
 
 /**
  * Override keputusan review (khusus SUPER_ADMIN / RISK_MANAGER).
+ *
  * @param {number} reviewId
- * @param {object} params - { new_decision: "SAFE"|"FRAUD", reason: string }
+ * @param {object} params
+ * @param {string} params.new_decision - "SAFE" | "FRAUD"
+ * @param {string} params.reason       - min 10 karakter, max 1000 karakter
  * @returns {Promise<object>}
  */
 export const overrideReview = async (reviewId, { new_decision, reason }) => {
@@ -190,195 +189,118 @@ export const overrideReview = async (reviewId, { new_decision, reason }) => {
 };
 
 /**
- * Laporkan transaksi sebagai false negative (lolos tapi sebenarnya fraud).
+ * Laporkan transaksi sebagai false negative.
+ * Hanya bisa diakses oleh SUPER_ADMIN dan RISK_MANAGER.
+ *
  * @param {number} transactionId - numeric transaction ID dari backend
- * @param {string} reason        - min 10 karakter
+ * @param {string} reason        - min 10 karakter, max 1000 karakter
  * @returns {Promise<object>}
  */
 export const reportFalseNegative = async (transactionId, reason) => {
-  return api.post(
-    `/reviews/transactions/${transactionId}/report-fraud`,
-    { reason },
-  );
-};
-
-// ─── Alur lengkap: Claim → Submit ────────────────────────────────
-
-/**
- * Alur satu fungsi: klaim alert lalu langsung submit vonis.
- * Berguna untuk bulk action atau submit cepat dari modal.
- *
- * @param {object} params
- * @param {number} params.alertId
- * @param {string} params.frontendDecision  - "approved" | "rejected"
- * @param {string} [params.note]
- * @param {number} [params.fraudScore]
- * @returns {Promise<{ claimResult, reviewResult }>}
- */
-export const claimAndSubmitReview = async ({
-  alertId,
-  frontendDecision,
-  note = "",
-  fraudScore = 50,
-}) => {
-  // Step 1: klaim alert
-  const claimResult = await claimAlert(alertId);
-
-  // Step 2: submit vonis
-  const reviewResult = await submitReview({
-    alertId,
-    frontendDecision,
-    note,
-    fraudScore,
+  return api.post(`/reviews/transactions/${transactionId}/report-fraud`, {
+    reason,
   });
-
-  return { claimResult, reviewResult };
 };
 
-// ─── Transformasi data alert → format txn frontend ───────────────
+// ─── Data Transformers ────────────────────────────────────────────
 
 /**
- * Ubah objek alert dari backend menjadi format transaksi yang dipakai frontend.
+ * Transform item dari GET /reviews/history ke format render ReviewHistory.
  *
- * Backend alert memiliki field: id, transaction_id, service, severity, priority,
- * status, title, description, trx_id, badge, type, etc.
+ * Hanya memetakan field yang benar-benar dikirim oleh BE (ReviewHistoryItem schema).
+ * Field yang tidak ada di BE (analyst_name, analyst_role, service, amount,
+ * risk_score) TIDAK dimasukkan untuk menghindari tampilan "—" palsu.
  *
- * Fungsi ini mengambil alert + data transaksi (dari alert detail) dan
- * mengembalikan objek yang kompatibel dengan normalise() dan render tabel.
- *
- * @param {object} alert   - objek alert dari /alerts/open-queue atau /alerts/{id}
- * @param {object} [txnData] - data transaksi tambahan (opsional, jika sudah ada)
- * @returns {object} transaksi dalam format frontend
- */
-export const mapAlertToTransaction = (alert, txnData = null) => {
-  const service =
-    (alert.service || "").toLowerCase() === "nusabill" ? "nusabill" : "agenusa";
-
-  // Parse anomalies/patterns dari message/description alert
-  const parseAnomalies = (msg = "") => {
-    const lines = msg.split("\n").filter((l) => l.includes("Pattern"));
-    return lines
-      .map((l) => l.replace(/.*Pattern[:\s]*/i, "").trim())
-      .filter(Boolean);
-  };
-
-  const rawScore =
-    alert.priority != null ? Math.min(alert.priority / 100, 1) : 0.5;
-  const fraudScore = Math.round(rawScore * 100);
-
-  const scoreToRisk = (score) => {
-    if (score >= 88) return "critical";
-    if (score >= 70) return "high";
-    if (score >= 50) return "medium";
-    return "low";
-  };
-
-  const base = {
-    // ID frontend: pakai trx_id dari alert kalau ada, fallback ke alert.id
-    id: alert.trx_id || String(alert.transaction_id || alert.id),
-    _alertId: alert.id,           // simpan alert ID asli untuk claim/submit
-    _transactionId: alert.transaction_id,
-    service,
-    status: "pending",            // alert terbuka selalu pending di frontend
-    rawScore,
-    fraudScore,
-    riskLevel: scoreToRisk(fraudScore),
-    anomalies: parseAnomalies(alert.description || alert.message_raw || ""),
-    matched_patterns: [],
-    dateTime: alert.created_at || null,
-    _alertData: alert,            // simpan seluruh data alert asli
-  };
-
-  // Jika ada txnData spesifik dari detail alert, map field-nya
-  if (txnData) {
-    return { ...base, ...txnData };
-  }
-
-  // Estimasi field minimal dari data alert yang ada
-  if (service === "agenusa") {
-    return {
-      ...base,
-      ACCOUNT_NUMBER: alert.user_account || "—",
-      DEST_ACCOUNT_NUMBER: "—",
-      TIMESTAMP_DB: alert.created_at,
-      AMOUNT: 0,
-      PROCESSING_CODE: 10000,
-      RESPONSE_CODE: 0,
-      accountId: alert.user_account || "—",
-      amount: 0,
-      amountNote: null,
-      destOrBill: "—",
-      typeOrChannel: "Transfer",
-    };
-  } else {
-    return {
-      ...base,
-      CUSTOMER_ID: alert.user_account || "—",
-      BILL_ID: "—",
-      BILL_AMOUNT: 0,
-      PAYMENT_AMOUNT: 0,
-      CHANNEL: "—",
-      REFUND_FLAG: 0,
-      accountId: alert.user_account || "—",
-      amount: 0,
-      amountNote: null,
-      destOrBill: "—",
-      typeOrChannel: "—",
-    };
-  }
-};
-
-/**
- * Ubah list alert dari open-queue menjadi list transaksi frontend.
- * @param {Array} alerts
- * @returns {Array} transaksi siap render
- */
-export const mapAlertsToTransactions = (alerts = []) => {
-  return alerts.map((a) => mapAlertToTransaction(a));
-};
-
-// ─── Review History transform ─────────────────────────────────────
-
-/**
- * Transform item dari /reviews/history ke format yang dipakai ReviewHistory.js
  * @param {object} item - ReviewHistoryItem dari backend
- * @returns {object}
+ * @param {number}  item.id
+ * @param {number}  item.transaction_id
+ * @param {number|null} item.alert_id
+ * @param {string}  item.decision         - "SAFE" | "FRAUD"
+ * @param {string|null} item.review_note
+ * @param {string|null} item.previous_status
+ * @param {string}  item.final_status
+ * @param {number|null} item.reviewed_by
+ * @param {string}  item.created_at       - ISO datetime string
+ * @returns {object} mapped history item
  */
 export const mapHistoryItem = (item) => ({
   id: item.id,
   transactionId: String(item.transaction_id),
-  alertId: item.alert_id,
-  action: toFrontendStatus(item.decision), // "approved" | "rejected"
-  decision: item.decision,                  // "SAFE" | "FRAUD"
-  notes: item.review_note || "",
-  previousStatus: item.previous_status,
+  alertId: item.alert_id ?? null,
+  decision: item.decision, // "SAFE" | "FRAUD" — tampilkan apa adanya
+  reviewNote: item.review_note || null,
+  previousStatus: item.previous_status || null,
   finalStatus: item.final_status,
-  reviewedBy: item.reviewed_by,
-  timestamp: item.created_at,
-  // field opsional yang mungkin tidak ada tergantung backend response
-  reviewer: item.analyst_name || "—",
-  reviewerRole: item.analyst_role || "Analyst",
+  reviewedBy: item.reviewed_by ?? null,
+  createdAt: item.created_at,
 });
 
-export default {
-  fetchOpenQueue,
+/**
+ * Transform list items dari /reviews/history.
+ *
+ * @param {Array} items
+ * @returns {Array}
+ */
+export const mapHistoryItems = (items = []) => items.map(mapHistoryItem);
+
+// ─── Alert Transformer (untuk My Queue) ──────────────────────────
+
+/**
+ * Transform objek alert dari /alerts/my-queue ke format yang dipakai
+ * halaman Manual Review. Hanya memetakan field yang tersedia di BE.
+ *
+ * Alert fields dari BE: id, transaction_id, alert_type, severity, priority,
+ * priority_label, title, message, status, created_at, type, service
+ *
+ * @param {object} alert - alert object dari /alerts/my-queue
+ * @returns {object} mapped alert for Manual Review page
+ */
+export const mapMyQueueAlert = (alert) => ({
+  alertId: alert.id,
+  transactionId: alert.transaction_id,
+  title: alert.title || "Untitled Alert",
+  message: alert.message || "",
+  severity: alert.severity,
+  priorityLabel: alert.priority_label,
+  priority: alert.priority ?? 0,
+  status: alert.status,
+  alertType: alert.type || alert.alert_type || "—",
+  service: alert.service || "—",
+  createdAt: alert.created_at,
+});
+
+/**
+ * Transform list alerts dari /alerts/my-queue.
+ *
+ * @param {Array} alerts
+ * @returns {Array}
+ */
+export const mapMyQueueAlerts = (alerts = []) => alerts.map(mapMyQueueAlert);
+
+// ─── Exports ──────────────────────────────────────────────────────
+
+const reviewApiService = {
+  // Alert queue
   fetchMyQueue,
   fetchAlertDetail,
   claimAlert,
   releaseAlert,
   updateAlertStatus,
+
+  // Reviews
   submitReview,
-  claimAndSubmitReview,
   fetchReviewHistory,
   fetchReviewMetrics,
   fetchAnalystPerformance,
   fetchTimelineAnalytics,
   overrideReview,
   reportFalseNegative,
-  mapAlertToTransaction,
-  mapAlertsToTransactions,
+
+  // Transformers
   mapHistoryItem,
-  toBackendDecision,
-  toFrontendStatus,
-  resolveConfidence,
+  mapHistoryItems,
+  mapMyQueueAlert,
+  mapMyQueueAlerts,
 };
+
+export default reviewApiService;

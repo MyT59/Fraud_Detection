@@ -43,12 +43,36 @@ def get_priority_label(priority: float) -> str:
     elif priority >= 50: return "MEDIUM"
     return "LOW"
 
+def get_safe_alert_type(alert):
+    """Fungsi penyelamat: Membaca ulang tipe jika di DB terlanjur tersimpan UNKNOWN"""
+    atype = getattr(alert, "alert_type", "UNKNOWN")
+    if atype == "UNKNOWN" and alert.transaction:
+        reason = alert.transaction.violation_reason or ""
+        if "COMBINED_ML" in reason: return "COMBINED_ML"
+        if "RULE_ML" in reason: return "RULE_ML"
+        if "PATTERN_ML" in reason: return "PATTERN_ML"
+        if "BLACKLIST:" in reason: return "BLACKLIST"
+        if "RULE:" in reason: return "RULE"
+        if "PATTERN:" in reason: return "PATTERN"
+        if "ML:" in reason: return "ML"
+    return atype
 
 def format_title(alert):
-    if getattr(alert, "alert_type", None) == "RULE": return "Rule Engine Triggered"
-    elif getattr(alert, "alert_type", None) == "PATTERN": return "Fraud Detected"
-    elif getattr(alert, "alert_type", None) == "COMBINED": return "Fraud & Rule Triggered"
-    return alert.title or "Alert"
+    """Menentukan judul dinamis di Frontend"""
+    atype = get_safe_alert_type(alert)
+    
+    if atype == "RULE": return "Rule Engine Triggered"
+    elif atype == "PATTERN": return "Pattern Engine Triggered"
+    elif atype == "ML": return "ML Anomaly Detected"
+    elif atype == "COMBINED": return "Fraud & Rule Triggered"
+    elif atype == "BLACKLIST": return "Blacklist Hit Detected"
+    
+    # 🚀 TAMBAHAN BARU UNTUK KOMBINASI ML ENGINE
+    elif atype == "COMBINED_ML": return "Fraud & ML Anomaly Detected"
+    elif atype == "RULE_ML": return "Rule + ML Anomaly Detected"
+    elif atype == "PATTERN_ML": return "Pattern + ML Anomaly Detected"
+    
+    return alert.title or "System Alert"
 
 
 def format_trx_id(alert):
@@ -87,12 +111,35 @@ def create_alert(
 
     def determine_alert_type(trx):
         reason = trx.violation_reason or ""
+
         has_rule = "RULE:" in reason
         has_pattern = "PATTERN:" in reason
-        if has_rule and has_pattern: return "COMBINED"
-        elif has_rule: return "RULE"
-        elif has_pattern: return "PATTERN"
-        return "UNKNOWN"
+        has_blacklist = "BLACKLIST:" in reason
+
+        # ML Runtime
+        if getattr(trx, "is_flagged_ml", False):
+            if has_rule and has_pattern:
+                return "COMBINED_ML"
+
+            elif has_rule:
+                return "RULE_ML"
+
+            elif has_pattern:
+                return "PATTERN_ML"
+
+            return "ML"
+
+        if has_rule and has_pattern:
+            return "COMBINED"
+        elif has_blacklist:
+            return "BLACKLIST"
+        elif has_rule:
+            return "RULE"
+        elif has_pattern:
+            return "PATTERN"
+            
+
+        return "SYSTEM"
     
     def format_message(reason: str):
         if not reason: return "No suspicious activity detected"
@@ -103,12 +150,25 @@ def create_alert(
             elif p.startswith("PATTERN:"): readable.append(p.replace("PATTERN:", "Pattern Detected: "))
         return "User triggered suspicious behaviors:\n- " + "\n- ".join(readable)
 
+    alert_type = determine_alert_type(trx)
+
+    title_mapping = {
+        "RULE": "Rule Engine Triggered",
+        "PATTERN": "Pattern Engine Triggered",
+        "ML": "ML Anomaly Detected",
+        "COMBINED": "Fraud & Rule Triggered",
+        "BLACKLIST": "Blacklist Hit Detected",
+        "COMBINED_ML": "Fraud & ML Anomaly Detected",
+        "RULE_ML": "Rule + ML Anomaly Detected",
+        "PATTERN_ML": "Pattern + ML Anomaly Detected",
+    }
+
     alert = FraudAlert(
         transaction_id=trx.id,
-        alert_type=determine_alert_type(trx),
+        alert_type=alert_type,
         severity=trx.risk_level,
         priority=(trx.risk_score or 0) + (10 if trx.final_status == "FRAUD" else 0),
-        title="Fraud Detected",
+        title=title_mapping.get(alert_type, "System Alert"),
         message=format_message(trx.violation_reason),
         status="OPEN"
     )
@@ -163,12 +223,16 @@ def create_alert(
     )
 
 
-def get_all_alerts(db, status: str = None, severity: str = None, service: str = None, priority: str = None, page: int = 1, limit: int = 10):
+def get_all_alerts(db, status: str = None, severity: str = None, service: str = None, priority: str = None, page: int = 1, limit: int = 10, alert_type: str = None):
     alert_repo = AlertRepository(db)
     query = alert_repo.get_query().options(joinedload(FraudAlert.transaction)).join(Transaction)
 
     if status: query = query.filter(FraudAlert.status == status.upper())
     if severity: query = query.filter(FraudAlert.severity == severity.upper())
+    
+    # 🚀 LOGIKA FILTER BARU UNTUK TIPE ALERT
+    if alert_type: query = query.filter(FraudAlert.alert_type == alert_type.upper())
+    
     if service: query = query.filter(Transaction.service_source == service.upper())
     if priority:
         label = priority.upper()
@@ -178,7 +242,8 @@ def get_all_alerts(db, status: str = None, severity: str = None, service: str = 
         elif label == "LOW": query = query.filter(FraudAlert.priority < 50)
 
     total = query.count()
-    alerts = query.order_by(FraudAlert.priority.desc()).offset((page - 1) * limit).limit(limit).all()
+    # Lanjutannya biarkan sama seperti aslinya...
+    alerts = query.order_by(FraudAlert.priority.desc(), FraudAlert.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
 
     return {
         "page": page,
@@ -217,47 +282,114 @@ def get_alert_metrics_service(db):
     }
 
 
-def get_alert_detail_service(db, alert_id):
-    alert = db.query(FraudAlert).options(joinedload(FraudAlert.transaction)).filter(FraudAlert.id == alert_id).first()
-    if not alert: raise HTTPException(status_code=404, detail="Alert not found")
+def get_alert_detail_service(db, alert_id: int):
+    alert_repo = AlertRepository(db)
+    a = alert_repo.get_by_id(alert_id)
+    if not a:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Alert tidak ditemukan")
+    
+    # 🚀 Ekstrak data ML secara aman dari transaction.score_breakdown
+    ml_score = None
+    is_anomaly = getattr(a.transaction, "is_flagged_ml", False) if a.transaction else False
+    ml_patterns = []
+
+    if a.transaction and a.transaction.score_breakdown:
+        breakdown = a.transaction.score_breakdown or {}
+        ml_score = breakdown.get("ml_score")
+        ml_patterns = breakdown.get("patterns", [])
+
+    txn_data = None
+    if a.transaction:
+        txn_data = {
+            "original_trx_id": a.transaction.original_trx_id,
+            "service_source": a.transaction.service_source,
+            "amount": float(a.transaction.amount) if a.transaction.amount else 0,
+            "account_number": getattr(a.transaction, "account_number", "-"),
+            "merchant_id": getattr(a.transaction, "merchant_id", "-"),
+            "ip_address": getattr(a.transaction, "ip_address", "-"),
+            "risk_score": getattr(a.transaction, "risk_score", 0),
+            "violation_reason": getattr(a.transaction, "violation_reason", "-")
+        }
+
     return {
-        "id": alert.id, "transaction_id": alert.transaction_id, "severity": alert.severity, "status": alert.status,
-        "title": alert.title, "message": alert.message, "created_at": alert.created_at, "resolved_at": alert.resolved_at, "resolved_by": alert.resolved_by,
+        "id": a.id,
+        "transaction_id": a.transaction_id,
+        "type": getattr(a, "alert_type", "system").upper(),
+        "severity": a.severity.upper() if a.severity else "LOW",
+        "priority": a.priority or 0,
+        "status": a.status.upper() if a.status else "OPEN",
+        "title": format_title(a), # 🚀 Ambil title dinamis agar konsisten di log & detail
+        "message": a.message,
+        "created_at": a.created_at,
+        "claimed_at": a.claimed_at,
+        "resolved_at": a.resolved_at,
+        "resolved_by": a.resolved_by, 
+        
+        # 🚀 Suntikkan top-level ML properties
+        "ml_score": ml_score,
+        "is_anomaly": is_anomaly,
+        "ml_patterns": ml_patterns,
+        
+        "transaction": txn_data
     }
 
 
-def update_alert_status_service(db, alert_id, status, user_id, background_tasks: BackgroundTasks):
-    alert = db.query(FraudAlert).filter(FraudAlert.id == alert_id).first()
-    if not alert: raise HTTPException(status_code=404, detail="Alert not found")
+def update_alert_status_service(db, alert_id: int, status: str, user_id: int, background_tasks: BackgroundTasks):
+    alert_repo = AlertRepository(db)
+    alert = alert_repo.get_by_id(alert_id)
+    
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert tidak ditemukan")
 
     target_status = status.upper()
-    allowed_statuses = ["OPEN", "IN_PROGRESS", "RESOLVED"]
-    if target_status not in allowed_statuses:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {allowed_statuses}")
 
-    valid_transition = {"OPEN": ["IN_PROGRESS", "RESOLVED"], "IN_PROGRESS": ["RESOLVED"], "RESOLVED": []}
-    if target_status not in valid_transition.get(alert.status, []):
-        raise HTTPException(status_code=400, detail=f"Invalid status transition from {alert.status} to {target_status}")
+    # 🚀 PROTEKSI 1: Analis Biasa WAJIB Claim Dulu
+    # Jika alert masih OPEN dan mau di-RESOLVED...
+    if alert.status == "OPEN" and target_status == "RESOLVED":
+        # Cek role user di database (opsional, tapi disarankan)
+        admin_repo = AdminRepository(db)
+        user = admin_repo.get_by_id(user_id)
+        
+        # Asumsikan Role ID 1 adalah Super Admin, Role ID 2 adalah Risk Manager
+        # Jika bukan Manager/Admin (misal Role 3: Fraud Analyst), TOLAK!
+        if user and user.role_id not in [1, 2]: 
+            raise HTTPException(
+                status_code=403, 
+                detail="Akses Ditolak: Anda harus melakukan 'Claim' terlebih dahulu sebelum dapat menutup kasus ini."
+            )
 
-    if target_status == "IN_PROGRESS":
-         raise HTTPException(status_code=400, detail="Use the dedicated /claim endpoint to set alert to IN_PROGRESS")
+    # 🚀 PROTEKSI 2: Hanya pemilik kasus yang boleh Resolve
+    if target_status == "RESOLVED":
+        if alert.claimed_by is not None and alert.claimed_by != user_id:
+            # Jika user yang mau resolve bukan Super Admin/Risk Manager
+             admin_repo = AdminRepository(db)
+             user = admin_repo.get_by_id(user_id)
+             if user and user.role_id not in [1, 2]:
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Akses Ditolak: Kasus ini sedang dikerjakan oleh analis lain."
+                )
+        
+        alert.resolved_by = user_id
+        alert.resolved_at = datetime.now(timezone.utc)
 
     alert.status = target_status
-    if target_status == "RESOLVED":
-        alert.resolved_at = func.now()
-        alert.resolved_by = int(user_id)
-
     db.commit()
     db.refresh(alert)
 
+    # Panggil log activity
     background_tasks.add_task(
-        safe_redis_publish, 
-        {"type": "ALERT_UPDATED", "alert_id": alert.id, "status": alert.status},
-        task_type="ALERT_STATUS_UPDATED"
+        log_activity,
+        db=db,
+        admin_id=user_id,
+        action=ActivityActionEnum.UPDATE,
+        target_type=TargetType.ALERT,
+        target_id=alert.id,
+        description=f"Mengubah status alert menjadi {target_status}"
     )
-    return {"message": "Alert status updated successfully", "alert_id": alert.id, 
-            "new_status": alert.status, "resolved_by": alert.resolved_by, 
-            "resolved_at": alert.resolved_at}
+
+    return {"message": f"Status alert {alert.id} berhasil diupdate menjadi {target_status}"}
 
 
 # ==========================================
@@ -329,33 +461,97 @@ def release_alert_service(db, alert_id, admin_id, user_role="FRAUD_ANALYST"):
     return {"message": "Alert successfully released", "alert_id": alert.id}
 
 
-def get_my_queue_service(db, user_id: int):
+def get_my_queue_service(db, user_id: int, page: int = 1, limit: int = 10):
     alert_repo = AlertRepository(db)
-    alerts = alert_repo.get_claimed_by_user(user_id)
-    return [
+    # Ambil semua data list dari repo
+    all_alerts = alert_repo.get_my_queue(user_id=user_id)
+    
+    # 🚀 HITUNG TOTAL DATA ASLI
+    total = len(all_alerts)
+    
+    # 🚀 LAKUKAN SLICING LIST BERDASARKAN PAGE & LIMIT
+    start_offset = (page - 1) * limit
+    end_offset = start_offset + limit
+    paginated_alerts = all_alerts[start_offset:end_offset]
+
+    items = [
         {
-            "id": a.id, "transaction_id": a.transaction_id, "severity": a.severity, "priority": a.priority or 0,
-            "priority_label": get_priority_label(a.priority or 0), "status": a.status, "title": format_title(a),
-            "description": a.message, "badge": format_badge(a.severity), "trx_id": format_trx_id(a),
-            "time": format_time(a.created_at), "claimed_at": format_time(a.claimed_at), "type": getattr(a, "alert_type", "UNKNOWN"),
+            "id": a.id, 
+            "transaction_id": a.transaction_id, 
+            "service": a.transaction.service_source if a.transaction else "UNKNOWN",
+            "severity": a.severity, 
+            "priority": a.priority or 0, 
+            "priority_label": get_priority_label(a.priority or 0), 
+            "status": a.status, 
+            "created_at": a.created_at, 
+            "title": format_title(a), 
+            "message": a.message, 
+            "badge": format_badge(a.severity), 
+            "trx_id": format_trx_id(a),
+            "type": getattr(a, "alert_type", "UNKNOWN") 
+        }
+        for a in paginated_alerts # Loop menggunakan data yang sudah dipaginasi
+    ]
+
+    # 🚀 RETURN SESUAI ARSITEKTUR STRUKTUR BARU
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
+
+
+def get_open_queue_service(db, priority_label: str = None, page: int = 1, limit: int = 50):
+    # 🚀 Tambahkan parameter page dan limit di parameter fungsi atas
+    
+    query = db.query(FraudAlert).filter(FraudAlert.status == "OPEN")
+    
+    if priority_label:
+        label = priority_label.upper()
+        if label == "CRITICAL": query = query.filter(FraudAlert.priority >= 90)
+        elif label == "HIGH": query = query.filter(FraudAlert.priority >= 75, FraudAlert.priority < 90)
+        elif label == "MEDIUM": query = query.filter(FraudAlert.priority >= 50, FraudAlert.priority < 75)
+        elif label == "LOW": query = query.filter(FraudAlert.priority < 50)
+
+    # 🚀 1. Hitung total antrean OPEN yang tersedia
+    total = query.count()
+    
+    # 🚀 2. Ambil chunk data sesuai halaman aktif analis
+    alerts = (
+        query
+        .order_by(FraudAlert.priority.desc(), FraudAlert.created_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+    
+    items = [
+        {
+            "id": a.id, 
+            "transaction_id": a.transaction_id, 
+            "service": a.transaction.service_source if a.transaction else "UNKNOWN",
+            "severity": a.severity, 
+            "priority": a.priority or 0, 
+            "priority_label": get_priority_label(a.priority or 0), 
+            "status": a.status, 
+            "created_at": a.created_at, 
+            "title": format_title(a), 
+            "message": a.message, 
+            "badge": format_badge(a.severity), 
+            "trx_id": format_trx_id(a),
+            "type": getattr(a, "alert_type", "UNKNOWN")
         }
         for a in alerts
     ]
 
-
-def get_open_queue_service(db, priority_label: str = None, limit: int = 50):
-    alert_repo = AlertRepository(db)
-    alerts = alert_repo.get_open_queue(priority_label=priority_label, limit=limit)
-    return [
-        {
-            "id": a.id, "transaction_id": a.transaction_id, "service": a.transaction.service_source if a.transaction else "UNKNOWN",
-            "severity": a.severity, "priority": a.priority or 0, "priority_label": get_priority_label(a.priority or 0), 
-            "status": a.status, "created_at": a.created_at, "title": format_title(a), "description": a.message,
-            "badge": format_badge(a.severity), "trx_id": format_trx_id(a), "time": format_time(a.created_at),
-            "type": getattr(a, "alert_type", "UNKNOWN"), "icon": "fraud" if a.severity in ["CRITICAL", "HIGH"] else "warning"
-        }
-        for a in alerts
-    ]
+    # 🚀 3. Return dengan struktur standar arsitektur baru
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
 
 
 def get_priority_distribution_service(db):
