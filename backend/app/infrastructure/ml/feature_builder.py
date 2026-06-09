@@ -96,7 +96,11 @@ def build_agenusa_features_from_snapshot(snapshot: dict) -> dict:
     """
     current_tx = snapshot.get("transaction", {})
     historical_context = snapshot.get("historical_context", {})
-    historical_txs = historical_context.get("recent_account_transactions", [])
+    # Ambil data mentahnya
+    raw_historical_txs = historical_context.get("recent_account_transactions", [])
+    # Saring transaksi saat ini agar tidak ikut terhitung (Fix Data Leakage)
+    current_tx_id = current_tx.get("id")
+    historical_txs = [tx for tx in raw_historical_txs if tx.get("id") != current_tx_id]
     
     features = {}
     
@@ -104,10 +108,12 @@ def build_agenusa_features_from_snapshot(snapshot: dict) -> dict:
     features["TIMESTAMP_DB"] = _parse_datetime(current_tx.get("transaction_time"))
     features["ACCOUNT_NUMBER"] = current_tx.get("account_number")
     features["TERMINAL_ID"] = current_tx.get("terminal_id")
+    features["MERCHANT_ID"] = current_tx.get("merchant_id")
     features["AMOUNT"] = float(current_tx.get("amount") or 0)
     features["RESPONSE_CODE"] = current_tx.get("response_code", "00")
     features["PROCESSING_CODE"] = current_tx.get("processing_code")
     features["DEST_ACCOUNT_NUMBER"] = current_tx.get("dest_account_number")
+    features["MTI"] = current_tx.get("mti","0200")
     
     # ===== TIME-BASED FEATURES =====
     if features["TIMESTAMP_DB"]:
@@ -200,7 +206,11 @@ def build_nusabill_features_from_snapshot(snapshot: dict) -> dict:
     """
     current_tx = snapshot.get("transaction", {})
     historical_context = snapshot.get("historical_context", {})
-    historical_txs = historical_context.get("recent_account_transactions", [])
+    # Ambil data mentahnya
+    raw_historical_txs = historical_context.get("recent_account_transactions", [])
+    # Saring transaksi saat ini agar tidak ikut terhitung (Fix Data Leakage)
+    current_tx_id = current_tx.get("id")
+    historical_txs = [tx for tx in raw_historical_txs if tx.get("id") != current_tx_id]
     
     features = {}
     
@@ -211,6 +221,18 @@ def build_nusabill_features_from_snapshot(snapshot: dict) -> dict:
     features["PAYMENT_AMOUNT"] = float(current_tx.get("payment_amount") or 0)
     features["BILL_AMOUNT"] = float(current_tx.get("bill_amount") or 0)
     features["CHANNEL"] = current_tx.get("channel", "API")
+    raw_status = str(
+        current_tx.get("bill_status", "terbayar")
+    ).lower()
+
+    status_mapping = {
+        "terbayar": "Paid",
+        "paid": "Paid",
+        "belum_bayar": "Unpaid",
+        "unpaid": "Unpaid",
+    }
+
+    features["BILL_STATUS"] = status_mapping.get(raw_status,"Paid")
     
     # ===== PAYMENT TIMING FEATURES =====
     if features["BILL_DATE"] and features["PAYMENT_DATE"]:
@@ -397,7 +419,14 @@ def build_nusabill_features(df: pd.DataFrame) -> pd.DataFrame:
     data["BILL_DATE"] = pd.to_datetime(data["BILL_DATE"], errors="coerce")
     data["PAYMENT_DATE"] = pd.to_datetime(data["PAYMENT_DATE"], errors="coerce")
     data = data.sort_values(["CUSTOMER_ID", "PAYMENT_DATE"]).reset_index(drop=True)
-
+    status_mapping = {
+        "terbayar": "Paid",
+        "paid": "Paid",
+        "belum_bayar": "Unpaid",
+        "unpaid": "Unpaid",
+    }
+    raw_status = data["bill_status"].fillna("terbayar").astype(str).str.lower()
+    data["BILL_STATUS"] = raw_status.map(status_mapping).fillna("Paid")
     data["PAYMENT_DELAY_DAYS"] = (
         (data["PAYMENT_DATE"] - data["BILL_DATE"]).dt.total_seconds() / 86400.0
     ).fillna(0.0)
@@ -511,20 +540,25 @@ def build_features_from_snapshot(domain: str, snapshot: dict) -> dict[str, Any]:
 def build_features(domain: str, df: pd.DataFrame) -> pd.DataFrame:
     """
     Legacy function: Build fraud detection features from Pandas DataFrame.
-    
-    DEPRECATED: Use build_features_from_snapshot() for new implementations.
-    This function is maintained for backward compatibility with batch processing.
-    
-    Args:
-        domain: "agenusa" or "nusabill"
-        df: Pandas DataFrame with transaction records
-    
-    Returns:
-        DataFrame with calculated features for all rows
+    Sering digunakan oleh retrain_service.py untuk memproses data batch (CSV + DB).
     """
+    df = df.copy()
+    # 1. Paksa lowercase di awal agar alias kolom dari berbagai source seragam
+    df.columns = df.columns.str.lower()
+
     if domain == "agenusa":
-        return build_agenusa_features(df)
+        processed_df = build_agenusa_features(df)
     elif domain == "nusabill":
-        return build_nusabill_features(df)
+        processed_df = build_nusabill_features(df)
     else:
         raise ValueError(f"Domain tidak dikenal: {domain}")
+
+    # 🔥 FIX AKURASI: Paksa seluruh kolom hasil akhir menjadi UPPERCASE
+    processed_df.columns = processed_df.columns.str.upper()
+    
+    # 👇 ====== TAMBAHKAN BARIS INI ====== 👇
+    # Hapus duplikat kolom akibat bentrokan huruf besar/kecil dari proses di atas
+    processed_df = processed_df.loc[:, ~processed_df.columns.duplicated()]
+    # 👆 ================================= 👆
+    
+    return processed_df

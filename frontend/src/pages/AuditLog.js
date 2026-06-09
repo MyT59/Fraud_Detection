@@ -1,176 +1,134 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import ActivityStats from "../components/auditlog/ActivityStats";
 import ActivityFilters from "../components/auditlog/ActivityFilters";
 import ActivityFeed from "../components/auditlog/ActivityFeed";
 import "./AuditLog.css";
 import PageLoader from "../components/common/PageLoader";
+import activityLogService, {
+  AUDIT_LOG_ACTIONS,
+} from "../services/activityLogService";
 
-const SEED_LOGS = [
+// Mapping action_type BE → type display FE
+const ACTION_TYPE_MAP = {
+  ACCOUNT_CREATED: "create",
+  ACCOUNT_ROLE_CHANGED: "edit",
+  ACCOUNT_SUSPENDED: "suspend",
+};
+
+// Konversi log BE ke format feed
+const toFeedItem = (log) => {
+  const type = ACTION_TYPE_MAP[log.action_type] || "edit";
+  const details = log.details || {};
+
+  // Nama target — prioritas: details.email, details.full_name, target_id
+  const targetName = details.email || details.full_name || log.target_id || "—";
+
+  let desc = "";
+  if (typeof details === "string") {
+    desc = details;
+  } else if (type === "create") {
+    desc = `Membuat akun baru untuk ${targetName}${details.department ? ` — Departemen: ${details.department}` : ""}`;
+  } else if (type === "edit") {
+    const before = details.before || {};
+    const after = details.after || {};
+    const changes = Object.keys(after)
+      .filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
+      .map((k) => `${k}: ${before[k] ?? "—"} → ${after[k]}`)
+      .join(", ");
+    desc = `Memperbarui akun ${targetName}${changes ? `: ${changes}` : ""}`;
+  } else if (type === "suspend") {
+    const isActive = details.target_status_active;
+    if (isActive === true) desc = `Mengaktifkan kembali akun ${targetName}`;
+    else if (isActive === false) desc = `Men-suspend akun ${targetName}`;
+    else desc = details.reason || `Akun ${targetName} diarsipkan`;
+  }
+
+  return {
+    id: log.id,
+    type,
+    action_type: log.action_type,
+    desc,
+    time: log.created_at
+      ? new Date(log.created_at).toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })
+      : "—",
+    created_at: log.created_at,
+    actor: log.admin_name || "System",
+    actor_email: log.admin_email,
+    actor_display:
+      log.admin_name && log.admin_email
+        ? `${log.admin_name} (${log.admin_email})`
+        : log.admin_name || "System",
+  };
+};
+
+const FALLBACK_LOGS = [
   {
-    id: "seed-01",
+    id: "f-01",
     type: "create",
-    actor_name: "Super Admin",
-    target_name: "Hani Puspita",
-    target_role: "analyst",
-    detail:
-      "Membuat akun baru untuk Hani Puspita (Fraud Analyst) — Departemen: Risk Management",
-    time_label: "10 Feb 2024",
+    desc: "Membuat akun baru untuk Hani Puspita (Fraud Analyst) — Departemen: Risk Management",
+    time: "10 Feb 2024",
+    actor: "Super Admin",
   },
   {
-    id: "seed-02",
+    id: "f-02",
     type: "edit",
-    actor_name: "Super Admin",
-    target_name: "Rizky Pratama",
-    target_role: "admin",
-    detail: "Memperbarui akun Rizky Pratama: role: Fraud Analyst → Admin",
-    time_label: "08 Feb 2024",
+    desc: "Memperbarui akun Rizky Pratama: role: Fraud Analyst → Admin",
+    time: "08 Feb 2024",
+    actor: "Super Admin",
   },
   {
-    id: "seed-03",
+    id: "f-03",
     type: "suspend",
-    actor_name: "Super Admin",
-    target_name: "Lina Kusuma",
-    target_role: "analyst",
-    detail: "Men-suspend akun Lina Kusuma (Fraud Analyst)",
-    time_label: "05 Feb 2024",
+    desc: "Men-suspend akun Lina Kusuma (Fraud Analyst)",
+    time: "05 Feb 2024",
+    actor: "Super Admin",
   },
   {
-    id: "seed-04",
+    id: "f-04",
     type: "create",
-    actor_name: "Super Admin",
-    target_name: "Dian Permata",
-    target_role: "analyst",
-    detail:
-      "Membuat akun baru untuk Dian Permata (Fraud Analyst) — Departemen: Risk Management",
-    time_label: "01 Feb 2024",
+    desc: "Membuat akun baru untuk Dian Permata (Fraud Analyst) — Departemen: Risk Management",
+    time: "01 Feb 2024",
+    actor: "Super Admin",
   },
   {
-    id: "seed-05",
+    id: "f-05",
     type: "edit",
-    actor_name: "Super Admin",
-    target_name: "Fajar Nugroho",
-    target_role: "analyst",
-    detail:
-      "Memperbarui akun Fajar Nugroho: departemen: Risk Management → Fraud Prevention",
-    time_label: "30 Jan 2024",
+    desc: "Memperbarui akun Fajar Nugroho: departemen: Risk Management → Fraud Prevention",
+    time: "30 Jan 2024",
+    actor: "Super Admin",
   },
   {
-    id: "seed-06",
-    type: "delete",
-    actor_name: "Super Admin",
-    target_name: "Toni Hidayat",
-    target_role: "analyst",
-    detail: "Menghapus akun Toni Hidayat (Fraud Analyst) — Risk Management",
-    time_label: "28 Jan 2024",
-  },
-  {
-    id: "seed-07",
-    type: "create",
-    actor_name: "Super Admin",
-    target_name: "Fajar Nugroho",
-    target_role: "analyst",
-    detail:
-      "Membuat akun baru untuk Fajar Nugroho (Fraud Analyst) — Departemen: Fraud Prevention",
-    time_label: "05 Feb 2024",
-  },
-  {
-    id: "seed-08",
-    type: "edit",
-    actor_name: "Super Admin",
-    target_name: "Budi Santoso",
-    target_role: "analyst",
-    detail: "Memperbarui akun Budi Santoso: email diperbarui",
-    time_label: "25 Jan 2024",
-  },
-  {
-    id: "seed-09",
+    id: "f-06",
     type: "suspend",
-    actor_name: "Super Admin",
-    target_name: "Maya Indah",
-    target_role: "analyst",
-    detail: "Men-suspend akun Maya Indah (Fraud Analyst) sementara",
-    time_label: "22 Jan 2024",
-  },
-  {
-    id: "seed-10",
-    type: "create",
-    actor_name: "Super Admin",
-    target_name: "Irwan Setiawan",
-    target_role: "superadmin",
-    detail:
-      "Membuat akun baru untuk Irwan Setiawan (Super Admin) — Departemen: Risk Management",
-    time_label: "15 Feb 2024",
-  },
-  {
-    id: "seed-11",
-    type: "suspend",
-    actor_name: "Super Admin",
-    target_name: "Maya Indah",
-    target_role: "analyst",
-    detail: "Mengaktifkan kembali akun Maya Indah (Fraud Analyst)",
-    time_label: "20 Jan 2024",
-  },
-  {
-    id: "seed-12",
-    type: "delete",
-    actor_name: "Super Admin",
-    target_name: "Ahmad Kurniawan",
-    target_role: "analyst",
-    detail: "Menghapus akun Ahmad Kurniawan (Fraud Analyst) — Compliance",
-    time_label: "18 Jan 2024",
+    desc: "Menghapus akun Toni Hidayat (Fraud Analyst) — Risk Management",
+    time: "28 Jan 2024",
+    actor: "Super Admin",
   },
 ];
 
-const toFeedItem = (log) => ({
-  id: log.id,
-  type: log.type,
-  desc: log.detail,
-  time: log.time_label || log.timestamp?.slice(0, 10) || "—",
-  timestamp: log.timestamp || "",
-  actor: log.actor_name,
-});
-
-const TYPE_LABEL = {
-  create: "Dibuat",
-  edit: "Diedit",
-  suspend: "Disuspend",
-  delete: "Dihapus",
-};
-
-const parseLogDate = (timeStr) => {
-  if (!timeStr || timeStr === "—") return null;
-  const d = new Date(timeStr);
-  return isNaN(d.getTime()) ? null : d;
-};
-
-const inputToDate = (val) => {
-  if (!val) return null;
-  const [y, m, d] = val.split("-").map(Number);
-  return new Date(y, m - 1, d);
-};
-
-const toInputVal = (date) => (date ? date.toISOString().slice(0, 10) : "");
+// Export helpers
+const TYPE_LABEL = { create: "Dibuat", edit: "Diedit", suspend: "Disuspend" };
 
 const exportCSV = (logs, dateFrom, dateTo) => {
-  const suffix = dateFrom && dateTo ? `_${dateFrom}_${dateTo}` : "";
-  const headers = ["No", "Tipe", "Waktu", "Deskripsi", "Aktor"];
-  const rows = logs.map((log, i) => [
-    i + 1,
-    TYPE_LABEL[log.type] || log.type,
-    log.time,
-    log.desc,
-    log.actor || "-",
-  ]);
-  const csv = [headers, ...rows]
-    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `audit-log${suffix}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  activityLogService.exportToCSV(
+    logs.map((l) => ({
+      id: l.id,
+      action_type: l.action_type || l.type,
+      created_at: l.created_at,
+      module_source: "AUTH",
+      severity: "INFO",
+      admin_name: l.actor_display || l.actor,
+      admin_email: l.actor_email,
+      target_type: "ADMIN",
+      target_id: null,
+      details: l.desc,
+    })),
+    `audit-log${dateFrom && dateTo ? `_${dateFrom}_${dateTo}` : ""}`,
+  );
 };
 
 const exportExcel = async (logs, dateFrom, dateTo) => {
@@ -181,7 +139,7 @@ const exportExcel = async (logs, dateFrom, dateTo) => {
     Tipe: TYPE_LABEL[log.type] || log.type,
     Waktu: log.time,
     Deskripsi: log.desc,
-    Aktor: log.actor || "-",
+    Aktor: log.actor_display || log.actor || "-",
   }));
   const ws = XLSX.utils.json_to_sheet(data);
   ws["!cols"] = [
@@ -201,7 +159,6 @@ const exportPDF = async (logs, dateFrom, dateTo) => {
   const { default: jsPDF } = await import("jspdf");
   const { default: autoTable } = await import("jspdf-autotable");
   const doc = new jsPDF({ orientation: "landscape" });
-
   doc.setFontSize(16);
   doc.setFont(undefined, "bold");
   doc.text("Audit Log", 14, 16);
@@ -211,16 +168,11 @@ const exportPDF = async (logs, dateFrom, dateTo) => {
   const rangeText =
     dateFrom && dateTo ? `Periode: ${dateFrom} s/d ${dateTo} — ` : "";
   doc.text(
-    `${rangeText}Diekspor: ${new Date().toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    })} — ${logs.length} entri`,
+    `${rangeText}Diekspor: ${new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })} — ${logs.length} entri`,
     14,
     23,
   );
   doc.setTextColor(0);
-
   autoTable(doc, {
     startY: 29,
     head: [["No", "Tipe", "Waktu", "Deskripsi", "Aktor"]],
@@ -229,7 +181,7 @@ const exportPDF = async (logs, dateFrom, dateTo) => {
       TYPE_LABEL[log.type] || log.type,
       log.time,
       log.desc,
-      log.actor || "-",
+      log.actor_display || log.actor || "-",
     ]),
     styles: { fontSize: 8, cellPadding: 4 },
     headStyles: { fillColor: [220, 38, 38], fontStyle: "bold", fontSize: 8 },
@@ -256,120 +208,102 @@ const FORMAT_OPTIONS = [
   {
     id: "excel",
     label: "Excel (.xlsx)",
-    desc: "Format Microsoft Excel dengan kolom terformat",
+    desc: "Format Microsoft Excel",
     icon: "bi-filetype-xlsx",
     cls: "al-fmt-excel",
   },
   {
     id: "pdf",
     label: "PDF",
-    desc: "Siap cetak, layout landscape",
+    desc: "Siap cetak",
     icon: "bi-filetype-pdf",
     cls: "al-fmt-pdf",
   },
 ];
 
-const PRESETS = [
-  { label: "7 Hari Terakhir", days: 7 },
-  { label: "30 Hari Terakhir", days: 30 },
-  { label: "90 Hari Terakhir", days: 90 },
-  { label: "Semua Data", days: null },
-];
-
-const ExportModal = ({ onClose, allLogs }) => {
-  const today = new Date();
-  const thirtyDaysAgo = new Date(today);
-  thirtyDaysAgo.setDate(today.getDate() - 30);
-
-  const [dateFrom, setDateFrom] = useState(toInputVal(thirtyDaysAgo));
-  const [dateTo, setDateTo] = useState(toInputVal(today));
+// ---- Export Modal (tidak berubah dari versi lama) ----
+const ExportModal = ({ allLogs, onClose }) => {
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [activePreset, setActivePreset] = useState(null);
   const [formats, setFormats] = useState({
-    csv: false,
+    csv: true,
     excel: false,
     pdf: false,
   });
   const [exporting, setExporting] = useState(false);
-  const [activePreset, setActivePreset] = useState("30 Hari Terakhir");
-
-  const toggleFormat = (id) =>
-    setFormats((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const applyPreset = (preset) => {
-    setActivePreset(preset.label);
-    if (preset.days === null) {
-      setDateFrom("");
-      setDateTo("");
-    } else {
-      const from = new Date(today);
-      from.setDate(today.getDate() - preset.days);
-      setDateFrom(toInputVal(from));
-      setDateTo(toInputVal(today));
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const fmt = (d) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    let from = "",
+      to = fmt(now);
+    if (preset === "today") {
+      from = to;
+    } else if (preset === "week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 6);
+      from = fmt(d);
+    } else if (preset === "month") {
+      from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+    } else if (preset === "year") {
+      from = `${now.getFullYear()}-01-01`;
     }
+    setDateFrom(from);
+    setDateTo(to);
+    setActivePreset(preset);
   };
 
-  const filteredByDate = useMemo(() => {
-    const from = inputToDate(dateFrom);
-    const to = inputToDate(dateTo);
-    if (!from && !to) return allLogs;
-    return allLogs.filter((log) => {
-      const d = parseLogDate(log.time);
-      if (!d) return true;
-      const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      if (from && dMid < from) return false;
-      if (to && dMid > to) return false;
-      return true;
-    });
-  }, [allLogs, dateFrom, dateTo]);
+  const filteredByDate = allLogs.filter((log) => {
+    if (!dateFrom && !dateTo) return true;
+    const d = log.created_at ? new Date(log.created_at) : null;
+    if (!d) return false;
+    if (dateFrom && d < new Date(dateFrom)) return false;
+    if (dateTo && d > new Date(dateTo + "T23:59:59")) return false;
+    return true;
+  });
 
-  const selectedFormats = Object.entries(formats)
-    .filter(([, v]) => v)
-    .map(([k]) => k);
-
-  const canExport = selectedFormats.length > 0 && filteredByDate.length > 0;
+  const toggleFormat = (id) => setFormats((f) => ({ ...f, [id]: !f[id] }));
+  const selectedFormats = Object.keys(formats).filter((k) => formats[k]);
+  const canExport = selectedFormats.length > 0;
 
   const handleExport = async () => {
-    if (!canExport) return;
     setExporting(true);
+    const from = dateFrom || null;
+    const to = dateTo || null;
     try {
-      for (const fmt of selectedFormats) {
-        if (fmt === "csv") exportCSV(filteredByDate, dateFrom, dateTo);
-        if (fmt === "excel")
-          await exportExcel(filteredByDate, dateFrom, dateTo);
-        if (fmt === "pdf") await exportPDF(filteredByDate, dateFrom, dateTo);
-      }
-      onClose();
-    } catch (err) {
-      console.error("Export error:", err);
-      alert(
-        "Gagal mengekspor. Pastikan package xlsx dan jspdf sudah terinstall.",
-      );
+      if (formats.csv) exportCSV(filteredByDate, from, to);
+      if (formats.excel) await exportExcel(filteredByDate, from, to);
+      if (formats.pdf) await exportPDF(filteredByDate, from, to);
     } finally {
       setExporting(false);
+      onClose();
     }
   };
 
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, []);
+  const PRESETS = [
+    { id: "today", label: "Hari Ini" },
+    { id: "week", label: "7 Hari Terakhir" },
+    { id: "month", label: "Bulan Ini" },
+    { id: "year", label: "Tahun Ini" },
+  ];
 
   return (
     <>
       <div className="al-modal-backdrop" onClick={onClose} />
-
       <div className="al-modal-wrap">
         <div className="al-modal">
           <div className="al-modal-header">
             <div className="al-modal-header-left">
-              <span className="al-modal-header-icon">
+              <div className="al-modal-header-icon">
                 <i className="bi bi-download"></i>
-              </span>
+              </div>
               <div>
-                <h3 className="al-modal-title">Export Log Aktivitas</h3>
+                <p className="al-modal-title">Export Audit Log</p>
                 <p className="al-modal-subtitle">
-                  Pilih rentang tanggal dan format file ekspor
+                  {allLogs.length} entri tersedia
                 </p>
               </div>
             </div>
@@ -381,25 +315,23 @@ const ExportModal = ({ onClose, allLogs }) => {
           <div className="al-modal-body">
             <div className="al-modal-section">
               <div className="al-section-label">
-                <i className="bi bi-calendar-range"></i>
-                Rentang Tanggal
+                <i className="bi bi-calendar-range"></i>Rentang Tanggal
+                <span className="al-section-hint">Opsional</span>
               </div>
-
               <div className="al-presets">
                 {PRESETS.map((p) => (
                   <button
-                    key={p.label}
-                    className={`al-preset-btn ${activePreset === p.label ? "al-preset-active" : ""}`}
-                    onClick={() => applyPreset(p)}
+                    key={p.id}
+                    className={`al-preset-btn ${activePreset === p.id ? "al-preset-active" : ""}`}
+                    onClick={() => applyPreset(p.id)}
                   >
                     {p.label}
                   </button>
                 ))}
               </div>
-
               <div className="al-date-row">
                 <div className="al-date-field">
-                  <label className="al-date-label">Dari Tanggal</label>
+                  <label className="al-date-label">Dari</label>
                   <div className="al-date-input-wrap">
                     <i className="bi bi-calendar3 al-date-ico"></i>
                     <input
@@ -414,13 +346,11 @@ const ExportModal = ({ onClose, allLogs }) => {
                     />
                   </div>
                 </div>
-
                 <div className="al-date-sep">
                   <i className="bi bi-arrow-right"></i>
                 </div>
-
                 <div className="al-date-field">
-                  <label className="al-date-label">Sampai Tanggal</label>
+                  <label className="al-date-label">Sampai</label>
                   <div className="al-date-input-wrap">
                     <i className="bi bi-calendar3 al-date-ico"></i>
                     <input
@@ -436,14 +366,13 @@ const ExportModal = ({ onClose, allLogs }) => {
                   </div>
                 </div>
               </div>
-
               <div
                 className={`al-date-preview ${filteredByDate.length === 0 ? "al-date-preview-empty" : ""}`}
               >
                 {filteredByDate.length === 0 ? (
                   <>
-                    <i className="bi bi-exclamation-circle"></i>
-                    Tidak ada entri dalam rentang tanggal ini
+                    <i className="bi bi-exclamation-circle"></i>Tidak ada entri
+                    dalam rentang tanggal ini
                   </>
                 ) : (
                   <>
@@ -459,13 +388,11 @@ const ExportModal = ({ onClose, allLogs }) => {
 
             <div className="al-modal-section al-modal-section-last">
               <div className="al-section-label">
-                <i className="bi bi-file-earmark-arrow-down"></i>
-                Format Export
+                <i className="bi bi-file-earmark-arrow-down"></i>Format Export
                 <span className="al-section-hint">
                   Bisa pilih lebih dari satu
                 </span>
               </div>
-
               <div className="al-format-grid">
                 {FORMAT_OPTIONS.map((fmt) => (
                   <button
@@ -488,7 +415,6 @@ const ExportModal = ({ onClose, allLogs }) => {
                   </button>
                 ))}
               </div>
-
               {selectedFormats.length > 0 && (
                 <div className="al-selected-hint">
                   <i className="bi bi-info-circle"></i>
@@ -518,8 +444,7 @@ const ExportModal = ({ onClose, allLogs }) => {
                 </>
               ) : (
                 <>
-                  <i className="bi bi-download"></i>
-                  Export
+                  <i className="bi bi-download"></i>Export
                   {selectedFormats.length > 0
                     ? ` (${selectedFormats.length} format)`
                     : ""}
@@ -533,50 +458,67 @@ const ExportModal = ({ onClose, allLogs }) => {
   );
 };
 
+const ACTION_TYPE_FILTER = {
+  create: ["ACCOUNT_CREATED"],
+  edit: ["ACCOUNT_ROLE_CHANGED"],
+  suspend: ["ACCOUNT_SUSPENDED"],
+};
+
+// ---- Main Page ----
 const AuditLog = () => {
   const [loading, setLoading] = useState(true);
-  const [apiLogs, setApiLogs] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [totalRecords, setTotalRecords] = useState(0);
   const [apiError, setApiError] = useState(false);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [showExportModal, setShowExportModal] = useState(false);
+  const debounceTimer = useRef(null);
 
-  const fetchLogs = useCallback(async () => {
-    try {
-      const res = await fetch("/audit-logs?page_size=100");
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setApiLogs(data.logs || []);
-      setApiError(false);
-    } catch {
-      setApiError(true);
-    }
-  }, []);
+  const fetchLogs = useCallback(
+    async (isRefresh = false) => {
+      if (isRefresh) setLoading(true);
+      try {
+        const params = {
+          page: 1,
+          limit: 200,
+          action_types:
+            typeFilter === "all"
+              ? AUDIT_LOG_ACTIONS
+              : ACTION_TYPE_FILTER[typeFilter] || AUDIT_LOG_ACTIONS,
+        };
+        if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+
+        const res = await activityLogService.getAuditLogs(params);
+        const items = (res.items || []).map(toFeedItem);
+        setLogs(items);
+        setTotalRecords(res.total || items.length);
+        setApiError(false);
+      } catch {
+        setApiError(true);
+        setLogs(FALLBACK_LOGS);
+        setTotalRecords(FALLBACK_LOGS.length);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [typeFilter, debouncedSearch],
+  );
 
   useEffect(() => {
-    fetchLogs().finally(() => setLoading(false));
+    fetchLogs();
   }, [fetchLogs]);
 
-  const allLogs = useMemo(() => {
-    const apiItems = apiLogs.map(toFeedItem);
-    const seedItems = SEED_LOGS.map(toFeedItem);
-    const apiIds = new Set(apiItems.map((l) => l.id));
-    return [...apiItems, ...seedItems.filter((l) => !apiIds.has(l.id))];
-  }, [apiLogs]);
-
-  const filtered = useMemo(() => {
-    return allLogs.filter((log) => {
-      const matchType = typeFilter === "all" || log.type === typeFilter;
-      const matchSearch =
-        !search ||
-        log.desc.toLowerCase().includes(search.toLowerCase()) ||
-        (log.actor || "").toLowerCase().includes(search.toLowerCase());
-      return matchType && matchSearch;
-    });
-  }, [allLogs, search, typeFilter]);
+  const handleSearch = (val) => {
+    setSearch(val);
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => setDebouncedSearch(val), 400);
+  };
 
   const handleReset = () => {
     setSearch("");
+    setDebouncedSearch("");
     setTypeFilter("all");
   };
 
@@ -601,17 +543,12 @@ const AuditLog = () => {
           <button
             className="al-export-btn"
             onClick={() => setShowExportModal(true)}
-            disabled={allLogs.length === 0}
+            disabled={logs.length === 0}
           >
-            <i className="bi bi-download"></i>
-            Export Log
+            <i className="bi bi-download"></i>Export Log
           </button>
-
           <button
-            onClick={() => {
-              setLoading(true);
-              fetchLogs().finally(() => setLoading(false));
-            }}
+            onClick={() => fetchLogs(true)}
             style={{
               display: "flex",
               alignItems: "center",
@@ -627,8 +564,7 @@ const AuditLog = () => {
               fontFamily: "inherit",
             }}
           >
-            <i className="bi bi-arrow-clockwise"></i>
-            Refresh
+            <i className="bi bi-arrow-clockwise"></i>Refresh
           </button>
         </div>
       </div>
@@ -653,11 +589,11 @@ const AuditLog = () => {
         </div>
       )}
 
-      <ActivityStats logs={allLogs} />
+      <ActivityStats logs={logs} />
 
       <ActivityFilters
         search={search}
-        onSearch={setSearch}
+        onSearch={handleSearch}
         typeFilter={typeFilter}
         onTypeFilter={setTypeFilter}
         onReset={handleReset}
@@ -668,17 +604,16 @@ const AuditLog = () => {
           <h2 className="al-card-title">
             <i className="bi bi-list-ul"></i>
             Log Aktivitas
-            <span className="al-count">({filtered.length} entri)</span>
+            <span className="al-count">
+              ({logs.length} dari {totalRecords.toLocaleString()} entri)
+            </span>
           </h2>
         </div>
-        <ActivityFeed logs={filtered} />
+        <ActivityFeed logs={logs} />
       </div>
 
       {showExportModal && (
-        <ExportModal
-          allLogs={allLogs}
-          onClose={() => setShowExportModal(false)}
-        />
+        <ExportModal allLogs={logs} onClose={() => setShowExportModal(false)} />
       )}
     </div>
   );

@@ -39,29 +39,21 @@ class AlertRepository:
             .options(joinedload(FraudAlert.transaction))\
             .filter(FraudAlert.status == "OPEN")
 
-        # =========================
-        # FILTERING PRIORITY LABEL
-        # =========================
         if priority_label:
-            label = priority_label.upper()
-            if label == "CRITICAL":
+            if priority_label.upper() == "CRITICAL":
                 query = query.filter(FraudAlert.priority >= 90)
-            elif label == "HIGH":
-                query = query.filter(FraudAlert.priority >= 75, FraudAlert.priority < 90)
-            elif label == "MEDIUM":
-                query = query.filter(FraudAlert.priority >= 50, FraudAlert.priority < 75)
-            elif label == "LOW":
+            elif priority_label.upper() == "HIGH":
+                query = query.filter(and_(FraudAlert.priority >= 75, FraudAlert.priority < 90))
+            elif priority_label.upper() == "MEDIUM":
+                query = query.filter(and_(FraudAlert.priority >= 50, FraudAlert.priority < 75))
+            elif priority_label.upper() == "LOW":
                 query = query.filter(FraudAlert.priority < 50)
 
-        return query.order_by(
-            FraudAlert.priority.desc(),
-            FraudAlert.created_at.asc()
-        ).limit(limit).all()
+        return query.order_by(FraudAlert.priority.desc(), FraudAlert.created_at.asc()).limit(limit).all()
 
-    def get_claimed_by_user(self, user_id: int):
+    def get_my_queue(self, user_id: int):
         """
-        Mengambil alert yang sedang diinvestigasi oleh user tertentu.
-        Diurutkan berdasarkan prioritas tertinggi (Priority Queue).
+        Mengambil antrean alert yang sedang dikerjakan (di-claim) oleh user_id.
         """
         return self.db.query(FraudAlert)\
             .options(joinedload(FraudAlert.transaction))\
@@ -85,20 +77,13 @@ class AlertRepository:
     
     def get_priority_distribution(self):
         """
-        Menghitung matriks distribusi jumlah alert yang masih OPEN berdasarkan level prioritasnya.
-        Kalkulasi dieksekusi langsung di level database engine untuk efisiensi tinggi.
+        Menghitung matriks distribusi jumlah alert yang masih OPEN.
+        Dilengkapi coalesce agar tidak crash saat database kosong (None -> 0).
         """
         data = self.db.query(
-            func.sum(case(((FraudAlert.priority >= 90), 1), else_=0)).label("critical"),
-            func.sum(case((and_(FraudAlert.priority >= 75, FraudAlert.priority < 90), 1), else_=0)).label("high"),
-            func.sum(case((and_(FraudAlert.priority >= 50, FraudAlert.priority < 75), 1), else_=0)).label("medium"),
-            func.sum(case(((FraudAlert.priority < 50), 1), else_=0)).label("low")
+            func.coalesce(func.sum(case(((FraudAlert.priority >= 90), 1), else_=0)), 0).label("critical"),
+            func.coalesce(func.sum(case((and_(FraudAlert.priority >= 75, FraudAlert.priority < 90), 1), else_=0)), 0).label("high"),
+            func.coalesce(func.sum(case((and_(FraudAlert.priority >= 50, FraudAlert.priority < 75), 1), else_=0)), 0).label("medium"),
+            func.coalesce(func.sum(case(((FraudAlert.priority < 50), 1), else_=0)), 0).label("low")
         ).filter(FraudAlert.status == "OPEN").first()
-
-        return {
-            "CRITICAL": int(data.critical or 0),
-            "HIGH": int(data.high or 0),
-            "MEDIUM": int(data.medium or 0),
-            "LOW": int(data.low or 0)
-        }
-    
+        return data

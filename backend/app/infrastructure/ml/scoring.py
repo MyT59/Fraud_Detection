@@ -64,14 +64,22 @@ def score_transaction_snapshot(
     meta = load_isolation_meta(domain)
 
     # ===== DETERMINE RISK LEVEL =====
+    # Isolation Forest decision_function() menghasilkan nilai di mana:
+    #   NEGATIF = anomali (semakin negatif = semakin mencurigakan)
+    #   POSITIF = normal
+    #
+    # Key threshold di meta JSON:
+    #   "high_risk_score_threshold": -0.0053  (score <= ini → HIGH_RISK)
+    #   "review_score_threshold"   :  0.0014  (score <= ini → REVIEW)
     score = prediction["score"]
     thresholds = meta.get("thresholds", {})
-    critical_threshold = thresholds.get("critical", 0.5)
-    warning_threshold = thresholds.get("warning", 0.3)
 
-    if score >= critical_threshold:
+    high_risk_threshold = thresholds.get("high_risk_score_threshold", -0.005)
+    review_threshold = thresholds.get("review_score_threshold", 0.001)
+
+    if score <= high_risk_threshold:
         risk_level = "critical"
-    elif score >= warning_threshold:
+    elif score <= review_threshold:
         risk_level = "warning"
     else:
         risk_level = "low"

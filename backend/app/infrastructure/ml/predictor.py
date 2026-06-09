@@ -1,3 +1,5 @@
+from pyexpat import model
+
 import pandas as pd
 from typing import Any, Optional
 from .feature_builder import (
@@ -76,6 +78,29 @@ class IsolationPredictor:
         # Ensure feature order matches model training
         required_features = config.get("feature_names", x.columns.tolist())
         x = x[required_features]
+
+        print("\n========== ML FEATURE DEBUG ==========")
+
+        if hasattr(model, "feature_names_in_"):
+            print("TRAINED FEATURES:")
+            print(list(model.feature_names_in_))
+
+            print("\nRUNTIME FEATURES:")
+            print(list(x.columns))
+
+            print("\nMISSING FROM RUNTIME:")
+            if hasattr(model, "feature_names_in_"):
+                print(
+                    set(model.feature_names_in_) - set(x.columns)
+                )
+
+            print("\nEXTRA IN RUNTIME:")
+            if hasattr(model, "feature_names_in_"):
+                print(
+                    set(x.columns) - set(model.feature_names_in_)
+                )
+
+            print("=====================================\n")
 
         # Get predictions
         score = float(model.decision_function(x)[0])

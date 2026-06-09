@@ -1,8 +1,11 @@
+from matplotlib.pylab import size
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 from datetime import datetime, timedelta, timezone
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
 from app.infrastructure.database.models.transaction_model import Transaction
+from app.infrastructure.database.enums import TransactionStatusEnum
 
 class TransactionRepository:
 
@@ -325,3 +328,237 @@ class TransactionRepository:
             })
 
         return result
+    
+    def get_transactions(
+        self,
+        search=None,
+        service_source=None,
+        final_status=None,
+        risk_level=None,
+        is_flagged_ml=None,
+        city=None,
+        country=None,
+        min_amount=None,
+        max_amount=None,
+        start_date=None,
+        end_date=None,
+        sort_by="transaction_time",
+        sort_order="desc",
+        page=1,
+        size=20,
+    ):
+        query = self.db.query(Transaction)
+
+        if search:
+            query = query.filter(
+                or_(
+                    Transaction.original_trx_id.ilike(f"%{search}%"),
+                    Transaction.user_account_id.ilike(f"%{search}%"),
+                    Transaction.account_number.ilike(f"%{search}%"),
+                    Transaction.merchant_id.ilike(f"%{search}%"),
+                    Transaction.ip_address.ilike(f"%{search}%"),
+                )
+            )
+
+        if service_source:
+            query = query.filter(
+                Transaction.service_source == service_source
+            )
+
+        if final_status:
+            query = query.filter(
+                Transaction.final_status == final_status
+            )
+
+        if risk_level:
+            query = query.filter(
+                Transaction.risk_level == risk_level
+            )
+
+        if is_flagged_ml is not None:
+            query = query.filter(
+                Transaction.is_flagged_ml == is_flagged_ml
+            )
+
+        if city:
+            query = query.filter(Transaction.city == city)
+
+        if country:
+            query = query.filter(Transaction.country == country)
+
+        if min_amount is not None:
+            query = query.filter(Transaction.amount >= min_amount)
+
+        if max_amount is not None:
+            query = query.filter(Transaction.amount <= max_amount)
+
+        if start_date:
+            query = query.filter(
+                Transaction.transaction_time >= start_date
+            )
+
+        if end_date:
+            query = query.filter(
+                Transaction.transaction_time <= end_date
+            )
+
+        total = query.count()
+
+        sort_column = getattr(
+            Transaction,
+            sort_by,
+            Transaction.transaction_time
+        )
+
+        if sort_order.lower() == "asc":
+            query = query.order_by(sort_column.asc())
+        else:
+            query = query.order_by(sort_column.desc())
+
+        items = (
+            query
+            .offset((page - 1) * size)
+            .limit(size)
+            .all()
+        )
+
+        return items, total
+    
+    def get_transactions(
+        self,
+        search=None,
+        service_source=None,
+        final_status=None,
+        risk_level=None,
+        is_flagged_ml=None,
+        city=None,
+        country=None,
+        min_amount=None,
+        max_amount=None,
+        start_date=None,
+        end_date=None,
+        sort_by="transaction_time",
+        sort_order="desc",
+        page=1,
+        size=20,
+    ):
+        query = self.db.query(Transaction)
+
+        if search:
+            query = query.filter(
+                or_(
+                    Transaction.original_trx_id.ilike(f"%{search}%"),
+                    Transaction.user_account_id.ilike(f"%{search}%"),
+                    Transaction.account_number.ilike(f"%{search}%"),
+                    Transaction.merchant_id.ilike(f"%{search}%"),
+                    Transaction.ip_address.ilike(f"%{search}%"),
+                )
+            )
+
+        if service_source:
+            query = query.filter(
+                Transaction.service_source == service_source
+            )
+
+        if final_status:
+            query = query.filter(
+                Transaction.final_status == final_status
+            )
+
+        if risk_level:
+            query = query.filter(
+                Transaction.risk_level == risk_level
+            )
+
+        if is_flagged_ml is not None:
+            query = query.filter(
+                Transaction.is_flagged_ml == is_flagged_ml
+            )
+
+        if city:
+            query = query.filter(Transaction.city == city)
+
+        if country:
+            query = query.filter(Transaction.country == country)
+
+        if min_amount is not None:
+            query = query.filter(Transaction.amount >= min_amount)
+
+        if max_amount is not None:
+            query = query.filter(Transaction.amount <= max_amount)
+
+        if start_date:
+            query = query.filter(
+                Transaction.transaction_time >= start_date
+            )
+
+        if end_date:
+            query = query.filter(
+                Transaction.transaction_time <= end_date
+            )
+
+        total = query.count()
+
+        sort_column = getattr(
+            Transaction,
+            sort_by,
+            Transaction.transaction_time
+        )
+
+        if sort_order.lower() == "asc":
+            query = query.order_by(sort_column.asc())
+        else:
+            query = query.order_by(sort_column.desc())
+
+        items = (
+            query
+            .offset((page - 1) * size)
+            .limit(size)
+            .all()
+        )
+
+        return items, total
+
+    def get_transaction_summary(self):
+        total = (
+            self.db.query(func.count(Transaction.id))
+            .scalar()
+            or 0
+        )
+
+        fraud = (
+            self.db.query(func.count(Transaction.id))
+            .filter(
+                Transaction.final_status ==
+                TransactionStatusEnum.FRAUD
+            )
+            .scalar()
+            or 0
+        )
+
+        under_review = (
+            self.db.query(func.count(Transaction.id))
+            .filter(
+                Transaction.final_status ==
+                TransactionStatusEnum.UNDER_REVIEW
+            )
+            .scalar()
+            or 0
+        )
+
+        safe = (
+            self.db.query(func.count(Transaction.id))
+            .filter(
+                Transaction.final_status ==
+                TransactionStatusEnum.SAFE
+            )
+            .scalar()
+            or 0
+        )
+
+        return {
+            "total_transactions": total,
+            "fraud": fraud,
+            "under_review": under_review,
+            "safe": safe,
+        }

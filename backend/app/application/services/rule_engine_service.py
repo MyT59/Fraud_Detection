@@ -74,16 +74,16 @@ def evaluate_json_rule(config, trx):
         val = float(trx_value)
         th = float(value)
 
-        if operator == ">":
+        if operator in (">", "gt"):
             return val > th
 
-        if operator == "<":
+        if operator in ("<", "lt"):
             return val < th
 
-        if operator == ">=":
+        if operator in (">=", "gte"):
             return val >= th
 
-        if operator == "<=":
+        if operator in ("<=", "lte"):
             return val <= th
 
     except (ValueError, TypeError):

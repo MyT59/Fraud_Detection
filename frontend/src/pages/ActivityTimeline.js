@@ -1,313 +1,267 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
-import { ALL_ACTIVITIES } from "../components/activity/activityData";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { FALLBACK_ACTIVITIES } from "../components/activity/activityData";
+import { ACTION_GROUPS } from "../services/activityLogService";
 import ActivityStatsBar from "../components/activity/ActivityStatsBar";
 import ActivityToolbar from "../components/activity/ActivityToolbar";
 import ActivityFeed from "../components/activity/ActivityFeed";
 import ActivitySidePanel from "../components/activity/ActivitySidePanel";
 import PageLoader from "../components/common/PageLoader";
+import activityLogService from "../services/activityLogService";
 import "./ActivityTimeline.css";
 
-const BASE_URL = process.env.REACT_APP_ML_API_URL || "http://localhost:8000";
-const PAGE_SIZE = 8;
+const PAGE_LIMIT = 30;
+const SEARCH_DEBOUNCE_MS = 400;
 
-const flattenActivity = (a) => ({
-  ID: a.id,
-  Title: a.title,
-  Type: a.type,
-  Description: a.description,
-  User: a.user,
-  Timestamp: a.timestamp || a.time,
-  ...Object.fromEntries(
-    Object.entries(a.details || {}).map(([k, v]) => [
-      k.replace(/([A-Z])/g, " $1").trim(),
-      v,
-    ]),
-  ),
-});
-
-const exportCSV = (activities, filename = "activity_log.csv") => {
-  if (!activities.length) return;
-  const rows = activities.map(flattenActivity);
-  const headers = [...new Set(rows.flatMap(Object.keys))];
-  const csvContent = [
-    headers.join(","),
-    ...rows.map((r) =>
-      headers
-        .map((h) => {
-          const val = r[h] ?? "";
-          return `"${String(val).replace(/"/g, '""')}"`;
-        })
-        .join(","),
-    ),
-  ].join("\n");
-
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+// Time period → start_date param untuk BE
+const getPeriodStartDate = (period) => {
+  if (period === "all_time") return null;
+  const now = new Date();
+  if (period === "today") {
+    return new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    ).toISOString();
+  }
+  if (period === "this_week") {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    d.setDate(d.getDate() - d.getDay());
+    return d.toISOString();
+  }
+  if (period === "this_month") {
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  }
+  return null;
 };
 
-const exportExcel = (activities, filename = "activity_log.xls") => {
-  if (!activities.length) return;
-  const rows = activities.map(flattenActivity);
-  const headers = [...new Set(rows.flatMap(Object.keys))];
+const exportCSV = (logs) => {
+  activityLogService.exportToCSV(
+    logs,
+    `activity_timeline_${new Date().toISOString().slice(0, 10)}`,
+  );
+};
 
+const exportExcel = (logs) => {
+  if (!logs.length) return;
+  const headers = [
+    "ID",
+    "Tanggal",
+    "Action Type",
+    "Module",
+    "Severity",
+    "Admin",
+    "Email",
+    "Target Type",
+    "Target ID",
+    "Details",
+  ];
+  const escape = (val) => {
+    if (val === null || val === undefined) return "";
+    return typeof val === "object" ? JSON.stringify(val) : String(val);
+  };
+  const rows = logs.map((a) => [
+    a.id,
+    new Date(a.created_at).toLocaleString("id-ID"),
+    a.action_type,
+    a.module_source,
+    a.severity,
+    a.admin_name,
+    a.admin_email,
+    a.target_type,
+    a.target_id,
+    escape(a.details),
+  ]);
   const tableRows = rows
-    .map(
-      (r) =>
-        `<tr>${headers.map((h) => `<td>${r[h] ?? ""}</td>`).join("")}</tr>`,
-    )
+    .map((r) => `<tr>${r.map((v) => `<td>${escape(v)}</td>`).join("")}</tr>`)
     .join("");
-
-  const html = `
-    <html xmlns:o="urn:schemas-microsoft-com:office:office"
-          xmlns:x="urn:schemas-microsoft-com:office:excel"
-          xmlns="http://www.w3.org/TR/REC-html40">
-    <head><meta charset="UTF-8">
-    <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>
-    <x:ExcelWorksheet><x:Name>Activity Log</x:Name>
-    <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-    </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
-    </head><body>
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+    xmlns:x="urn:schemas-microsoft-com:office:excel"
+    xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="UTF-8"></head><body>
     <table border="1">
       <thead><tr>${headers.map((h) => `<th style="background:#6366f1;color:#fff;font-weight:bold">${h}</th>`).join("")}</tr></thead>
       <tbody>${tableRows}</tbody>
     </table></body></html>`;
-
   const blob = new Blob([html], {
     type: "application/vnd.ms-excel;charset=utf-8;",
   });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = `activity_timeline_${new Date().toISOString().slice(0, 10)}.xls`;
   a.click();
   URL.revokeObjectURL(url);
 };
 
-const exportPDF = async (activities, filename = "activity_log.pdf") => {
-  if (!activities.length) return;
-
-  const { default: jsPDF } = await import("jspdf");
-  const { default: autoTable } = await import("jspdf-autotable");
-
-  const rows = activities.map(flattenActivity);
-
-  const COLS = ["ID", "Title", "Type", "User", "Timestamp", "Description"];
-  const colHeaders = COLS.filter((c) =>
-    rows.some((r) => r[c] !== undefined && r[c] !== ""),
-  );
-
-  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-
-  doc.setFillColor(99, 102, 241);
-  doc.rect(0, 0, doc.internal.pageSize.getWidth(), 52, "F");
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
-  doc.setFont("helvetica", "bold");
-  doc.text("Activity Timeline — Export", 32, 32);
-
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.text(
-    `Generated: ${new Date().toLocaleString()}   |   Total records: ${activities.length}`,
-    32,
-    46,
-  );
-
-  const TYPE_COLORS = {
-    fraud_detected: [220, 38, 38],
-    manual_review: [5, 150, 105],
-    system: [37, 99, 235],
-    rule_update: [217, 119, 6],
-    alert: [234, 88, 12],
-    report: [124, 58, 237],
-    user_action: [75, 85, 99],
-  };
-
-  autoTable(doc, {
-    startY: 64,
-    head: [colHeaders],
-    body: rows.map((r) => colHeaders.map((h) => r[h] ?? "")),
-    styles: {
-      fontSize: 8,
-      cellPadding: { top: 5, right: 6, bottom: 5, left: 6 },
-      lineColor: [229, 231, 235],
-      lineWidth: 0.5,
-      textColor: [55, 65, 81],
-      font: "helvetica",
-    },
-    headStyles: {
-      fillColor: [79, 70, 229],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      fontSize: 8.5,
-    },
-    alternateRowStyles: {
-      fillColor: [249, 250, 251],
-    },
-    columnStyles: {
-      0: { cellWidth: 30 },
-      4: { cellWidth: 90 },
-      5: { cellWidth: "auto" },
-    },
-    didParseCell(data) {
-      if (data.section === "body" && data.column.index === 2) {
-        const type = String(data.cell.raw);
-        const color = TYPE_COLORS[type];
-        if (color) {
-          data.cell.styles.textColor = color;
-          data.cell.styles.fontStyle = "bold";
-        }
-      }
-    },
-    margin: { left: 32, right: 32 },
-  });
-
-  const pageCount = doc.internal.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(7.5);
-    doc.setTextColor(156, 163, 175);
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      `Fraud Detection System  |  Page ${i} of ${pageCount}`,
-      32,
-      doc.internal.pageSize.getHeight() - 14,
-    );
-  }
-
-  doc.save(filename);
-};
-
-const isInPeriod = (activity, period) => {
-  if (period === "all_time") return true;
-  const ts = activity.timestamp ? new Date(activity.timestamp) : null;
-  if (!ts || isNaN(ts)) return false;
-
-  const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfWeek = new Date(startOfDay);
-  startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  if (period === "today") return ts >= startOfDay;
-  if (period === "this_week") return ts >= startOfWeek;
-  if (period === "this_month") return ts >= startOfMonth;
-  return true;
-};
-
 const ActivityTimeline = () => {
-  const [loading, setLoading] = useState(true);
-  const [liveActivities, setLiveActivities] = useState([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [apiError, setApiError] = useState(false);
+
+  const [items, setItems] = useState([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(0);
+
+  // Stats — fetch sekali tanpa filter untuk total count per group
+  const [statsItems, setStatsItems] = useState([]);
+
   const [activeFilter, setActiveFilter] = useState("all");
   const [timeFilter, setTimeFilter] = useState("all_time");
   const [searchQuery, setSearchQuery] = useState("");
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
-  const exportRef = useRef(null);
 
-  useEffect(() => {
-    const fetchActivities = async () => {
-      try {
-        const res = await fetch(`${BASE_URL}/activity/feed?limit=100`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setLiveActivities(json.activities || []);
-      } catch (err) {
-        console.warn(
-          "ActivityTimeline: backend offline, using static data.",
-          err.message,
-        );
-        setApiError(true);
-      } finally {
-        setLoading(false);
+  const exportRef = useRef(null);
+  const sentinelRef = useRef(null);
+  const debounceTimer = useRef(null);
+  const abortRef = useRef(null);
+
+  // Build params dari state filter aktif
+  const buildParams = useCallback(
+    (pageNum) => {
+      const params = { page: pageNum, limit: PAGE_LIMIT };
+
+      if (activeFilter !== "all") {
+        params.action_types = ACTION_GROUPS[activeFilter] || [];
       }
-    };
-    fetchActivities();
+
+      const startDate = getPeriodStartDate(timeFilter);
+      if (startDate) params.start_date = startDate;
+
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+
+      return params;
+    },
+    [activeFilter, timeFilter, debouncedSearch],
+  );
+
+  // Fetch page pertama — reset items
+  const fetchFirst = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
+
+    setInitialLoading(true);
+    setItems([]);
+    setPage(1);
+    setHasMore(true);
+
+    try {
+      const res = await activityLogService.getTimelineLogs(buildParams(1));
+      const fetched = res.items || [];
+      setItems(fetched);
+      setTotal(res.total || 0);
+      setHasMore(
+        fetched.length === PAGE_LIMIT && fetched.length < (res.total || 0),
+      );
+      setApiError(false);
+    } catch (err) {
+      if (err.name === "AbortError") return;
+      console.warn(
+        "ActivityTimeline: fetch gagal, pakai fallback.",
+        err.message,
+      );
+      setApiError(true);
+      setItems(FALLBACK_ACTIVITIES);
+      setTotal(FALLBACK_ACTIVITIES.length);
+      setHasMore(false);
+    } finally {
+      setInitialLoading(false);
+    }
+  }, [buildParams]);
+
+  // Fetch page berikutnya — append items
+  const fetchMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    try {
+      const res = await activityLogService.getTimelineLogs(
+        buildParams(nextPage),
+      );
+      const fetched = res.items || [];
+      setItems((prev) => {
+        const ids = new Set(prev.map((i) => i.id));
+        return [...prev, ...fetched.filter((i) => !ids.has(i.id))];
+      });
+      setPage(nextPage);
+      setHasMore(
+        fetched.length === PAGE_LIMIT &&
+          items.length + fetched.length < (res.total || 0),
+      );
+    } catch (err) {
+      console.error("fetchMore error:", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, page, buildParams, items.length]);
+
+  // Re-fetch saat filter berubah
+  useEffect(() => {
+    fetchFirst();
+  }, [fetchFirst]);
+
+  // Fetch stats sekali (tanpa filter) untuk ActivityStatsBar & SidePanel count
+  useEffect(() => {
+    activityLogService
+      .getTimelineLogs({ page: 1, limit: 200 })
+      .then((res) => setStatsItems(res.items || []))
+      .catch(() => setStatsItems(FALLBACK_ACTIVITIES));
   }, []);
 
+  // IntersectionObserver untuk infinite scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0].isIntersecting &&
+          hasMore &&
+          !loadingMore &&
+          !initialLoading
+        ) {
+          fetchMore();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, initialLoading, fetchMore]);
+
+  // Close export dropdown on outside click
   useEffect(() => {
     const handler = (e) => {
-      if (exportRef.current && !exportRef.current.contains(e.target)) {
+      if (exportRef.current && !exportRef.current.contains(e.target))
         setExportOpen(false);
-      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const allActivities = useMemo(() => {
-    const combined = [...liveActivities, ...ALL_ACTIVITIES];
-    const seen = new Set();
-    const unique = combined.filter((a) => {
-      if (seen.has(a.id)) return false;
-      seen.add(a.id);
-      return true;
-    });
-    unique.sort((a, b) => {
-      const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-      const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-      return tb - ta;
-    });
-    return unique;
-  }, [liveActivities]);
-
-  const filtered = useMemo(() => {
-    let result = allActivities.filter((a) => isInPeriod(a, timeFilter));
-
-    if (activeFilter !== "all") {
-      result = result.filter((a) => a.type === activeFilter);
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (a) =>
-          a.title.toLowerCase().includes(q) ||
-          a.description.toLowerCase().includes(q) ||
-          a.user.toLowerCase().includes(q),
-      );
-    }
-    return result;
-  }, [allActivities, activeFilter, timeFilter, searchQuery]);
-
-  const visible = filtered.slice(0, visibleCount);
-  const hasMore = visibleCount < filtered.length;
-
-  const handleFilterChange = (val) => {
-    setActiveFilter(val);
-    setVisibleCount(PAGE_SIZE);
-  };
-
-  const handleTimeFilterChange = (val) => {
-    setTimeFilter(val);
-    setVisibleCount(PAGE_SIZE);
-  };
-
+  // Debounce search
   const handleSearchChange = (val) => {
     setSearchQuery(val);
-    setVisibleCount(PAGE_SIZE);
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(
+      () => setDebouncedSearch(val),
+      SEARCH_DEBOUNCE_MS,
+    );
   };
 
-  const handleLoadMore = () => setVisibleCount((prev) => prev + PAGE_SIZE);
+  const handleFilterChange = (val) => setActiveFilter(val);
+  const handleTimeFilterChange = (val) => setTimeFilter(val);
 
   const handleExport = (format) => {
     setExportOpen(false);
-    const timestamp = new Date().toISOString().slice(0, 10);
-    if (format === "csv") exportCSV(filtered, `activity_log_${timestamp}.csv`);
-    else if (format === "excel")
-      exportExcel(filtered, `activity_log_${timestamp}.xls`);
-    else if (format === "pdf")
-      exportPDF(filtered, `activity_log_${timestamp}.pdf`);
+    if (format === "csv") exportCSV(items);
+    else if (format === "excel") exportExcel(items);
   };
 
-  if (loading) return <PageLoader message="Memuat activity timeline..." />;
+  if (initialLoading)
+    return <PageLoader message="Memuat activity timeline..." />;
 
   return (
     <div className="activity-page">
@@ -323,16 +277,15 @@ const ActivityTimeline = () => {
         </div>
 
         <div className="activity-page-actions">
-          {!apiError && liveActivities.length > 0 && (
+          {!apiError ? (
             <span className="badge-live">
               <i
                 className="bi bi-circle-fill"
                 style={{ fontSize: ".45rem" }}
               ></i>
-              {liveActivities.length} live events
+              {total.toLocaleString()} events
             </span>
-          )}
-          {apiError && (
+          ) : (
             <span className="badge-static">
               <i className="bi bi-exclamation-triangle-fill"></i>
               Static data only
@@ -354,7 +307,7 @@ const ActivityTimeline = () => {
             {exportOpen && (
               <div className="export-dropdown">
                 <div className="export-dropdown-header">
-                  Export {filtered.length} activities
+                  Export {items.length} loaded activities
                 </div>
                 <button
                   className="export-option"
@@ -380,44 +333,70 @@ const ActivityTimeline = () => {
                     <span>Microsoft Excel format</span>
                   </div>
                 </button>
-                <button
-                  className="export-option"
-                  onClick={() => handleExport("pdf")}
-                >
-                  <span className="export-option-icon pdf-icon">
-                    <i className="bi bi-file-earmark-pdf"></i>
-                  </span>
-                  <div className="export-option-text">
-                    <strong>PDF / Print</strong>
-                    <span>Print-ready document</span>
-                  </div>
-                </button>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      <ActivityStatsBar activities={allActivities} />
+      <ActivityStatsBar activities={statsItems} />
 
       <ActivityToolbar
         activeFilter={activeFilter}
         onFilterChange={handleFilterChange}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
-        totalCount={filtered.length}
+        totalCount={total}
         timeFilter={timeFilter}
         onTimeFilterChange={handleTimeFilterChange}
       />
 
       <div className="activity-main-content">
-        <ActivityFeed
-          activities={visible}
-          onLoadMore={handleLoadMore}
-          hasMore={hasMore}
-        />
+        {/* Feed dengan sentinel untuk infinite scroll */}
+        <div className="timeline-feed-card">
+          <div className="feed-header">
+            <h3 className="feed-header-title">Activity Feed</h3>
+            <span className="feed-count-badge">
+              {items.length} / {total.toLocaleString()} events
+            </span>
+          </div>
+
+          <ActivityFeed
+            activities={items}
+            onLoadMore={fetchMore}
+            hasMore={false} /* tombol Load More diganti sentinel */
+          />
+
+          {/* Sentinel — IntersectionObserver target */}
+          <div ref={sentinelRef} style={{ height: 1 }} />
+
+          {loadingMore && (
+            <div className="text-center py-3">
+              <div
+                className="spinner-border spinner-border-sm text-secondary"
+                role="status"
+              >
+                <span className="visually-hidden">Memuat...</span>
+              </div>
+              <span className="ms-2 text-muted" style={{ fontSize: "0.85rem" }}>
+                Memuat lebih banyak...
+              </span>
+            </div>
+          )}
+
+          {!hasMore && items.length > 0 && (
+            <div
+              className="text-center py-3 text-muted"
+              style={{ fontSize: "0.82rem" }}
+            >
+              <i className="bi bi-check-all me-1"></i>
+              Semua {total.toLocaleString()} events sudah dimuat
+            </div>
+          )}
+        </div>
+
         <ActivitySidePanel
-          activities={allActivities}
+          activities={statsItems}
           activeFilter={activeFilter}
           onFilterChange={handleFilterChange}
         />

@@ -19,61 +19,26 @@ const fmtDate = (ds) => {
   });
 };
 
-const getRiskMeta = (score) => {
-  if (score >= 80) return { level: "CRITICAL", color: "#dc2626" };
-  if (score >= 60) return { level: "HIGH", color: "#ea580c" };
-  if (score >= 40) return { level: "MEDIUM", color: "#d97706" };
-  return { level: "LOW", color: "#16a34a" };
-};
-
-const PATTERN_SHORT = {
-  rapid_retry_declined: "Rapid Retry",
-  bruteforce_pin_pattern: "Bruteforce PIN",
-  money_mule_destination: "Money Mule",
-  impossible_travel_terminal_switch: "Terminal Switch",
-  midnight_unusual_amount: "Midnight Amt",
-  sudden_channel_switch_to_api: "Ch. Switch API",
-  burst_payment_pattern: "Burst Payment",
-  refund_abuse_pattern: "Refund Abuse",
-  payment_spike: "Spike",
-  underpayment: "Underpayment",
-};
-
 const ServiceBadge = ({ service }) => (
   <span className={`txn3-service-badge ${service}`}>
-    {service === "agenusa" ? "AGENUSA" : "NUSABILL"}
+    {service === "AGENUSA" ? "AGENUSA" : "NUSABILL"}
   </span>
 );
 
-const PatternsBadge = ({ patterns = [] }) => {
-  if (!patterns.length) return <span className="txn3-empty">—</span>;
-  return (
-    <div
-      className="txn3-patterns-wrap"
-      title={patterns.map((p) => PATTERN_SHORT[p] || p).join(", ")}
-    >
-      <span className="txn3-pattern-icon">
-        <i className="bi bi-exclamation-triangle-fill"></i>
-        {patterns.length}
-      </span>
-      <span className="txn3-pattern-first">
-        {PATTERN_SHORT[patterns[0]] || patterns[0]}
-        {patterns.length > 1 && (
-          <span className="txn3-pattern-more">+{patterns.length - 1}</span>
-        )}
-      </span>
-    </div>
-  );
-};
-
-const RiskCell = ({ score }) => {
-  const { level, color } = getRiskMeta(score);
+const RiskCell = ({ score, level }) => {
+  const colorMap = {
+    CRITICAL: "#dc2626",
+    HIGH: "#ea580c",
+    MEDIUM: "#d97706",
+    LOW: "#16a34a",
+  };
+  const color = colorMap[level] || "#6b7280";
   return (
     <span className="txn3-risk" style={{ color }}>
-      <span className="txn3-risk-num">{score}</span>
+      <span className="txn3-risk-num">{score ?? 0}</span>
       <span className="txn3-risk-max">/100</span>
       <span className="txn3-risk-lbl" style={{ color }}>
-        {level}
+        {level || "—"}
       </span>
     </span>
   );
@@ -81,33 +46,32 @@ const RiskCell = ({ score }) => {
 
 const StatusTag = ({ status }) => {
   const MAP = {
-    pending: {
+    PENDING: {
       icon: "bi-hourglass-split",
       label: "Pending",
       cls: "st-pending",
     },
-    approved: {
+    UNDER_REVIEW: {
+      icon: "bi-search",
+      label: "Under Review",
+      cls: "st-review",
+    },
+    SAFE: {
       icon: "bi-check-circle-fill",
-      label: "Approved",
+      label: "Safe",
       cls: "st-approved",
     },
-    rejected: {
-      icon: "bi-x-circle-fill",
-      label: "Rejected",
-      cls: "st-rejected",
-    },
-    legit: { icon: "bi-check-circle-fill", label: "Legit", cls: "st-approved" },
-    fraud: {
+    FRAUD: {
       icon: "bi-exclamation-circle-fill",
       label: "Fraud",
       cls: "st-fraud",
     },
   };
-  const { icon, label, cls } = MAP[status] || MAP.pending;
+  const meta = MAP[status] || MAP.PENDING;
   return (
-    <span className={`txn3-status-tag ${cls}`}>
-      <i className={`bi ${icon}`}></i>
-      {label}
+    <span className={`txn3-status-tag ${meta.cls}`}>
+      <i className={`bi ${meta.icon}`}></i>
+      {meta.label}
     </span>
   );
 };
@@ -119,7 +83,6 @@ const TransactionTable = ({
   colFilter = {
     service: "all",
     status: "all",
-    type: "all",
     dateFrom: "",
     dateTo: "",
   },
@@ -155,7 +118,6 @@ const TransactionTable = ({
       );
     if (col === "service") return colFilter.service !== "all";
     if (col === "status") return colFilter.status !== "all";
-    if (col === "type") return colFilter.type !== "all";
     return false;
   };
 
@@ -185,8 +147,8 @@ const TransactionTable = ({
             <div className="colf-title">Filter Layanan</div>
             {[
               ["all", "Semua Layanan", null],
-              ["agenusa", "AGENUSA", "dot-agenusa"],
-              ["nusabill", "NUSABILL", "dot-nusabill"],
+              ["AGENUSA", "AGENUSA", "dot-agenusa"],
+              ["NUSABILL", "NUSABILL", "dot-nusabill"],
             ].map(([v, l, dot]) => (
               <button
                 key={v}
@@ -237,34 +199,6 @@ const TransactionTable = ({
                 </button>
               </>
             )}
-          </>
-        );
-
-      case "type":
-        return (
-          <>
-            <div className="colf-title">Filter Type / Channel</div>
-            {[
-              ["all", "Semua"],
-              ["Transfer", "Transfer"],
-              ["API", "API"],
-              ["Web", "Web"],
-              ["Mobile", "Mobile"],
-            ].map(([v, l]) => (
-              <button
-                key={v}
-                className={`colf-opt ${colFilter.type === v ? "colf-opt-active" : ""}`}
-                onClick={() => {
-                  applyFilter({ type: v });
-                  setOpenDrop(null);
-                }}
-              >
-                {l}
-                {colFilter.type === v && (
-                  <i className="bi bi-check colf-check"></i>
-                )}
-              </button>
-            ))}
           </>
         );
 
@@ -417,9 +351,10 @@ const TransactionTable = ({
             <div className="colf-title">Filter Status</div>
             {[
               ["all", "Semua Status", null],
-              ["pending", "Pending", "dot-pending"],
-              ["approved", "Approved", "dot-approved"],
-              ["rejected", "Rejected", "dot-rejected"],
+              ["PENDING", "Pending", "dot-pending"],
+              ["UNDER_REVIEW", "Under Review", "dot-review"],
+              ["SAFE", "Safe", "dot-approved"],
+              ["FRAUD", "Fraud", "dot-fraud"],
             ].map(([v, l, dot]) => (
               <button
                 key={v}
@@ -473,16 +408,15 @@ const TransactionTable = ({
       <table className="txn3-table">
         <thead>
           <tr>
-            {colTh("service", "Layanan")}
-            <th>ID</th>
-            <th>Account / Customer</th>
+            {colTh("service", "Service")}
+            <th>Transaction ID</th>
+            <th>User Account</th>
             {colTh("amount", "Amount")}
-            <th className="txn3-hide-md">Dest / Bill ID</th>
-            {colTh("type", "Type / Channel", "txn3-hide-md")}
-            {colTh("date", "Date & Time", "txn3-hide-lg")}
-            <th className="txn3-hide-md">Patterns</th>
-            {colTh("risk", "Risk", "txn3-center")}
+            {colTh("risk", "Risk Score", "txn3-center")}
+            <th>Risk Level</th>
             {colTh("status", "Status")}
+            <th className="txn3-hide-md">Location</th>
+            {colTh("date", "Date & Time", "txn3-hide-lg")}
             <th className="txn3-col-act"></th>
           </tr>
         </thead>
@@ -490,7 +424,7 @@ const TransactionTable = ({
         <tbody>
           {transactions.length === 0 ? (
             <tr>
-              <td colSpan={11}>
+              <td colSpan={10}>
                 <div className="txn3-empty-state">
                   <i className="bi bi-inbox"></i>
                   <p>Tidak ada transaksi ditemukan</p>
@@ -502,54 +436,42 @@ const TransactionTable = ({
             transactions.map((t) => (
               <tr key={t.id} onClick={() => onViewDetails(t)}>
                 <td>
-                  <ServiceBadge service={t.service} />
+                  <ServiceBadge service={t.service_source} />
                 </td>
                 <td>
-                  <span className="txn3-id">{t.transactionId}</span>
+                  <span className="txn3-id">{t.original_trx_id}</span>
                 </td>
                 <td>
-                  <span className="txn3-account">{t.accountId}</span>
+                  <span className="txn3-account">{t.user_account_id}</span>
                 </td>
                 <td>
                   <div className="txn3-amount-cell">
                     <span className="txn3-amount">{fmt(t.amount)}</span>
-                    {t.service === "nusabill" &&
-                      t.paymentAmount &&
-                      t.paymentAmount !== t.amount && (
-                        <span className="txn3-paid">
-                          Paid: {fmt(t.paymentAmount)}
-                        </span>
-                      )}
                   </div>
                 </td>
-                <td className="txn3-hide-md">
-                  <span className="txn3-dest">{t.destId || "—"}</span>
+                <td className="txn3-center">
+                  <RiskCell score={t.risk_score} level={t.risk_level} />
+                </td>
+                <td>
+                  <span>{t.risk_level || "—"}</span>
+                </td>
+                <td>
+                  <StatusTag status={t.final_status} />
                 </td>
                 <td className="txn3-hide-md">
-                  <div className="txn3-type-cell">
-                    <span className="txn3-type">
-                      {t.type || t.channel || "—"}
-                    </span>
-                    {t.refundFlag && (
-                      <span className="txn3-refund-tag">
-                        <i className="bi bi-arrow-return-left"></i>Refund
-                      </span>
-                    )}
-                  </div>
+                  <span className="txn3-dest">
+                    {t.city || t.country
+                      ? `${t.city || ""}, ${t.country || ""}`.replace(
+                          /^, |, $/,
+                          "",
+                        )
+                      : "—"}
+                  </span>
                 </td>
                 <td className="txn3-hide-lg">
                   <span className="txn3-date">
-                    {fmtDate(t.timestamp || t.time)}
+                    {fmtDate(t.transaction_time)}
                   </span>
-                </td>
-                <td className="txn3-hide-md">
-                  <PatternsBadge patterns={t.patterns || []} />
-                </td>
-                <td className="txn3-center">
-                  <RiskCell score={t.riskScore} />
-                </td>
-                <td>
-                  <StatusTag status={t.status} />
                 </td>
                 <td
                   className="txn3-col-act"

@@ -3,12 +3,15 @@ def map_agenusa(data: dict):
         "original_trx_id": data.get("rrn"),
         "service_source": "AGENUSA",
         "user_account_id": data.get("customer_ref_number"),
-        "amount": data.get("amount"),
+        "amount": float(data.get("amount", 0)),
         "transaction_time": data.get("timestamp_db"),
-
+        "transaction_status": "INGESTED",
         "terminal_id": data.get("terminal_id"),
         "merchant_id": data.get("merchant_id"),
         "account_number": data.get("account_number"),
+        "ip_address": data.get("ip_address"),
+        "city": None,
+        "country": None,
 
         "transaction_details": {
             "stan": data.get("stan"),

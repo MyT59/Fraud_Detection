@@ -959,3 +959,101 @@
   font-size: 0.7rem;
   color: #9ca3af;
 }
+
+/* ===========================
+   SNAPSHOT DIFF
+   =========================== */
+.tf-snapshot {
+  margin-top: 0.6rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 0.82rem;
+}
+
+.tf-snapshot-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  flex-wrap: wrap;
+}
+
+.tf-snapshot-row + .tf-snapshot-row {
+  border-top: 1px solid #f3f4f6;
+}
+
+.tf-snapshot-changed {
+  background: #fffbeb;
+}
+
+.tf-snapshot-same {
+  background: #f9fafb;
+  color: #9ca3af;
+}
+
+.tf-snapshot-key {
+  font-weight: 600;
+  color: #374151;
+  min-width: 100px;
+  text-transform: capitalize;
+}
+
+.tf-snapshot-before {
+  color: #dc2626;
+  text-decoration: line-through;
+  background: #fef2f2;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.tf-snapshot-after {
+  color: #16a34a;
+  background: #f0fdf4;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.tf-snapshot-arrow {
+  color: #9ca3af;
+  font-size: 0.7rem;
+}
+
+.tf-snapshot-value {
+  color: #6b7280;
+}
+
+.tf-snapshot-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tf-snapshot-toggle:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+/* Severity badges */
+.tf-severity-high,
+.tf-severity-critical {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.tf-severity-warning {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}

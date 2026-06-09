@@ -123,45 +123,56 @@ class ReviewRepository:
     def get_queue_growth_7d(self):
         seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
-        incoming_sq = (
+        # 1. Ambil data incoming (Alerts yang dibuat)
+        incoming_data = (
             self.db.query(
                 func.date(FraudAlert.created_at).label("day"),
                 func.count(FraudAlert.id).label("incoming_count")
             )
             .filter(FraudAlert.created_at >= seven_days_ago)
             .group_by(func.date(FraudAlert.created_at))
-            .subquery()
+            .all()
         )
 
-        resolved_sq = (
+        # 2. Ambil data resolved (Alerts yang diselesaikan)
+        # Menggunakan kolom resolved_at sesuai dengan model database
+        resolved_data = (
             self.db.query(
-                func.date(FraudAlert.updated_at).label("day"),
+                func.date(FraudAlert.resolved_at).label("day"),
                 func.count(FraudAlert.id).label("resolved_count")
             )
             .filter(
-                FraudAlert.updated_at >= seven_days_ago,
+                FraudAlert.resolved_at >= seven_days_ago,
                 FraudAlert.status == 'RESOLVED'
             )
-            .group_by(func.date(FraudAlert.updated_at))
-            .subquery()
+            .group_by(func.date(FraudAlert.resolved_at))
+            .all()
         )
 
-        query = (
-            self.db.query(
-                func.coalesce(incoming_sq.c.day, resolved_sq.c.day).label("day"),
-                func.coalesce(incoming_sq.c.incoming_count, 0).label("incoming_count"),
-                func.coalesce(resolved_sq.c.resolved_count, 0).label("resolved_count")
-            )
-            .outerjoin(resolved_sq, incoming_sq.c.day == resolved_sq.c.day, full=True)
-            .order_by("day")
-        )
+        # 3. Gabungkan data menggunakan dictionary Python
+        merged_data = {}
 
-        results = query.all()
-        return [
-            {
-                "day": str(row.day),
-                "incoming_alerts": row.incoming_count,
-                "resolved_alerts": row.resolved_count
-            }
-            for row in results
-        ]
+        for row in incoming_data:
+            day_str = str(row.day)
+            if day_str not in merged_data:
+                merged_data[day_str] = {"incoming": 0, "resolved": 0}
+            merged_data[day_str]["incoming"] = row.incoming_count
+
+        for row in resolved_data:
+            day_str = str(row.day)
+            # Karena resolved_at bisa Null sebelum di-cast, pastikan day_str valid
+            if day_str and day_str != "None": 
+                if day_str not in merged_data:
+                    merged_data[day_str] = {"incoming": 0, "resolved": 0}
+                merged_data[day_str]["resolved"] = row.resolved_count
+
+        # 4. Format menjadi list of dictionaries
+        results = []
+        for day_str in sorted(merged_data.keys()):
+            results.append({
+                "day": day_str,
+                "incoming_alerts": merged_data[day_str]["incoming"],
+                "resolved_alerts": merged_data[day_str]["resolved"]
+            })
+
+        return results

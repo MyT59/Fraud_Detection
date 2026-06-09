@@ -1,16 +1,145 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from datetime import datetime
 
 from app.infrastructure.database.session import get_db
 from app.application.services.transaction_service import process_transaction
-
+from app.infrastructure.repositories.transaction_repository import (
+    TransactionRepository
+)
 from app.presentation.schemas.transaction_schema import (
     TransactionCreate,
-    TransactionResponse
+    TransactionResponse,
+    TransactionListResponse,
+    TransactionDetailResponse
 )
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
+@router.get(
+    "",
+    response_model=TransactionListResponse
+)
+def get_transactions(
+    search: str | None = None,
+    service_source: str | None = None,
+    final_status: str | None = None,
+    risk_level: str | None = None,
+    is_flagged_ml: bool | None = None,
+    city: str | None = None,
+    country: str | None = None,
+    min_amount: float | None = None,
+    max_amount: float | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    sort_by: str = "transaction_time",
+    sort_order: str = "desc",
+    page: int = 1,
+    size: int = 20,
+    db: Session = Depends(get_db)
+):
+    repo = TransactionRepository(db)
+
+    items, total = repo.get_transactions(
+        search=search,
+        service_source=service_source,
+        final_status=final_status,
+        risk_level=risk_level,
+        is_flagged_ml=is_flagged_ml,
+        city=city,
+        country=country,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        start_date=start_date,
+        end_date=end_date,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        size=size,
+    )
+
+    summary = repo.get_transaction_summary()
+
+    return {
+        "summary": summary,
+        "page": page,
+        "size": size,
+        "total_records": total,
+        "total_pages": (total + size - 1) // size,
+        "data": [
+            {
+                "id": trx.id,
+                "original_trx_id": trx.original_trx_id,
+                "service_source": trx.service_source,
+                "user_account_id": trx.user_account_id,
+                "amount": float(trx.amount),
+                "risk_score": trx.risk_score,
+                "risk_level": trx.risk_level,
+                "final_status": trx.final_status,
+                "transaction_time": trx.transaction_time,
+                "city": trx.city,
+                "country": trx.country,
+            }
+            for trx in items
+        ]
+    }
+
+@router.get(
+    "/{transaction_id}",
+    response_model=TransactionDetailResponse
+)
+def get_transaction_detail(
+    transaction_id: int,
+    db: Session = Depends(get_db)
+):
+    repo = TransactionRepository(db)
+
+    trx = repo.get_by_id(transaction_id)
+
+    if not trx:
+        raise HTTPException(
+            status_code=404,
+            detail="Transaction not found"
+        )
+
+    return {
+        "id": trx.id,
+        "original_trx_id": trx.original_trx_id,
+        "service_source": trx.service_source,
+
+        "user_account_id": trx.user_account_id,
+        "account_number": trx.account_number,
+
+        "amount": float(trx.amount),
+
+        "transaction_time": trx.transaction_time,
+
+        "transaction_status": trx.transaction_status,
+        "final_status": trx.final_status,
+
+        "risk_score": trx.risk_score,
+        "risk_level": trx.risk_level,
+        "anomaly_score": trx.anomaly_score,
+
+        "violation_reason": trx.violation_reason,
+        "violation_rule_ids": trx.violation_rule_ids,
+        "violation_pattern_ids": trx.violation_pattern_ids,
+
+        "ip_address": trx.ip_address,
+        "terminal_id": trx.terminal_id,
+        "merchant_id": trx.merchant_id,
+
+        "city": trx.city,
+        "country": trx.country,
+
+        "score_breakdown": trx.score_breakdown,
+        "transaction_details": trx.transaction_details,
+
+        "is_flagged_ml": trx.is_flagged_ml,
+
+        "created_at": trx.created_at,
+        "updated_at": trx.updated_at,
+    }
 
 @router.post("/", response_model=TransactionResponse)
 def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)):

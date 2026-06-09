@@ -1,16 +1,21 @@
 import React from "react";
 import "./HistoryDetailModal.css";
 
-const fmt = (amount) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(amount);
+/**
+ * HistoryDetailModal
+ *
+ * Hanya merender field yang BENAR-BENAR ada di ReviewHistoryItem schema BE:
+ *   id, transaction_id, alert_id, decision, review_note,
+ *   previous_status, final_status, reviewed_by, created_at
+ *
+ * Field yang DIHAPUS (tidak ada di BE):
+ *   service, amount, risk_score, account_id, matched_patterns,
+ *   reviewer_name, reviewer_role, duration
+ */
 
 const fmtTs = (ds) => {
-  const d = new Date(ds);
-  return d.toLocaleDateString("id-ID", {
+  if (!ds) return "—";
+  return new Date(ds).toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -20,358 +25,337 @@ const fmtTs = (ds) => {
   });
 };
 
-const ACTION_META = {
-  approved: {
+// Decision config — sesuai enum BE: SAFE | FRAUD
+const DECISION_META = {
+  SAFE: {
     icon: "bi-check-circle-fill",
-    label: "Approved",
-    cls: "approved",
+    label: "SAFE",
     bg: "#ecfdf5",
     color: "#059669",
+    borderColor: "#059669",
   },
-  rejected: {
+  FRAUD: {
     icon: "bi-x-circle-fill",
-    label: "Rejected",
-    cls: "rejected",
+    label: "FRAUD",
     bg: "#fef2f2",
     color: "#dc2626",
-  },
-  flagged: {
-    icon: "bi-flag-fill",
-    label: "Flagged",
-    cls: "flagged",
-    bg: "#fffbeb",
-    color: "#d97706",
-  },
-  escalated: {
-    icon: "bi-arrow-up-circle-fill",
-    label: "Escalated",
-    cls: "escalated",
-    bg: "#eff6ff",
-    color: "#2563eb",
+    borderColor: "#dc2626",
   },
 };
 
-const ServiceBadge = ({ service }) => (
-  <span
-    style={{
-      display: "inline-block",
-      padding: "2px 8px",
-      borderRadius: "4px",
-      fontSize: ".68rem",
-      fontWeight: 700,
-      letterSpacing: ".04em",
-      background: service === "agenusa" ? "#eff6ff" : "#fdf4ff",
-      color: service === "agenusa" ? "#1d4ed8" : "#7c3aed",
-      border: `1px solid ${service === "agenusa" ? "#bfdbfe" : "#e9d5ff"}`,
-    }}
-  >
-    {service === "agenusa" ? "AGENUSA" : "NUSABILL"}
-  </span>
+// Status badge helper
+const StatusBadge = ({ status }) => {
+  if (!status) return <span style={{ color: "#94a3b8" }}>—</span>;
+  const colorMap = {
+    FRAUD: { bg: "#fee2e2", color: "#b91c1c" },
+    SAFE: { bg: "#dcfce7", color: "#15803d" },
+    UNDER_REVIEW: { bg: "#eff6ff", color: "#1d4ed8" },
+    PENDING: { bg: "#f1f5f9", color: "#475569" },
+    RESOLVED: { bg: "#f0fdf4", color: "#15803d" },
+  };
+  const style = colorMap[status.toUpperCase()] || {
+    bg: "#f1f5f9",
+    color: "#475569",
+  };
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "3px 10px",
+        borderRadius: "12px",
+        fontSize: ".78rem",
+        fontWeight: 700,
+        background: style.bg,
+        color: style.color,
+      }}
+    >
+      {status}
+    </span>
+  );
+};
+
+// KV row helper
+const KVRow = ({ label, children }) => (
+  <div className="hmodal-field-row">
+    <span className="hmodal-field-label">{label}</span>
+    <span className="hmodal-field-value">{children}</span>
+  </div>
 );
-
-const PROC_CODE_MAP = {
-  0: "Balance Inquiry",
-  10000: "Transfer",
-  200000: "Payment",
-  400000: "Withdrawal",
-  900000: "Reversal",
-};
 
 const HistoryDetailModal = ({ item, onClose }) => {
   if (!item) return null;
-  const meta = ACTION_META[item.action] || ACTION_META.approved;
-  const isAgenusa = item.service === "agenusa";
 
-  const procLabel =
-    item.PROCESSING_CODE != null
-      ? `${item.PROCESSING_CODE} — ${PROC_CODE_MAP[item.PROCESSING_CODE] || item.typeOrChannel || "—"}`
-      : item.typeOrChannel || "—";
+  const decision = (item.decision || "").toUpperCase();
+  const meta = DECISION_META[decision] || DECISION_META.SAFE;
 
   return (
     <div className="hmodal-overlay" onClick={onClose}>
       <div className="hmodal-box" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
         <div
           className="hmodal-header"
-          style={{ borderBottom: `3px solid ${meta.color}` }}
+          style={{ borderBottom: `3px solid ${meta.borderColor}` }}
         >
           <div className="hmodal-header-left">
             <div
               className="hmodal-icon-wrap"
               style={{ background: meta.bg, color: meta.color }}
             >
-              <i className={`bi ${meta.icon}`}></i>
+              <i className={`bi ${meta.icon}`} />
             </div>
             <div>
-              <div
-                className="hmodal-entry-label"
-                style={{ display: "flex", alignItems: "center", gap: ".5rem" }}
-              >
-                Audit Entry
-                {item.service && <ServiceBadge service={item.service} />}
+              <div className="hmodal-entry-label">
+                Audit Entry · Review #{item.reviewId}
               </div>
               <div className="hmodal-txn-id">{item.transactionId}</div>
             </div>
           </div>
           <button className="hmodal-close" onClick={onClose}>
-            <i className="bi bi-x-lg"></i>
+            <i className="bi bi-x-lg" />
           </button>
         </div>
 
+        {/* Banner Decision */}
         <div
           className="hmodal-banner"
           style={{ background: meta.bg, color: meta.color }}
         >
-          <i className={`bi ${meta.icon}`}></i>
+          <i className={`bi ${meta.icon}`} />
           <span>
-            Transaction was <strong>{meta.label}</strong>
+            Keputusan: <strong>{meta.label}</strong>
           </span>
-          <span className="hmodal-banner-time">{fmtTs(item.timestamp)}</span>
+          <span className="hmodal-banner-time">{fmtTs(item.createdAt)}</span>
         </div>
 
         <div className="hmodal-body">
-          <div className="hmodal-row2" style={{ marginBottom: "1rem" }}>
-            <div className="hmodal-risk-block">
+          {/* Grid 2 kolom: Identifikasi + Status */}
+          <div className="hmodal-grid" style={{ marginBottom: "1rem" }}>
+            {/* Identifikasi */}
+            <div className="hmodal-kv">
+              <div className="hmodal-kv-label">
+                <i className="bi bi-fingerprint" /> Identifikasi
+              </div>
               <div
-                className="hmodal-risk-circle"
+                className="hmodal-info-block"
                 style={{
-                  borderColor:
-                    item.riskScore >= 80
-                      ? "#dc2626"
-                      : item.riskScore >= 60
-                        ? "#d97706"
-                        : "#16a34a",
-                  color:
-                    item.riskScore >= 80
-                      ? "#dc2626"
-                      : item.riskScore >= 60
-                        ? "#d97706"
-                        : "#16a34a",
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
                 }}
               >
-                <span className="hmodal-risk-num">{item.riskScore}</span>
-                <span className="hmodal-risk-sub">/100</span>
+                <KVRow label="Review ID">
+                  <code
+                    style={{
+                      fontFamily: "IBM Plex Mono, monospace",
+                      fontSize: ".8rem",
+                    }}
+                  >
+                    #{item.reviewId}
+                  </code>
+                </KVRow>
+                <KVRow label="Transaction ID">
+                  <code
+                    style={{
+                      fontFamily: "IBM Plex Mono, monospace",
+                      fontSize: ".8rem",
+                      color: "#7c3aed",
+                    }}
+                  >
+                    {item.transactionId}
+                  </code>
+                </KVRow>
+                <KVRow label="Alert ID">
+                  {item.alertId != null ? (
+                    <code
+                      style={{
+                        fontFamily: "IBM Plex Mono, monospace",
+                        fontSize: ".8rem",
+                      }}
+                    >
+                      #{item.alertId}
+                    </code>
+                  ) : (
+                    "—"
+                  )}
+                </KVRow>
               </div>
-              <div>
-                <div className="hmodal-risk-info-label">Fraud Score</div>
+            </div>
+
+            {/* Status Transition */}
+            <div className="hmodal-kv">
+              <div className="hmodal-kv-label">
+                <i className="bi bi-arrow-left-right" /> Status Transition
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: ".5rem",
+                  marginTop: ".25rem",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: ".68rem",
+                      color: "#94a3b8",
+                      fontWeight: 600,
+                      marginBottom: ".25rem",
+                    }}
+                  >
+                    SEBELUM
+                  </div>
+                  <StatusBadge status={item.previousStatus} />
+                </div>
                 <div
-                  className="hmodal-risk-level"
                   style={{
-                    color:
-                      item.riskScore >= 80
-                        ? "#dc2626"
-                        : item.riskScore >= 60
-                          ? "#d97706"
-                          : "#16a34a",
+                    color: "#94a3b8",
+                    fontSize: ".85rem",
+                    paddingLeft: "4px",
                   }}
                 >
-                  {item.riskScore >= 80
-                    ? "CRITICAL RISK"
-                    : item.riskScore >= 60
-                      ? "HIGH RISK"
-                      : "LOW RISK"}
+                  <i className="bi bi-arrow-down" />
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: ".68rem",
+                      color: "#94a3b8",
+                      fontWeight: 600,
+                      marginBottom: ".25rem",
+                    }}
+                  >
+                    SESUDAH
+                  </div>
+                  <StatusBadge status={item.finalStatus} />
                 </div>
               </div>
-            </div>
-
-            <div className="hmodal-info-block">
-              <div className="hmodal-block-title">
-                <i className="bi bi-cash-stack"></i>
-                {isAgenusa ? "Transaction" : "Billing"}
-              </div>
-              {isAgenusa ? (
-                <>
-                  <div className="hmodal-field-row">
-                    <span className="hmodal-field-label">Amount</span>
-                    <span className="hmodal-field-value amount">
-                      {fmt(item.amount)}
-                    </span>
-                  </div>
-                  <div className="hmodal-field-row">
-                    <span className="hmodal-field-label">Processing Code</span>
-                    <span className="hmodal-field-value mono">{procLabel}</span>
-                  </div>
-                  <div className="hmodal-field-row">
-                    <span className="hmodal-field-label">Response Code</span>
-                    <span className="hmodal-field-value mono">
-                      {item.RESPONSE_CODE != null ? item.RESPONSE_CODE : "—"}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="hmodal-field-row">
-                    <span className="hmodal-field-label">Bill Amount</span>
-                    <span className="hmodal-field-value amount">
-                      {fmt(item.amount)}
-                    </span>
-                  </div>
-                  {item.PAYMENT_AMOUNT != null && (
-                    <div className="hmodal-field-row">
-                      <span className="hmodal-field-label">Payment Amount</span>
-                      <span
-                        className="hmodal-field-value amount"
-                        style={{
-                          color:
-                            item.amount !== item.PAYMENT_AMOUNT
-                              ? "#ea580c"
-                              : "inherit",
-                        }}
-                      >
-                        {fmt(item.PAYMENT_AMOUNT)}
-                        {item.amount !== item.PAYMENT_AMOUNT && " ⚠️"}
-                      </span>
-                    </div>
-                  )}
-                  <div className="hmodal-field-row">
-                    <span className="hmodal-field-label">Channel</span>
-                    <span className="hmodal-field-value">
-                      {item.CHANNEL || item.typeOrChannel || "—"}
-                    </span>
-                  </div>
-                  <div className="hmodal-field-row">
-                    <span className="hmodal-field-label">Refund Flag</span>
-                    <span className="hmodal-field-value">
-                      {item.REFUND_FLAG ? "✅ Yes" : "No"}
-                    </span>
-                  </div>
-                </>
-              )}
             </div>
           </div>
 
-          <div className="hmodal-row2" style={{ marginBottom: "1rem" }}>
-            <div className="hmodal-info-block">
-              <div className="hmodal-block-title">
-                <i className="bi bi-person-circle"></i>
-                {isAgenusa ? "Account" : "Customer"}
-              </div>
-              {isAgenusa ? (
-                <>
-                  <div className="hmodal-field-row">
-                    <span className="hmodal-field-label">Account Number</span>
-                    <span className="hmodal-field-value mono">
-                      {item.accountId || "—"}
-                    </span>
-                  </div>
-                  <div className="hmodal-field-row">
-                    <span className="hmodal-field-label">Date & Time</span>
-                    <span className="hmodal-field-value mono">
-                      {item.TIMESTAMP_DB
-                        ? fmtTs(item.TIMESTAMP_DB)
-                        : fmtTs(item.timestamp)}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div className="hmodal-field-row">
-                  <span className="hmodal-field-label">Customer ID</span>
-                  <span className="hmodal-field-value mono">
-                    {item.accountId || "—"}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="hmodal-info-block">
-              <div className="hmodal-block-title">
-                <i className="bi bi-arrow-left-right"></i>
-                {isAgenusa ? "Destination" : "Bill Info"}
-              </div>
-              {isAgenusa ? (
-                <div className="hmodal-field-row">
-                  <span className="hmodal-field-label">Dest. Account</span>
-                  <span className="hmodal-field-value mono">
-                    {item.DEST_ACCOUNT_NUMBER || item.destOrBill || "—"}
-                  </span>
-                </div>
-              ) : (
-                <div className="hmodal-field-row">
-                  <span className="hmodal-field-label">Bill ID</span>
-                  <span className="hmodal-field-value mono">
-                    {item.BILL_ID || item.destOrBill || "—"}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="hmodal-info-block" style={{ marginBottom: "1rem" }}>
-            <div className="hmodal-block-title">
-              <i className="bi bi-exclamation-triangle"></i>
-              Matched Fraud Patterns ({item.matchedPatterns?.length || 0})
-            </div>
-            {item.matchedPatterns?.length > 0 ? (
-              <ul className="hmodal-anomaly-list">
-                {item.matchedPatterns.map((p, i) => (
-                  <li key={i} className="hmodal-anomaly-item">
-                    <i className="bi bi-dot"></i>
-                    {p
-                      .replace(/_/g, " ")
-                      .replace(/\b\w/g, (c) => c.toUpperCase())}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p
-                style={{
-                  fontSize: ".875rem",
-                  color: "#94a3b8",
-                  margin: ".5rem 0 0",
-                }}
-              >
-                No specific pattern — flagged by score threshold only.
-              </p>
-            )}
-          </div>
-
+          {/* Reviewer & Waktu */}
           <div className="hmodal-grid" style={{ marginBottom: "1rem" }}>
             <div className="hmodal-kv">
               <div className="hmodal-kv-label">
-                <i className="bi bi-person-badge"></i> Reviewed By
+                <i className="bi bi-person-badge" /> Reviewer
               </div>
               <div className="hmodal-kv-value">
-                <div className="hmodal-reviewer-row">
-                  <div className="hmodal-avatar">
-                    {item.reviewer
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .slice(0, 2)}
-                  </div>
-                  <div>
-                    <div className="hmodal-reviewer-name">{item.reviewer}</div>
-                    <div className="hmodal-reviewer-role">
-                      {item.reviewerRole}
+                {item.reviewedBy != null ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: ".6rem",
+                    }}
+                  >
+                    <div className="hmodal-avatar">
+                      <i
+                        className="bi bi-person-fill"
+                        style={{ fontSize: ".8rem" }}
+                      />
+                    </div>
+                    <div>
+                      <div className="hmodal-reviewer-name">
+                        Analyst #{item.reviewedBy}
+                      </div>
+                      <div
+                        className="hmodal-reviewer-role"
+                        style={{ fontSize: ".7rem", color: "#94a3b8" }}
+                      >
+                        ID: {item.reviewedBy}
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <span style={{ color: "#94a3b8" }}>—</span>
+                )}
               </div>
             </div>
+
             <div className="hmodal-kv">
               <div className="hmodal-kv-label">
-                <i className="bi bi-calendar-event"></i> Timestamp
+                <i className="bi bi-calendar-event" /> Waktu Review
               </div>
-              <div className="hmodal-kv-value mono">
-                {fmtTs(item.timestamp)}
+              <div
+                className="hmodal-kv-value mono"
+                style={{
+                  fontFamily: "IBM Plex Mono, monospace",
+                  fontSize: ".8rem",
+                }}
+              >
+                {fmtTs(item.createdAt)}
               </div>
             </div>
           </div>
 
-          {item.notes && (
+          {/* Decision & Confidence — dari field decision */}
+          <div
+            className="hmodal-kv hmodal-kv-full"
+            style={{ marginBottom: "1rem" }}
+          >
+            <div className="hmodal-kv-label">
+              <i className="bi bi-shield-check" /> Keputusan Final
+            </div>
+            <div
+              style={{
+                marginTop: ".4rem",
+                display: "flex",
+                alignItems: "center",
+                gap: ".75rem",
+              }}
+            >
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: ".4rem",
+                  padding: ".4rem 1rem",
+                  background: meta.bg,
+                  color: meta.color,
+                  border: `1px solid ${meta.color}30`,
+                  borderRadius: "8px",
+                  fontWeight: 700,
+                  fontSize: ".9rem",
+                }}
+              >
+                <i className={`bi ${meta.icon}`} /> {meta.label}
+              </span>
+            </div>
+          </div>
+
+          {/* Review Notes */}
+          {item.reviewNote && (
             <div className="hmodal-notes">
               <div className="hmodal-notes-label">
-                <i className="bi bi-chat-left-text-fill"></i>
-                Review Notes
+                <i className="bi bi-chat-left-text-fill" /> Catatan Review
               </div>
-              <p className="hmodal-notes-text">{item.notes}</p>
+              <p className="hmodal-notes-text">{item.reviewNote}</p>
             </div>
           )}
+
+          {/* Info: field tidak tersedia */}
+          <div
+            style={{
+              marginTop: "1rem",
+              padding: ".625rem 1rem",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "8px",
+              fontSize: ".75rem",
+              color: "#64748b",
+            }}
+          >
+            <i className="bi bi-info-circle" style={{ marginRight: 6 }} />
+            Detail transaksi (amount, service, risk score) tidak tersedia di
+            riwayat review. Untuk informasi lengkap, lihat di halaman{" "}
+            <strong>Alerts</strong>.
+          </div>
         </div>
 
+        {/* Footer */}
         <div className="hmodal-footer">
           <button className="hmodal-close-btn" onClick={onClose}>
-            <i className="bi bi-x-circle"></i>
-            Close
+            <i className="bi bi-x-circle" /> Tutup
           </button>
         </div>
       </div>

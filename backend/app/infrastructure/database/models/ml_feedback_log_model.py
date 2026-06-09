@@ -1,6 +1,7 @@
 from sqlalchemy import Column, BigInteger, Integer, String, Numeric, Boolean, Text, DateTime, Float, func
 from sqlalchemy.dialects.postgresql import JSONB
 from app.infrastructure.database.base import Base
+from sqlalchemy.ext.mutable import MutableDict
 
 class MLFeedbackLog(Base):
     __tablename__ = "ml_feedback_logs"
@@ -26,12 +27,13 @@ class MLFeedbackLog(Base):
     anomaly_score = Column(Float)
     risk_score = Column(Float)
     risk_level = Column(String(50))
-    score_breakdown = Column(JSONB)
+    score_breakdown = Column(MutableDict.as_mutable(JSONB),default=dict)
     is_flagged_ml = Column(Boolean, default=False)
     violation_reason = Column(Text)
     violation_rule_ids = Column(JSONB)
     violation_pattern_ids = Column(JSONB)
 
+    is_used_for_training = Column(Boolean, default=False)
     analyst_decision = Column(String(20), nullable=False)  # SAFE | FRAUD
     decision_confidence = Column(String(20))               # LOW | MEDIUM | HIGH
     

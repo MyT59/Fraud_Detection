@@ -4,10 +4,10 @@ import AlertItem from "./AlertItem";
 const AlertsFeed = ({
   alerts,
   pendingOps = {},
-  onMarkRead,
   onResolve,
   onClaim,
   onDelete,
+  onViewDetail,
 }) => {
   if (alerts.length === 0) {
     return (
@@ -34,10 +34,10 @@ const AlertsFeed = ({
             key={alert.id}
             alert={alert}
             pending={pendingOps[alert.id] || null}
-            onMarkRead={onMarkRead}
             onResolve={onResolve}
             onClaim={onClaim}
             onDelete={onDelete}
+            onViewDetail={onViewDetail}
           />
         ))}
       </div>

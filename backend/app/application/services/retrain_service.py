@@ -1,5 +1,6 @@
 import hashlib
 from sqlite3 import IntegrityError
+import logging
 import pandas as pd
 import json
 import shutil
@@ -12,10 +13,13 @@ from sqlalchemy.orm import Session
 from fastapi import UploadFile, HTTPException
 
 from app.paths import MODELS_DIR, DATA_DIR
+
+logger = logging.getLogger(__name__)
 from app.infrastructure.ml.domain_detector import detect_domain
 from app.infrastructure.ml.feature_builder import build_features
-from app.infrastructure.ml.training_engine import IsolationTrainingEngine
+from app.infrastructure.ml.training import train_from_dataframe 
 from app.infrastructure.ml.model_loader import load_isolation_model, load_isolation_meta, DOMAIN_ISO_CONFIG
+from app.infrastructure.database.models.ml_feedback_log_model import MLFeedbackLog
 from app.application.services.pattern_discovery_service import PatternDiscoveryService
 from app.application.services.dataset_retention_service import DatasetRetentionService
 
@@ -25,6 +29,7 @@ from app.infrastructure.database.models.retrain_history_model import RetrainHist
 from app.infrastructure.database.models.activity_log_model import ActivityLog
 from app.infrastructure.database.models.ml_dataset_model import MLDataset
 from app.infrastructure.database.models.ml_model_model import MLModel
+from app import domain
 
 
 
@@ -32,7 +37,6 @@ class RetrainService:
     def __init__(self, db: Session):
         self.db = db
         self.pattern_discovery = PatternDiscoveryService()
-        self.training_engine = IsolationTrainingEngine()
 
     # ==========================================
     # 📝 AUDIT LOG HELPER
@@ -248,7 +252,14 @@ class RetrainService:
         try:
             # 3. Eksekusi Training Logic
             feature_df = build_features(domain=domain, df=df)
-            training_result = self.training_engine.train_and_detect(feature_df=feature_df, domain=domain)
+            # Ambil nilai contamination sesuai domain
+            contamination = DOMAIN_ISO_CONFIG.get(domain, {}).get("contamination", 0.05)
+            # Gunakan training.py versi baru (Mendukung StandardScaler & Pipeline)
+            training_result = train_from_dataframe(
+                domain=domain,
+                df=feature_df, 
+                contamination=contamination
+            )
             
             # Pattern Discovery
             new_patterns_count = self.pattern_discovery.extract_and_save_patterns(
@@ -299,101 +310,197 @@ class RetrainService:
             }
 
         except Exception as e:
-            self.db.rollback()
+            self.db.rollback() # Membatalkan dataset baru jika belum di-commit
+            
             # Catat kegagalan ke history jika dataset sudah terdaftar
             if 'dataset_record' in locals():
+                # 👇 ====== TAMBAHKAN LOGIKA PENGECEKAN INI ====== 👇
+                # Jika existing_dataset bernilai None, artinya ini dataset baru yang ikut terhapus saat rollback.
+                # Kita harus menset ID menjadi None agar tidak melanggar Foreign Key constraint database.
+                is_new_dataset = existing_dataset is None if 'existing_dataset' in locals() else True
+                actual_dataset_id = None if is_new_dataset else dataset_record.id
+                # 👆 ============================================= 👆
+
                 self._record_history(
-                    schedule_id=None, trigger_source="manual_upload", status="FAILED",
-                    details={"error": str(e)}, admin_id=admin_id, dataset_id=dataset_record.id
+                    schedule_id=None, 
+                    trigger_source="manual_upload", 
+                    status="FAILED",
+                    details={"error": str(e)}, 
+                    admin_id=admin_id, 
+                    dataset_id=actual_dataset_id # 🌟 Gunakan ID hasil filter safe-check
                 )
                 self.db.commit()
             raise HTTPException(status_code=500, detail=f"Training gagal: {str(e)}")
 
-    def execute_retrain(self, schedule_dict: Dict[str, Any], trigger: str = "scheduled", admin_id: Optional[int] = None) -> Dict[str, Any]:
+    def execute_retrain(self, domain: str, schedule_id: Optional[int] = None, trigger_source: str = "MANUAL", admin_id: Optional[int] = None) -> Dict[str, Any]:
         """
-        Refactored: Menjalankan retrain otomatis/manual berdasarkan jadwal.
-        Mengintegrasikan model registration helper dan cleanup lifecycle.
+        Main entry point untuk menjalankan proses retraining dengan data bersih.
         """
-        schedule_id = schedule_dict.get("id")
-        domain = schedule_dict.get("domain", "auto_detect")
-        
+        start_time = datetime.now()
+
         try:
-            dataset_path = self._get_latest_dataset(domain)
-            if not dataset_path:
-                raise Exception(f"Tidak ada dataset ditemukan untuk domain: {domain}")
+            # 1. Validasi Domain
+            if domain not in ["agenusa", "nusabill"]:
+                raise HTTPException(status_code=400, detail=f"Domain tidak dikenal: {domain}")
 
-            result = self._run_training_logic(dataset_path, domain)
+            # 2. Ambil Dataset Baseline dari CSV
+            csv_name = f"{domain}_isolation_dataset.csv"
+            csv_path = DATA_DIR / csv_name
+            if not csv_path.exists():
+                raise HTTPException(status_code=404, detail=f"Dataset baseline CSV tidak ditemukan di {csv_path}")
 
-            new_model = self._register_model(
-                domain=result["domain"],
-                model_path=result["model_path"],
-                anomalies_found=result["anomalies_found"],
-                total_records=result["total_records"]
+            df_base = pd.read_csv(csv_path)
+
+            # 3. Ambil Data Tambahan dari DB (Feedback)
+            feedbacks = self.db.query(MLFeedbackLog).filter(
+                MLFeedbackLog.domain == domain,
+                MLFeedbackLog.is_used_in_retrain == False
+            ).all()
+
+            if feedbacks:
+                fb_data = [fb.features_snapshot for fb in feedbacks]
+                df_fb = pd.DataFrame(fb_data)
+                df_combined = pd.concat([df_base, df_fb], ignore_index=True)
+            else:
+                df_combined = df_base
+
+            # --- PERBAIKAN: PEMBERSIHAN DATA ---
+            # Pastikan kolom seragam (lowercase) sebelum diproses
+            df_combined.columns = df_combined.columns.str.lower()
+            
+            # Hapus kolom duplikat jika ada setelah penggabungan
+            df_combined = df_combined.loc[:, ~df_combined.columns.duplicated()]
+
+            # 4. Bangun fitur
+            feature_df = build_features(domain, df_combined)
+            
+            # Pastikan fitur akhir adalah UPPERCASE agar sama persis dengan format runtime
+            feature_df.columns = feature_df.columns.str.upper()
+
+            # 5. Jalankan Pelatihan
+            contamination_rate = 0.05
+            training_result = train_from_dataframe(
+                domain=domain,
+                feature_df=feature_df,
+                contamination=contamination_rate
             )
 
-            if trigger == "manual" and admin_id:
-                self._log_activity(
-                    admin_id, 
-                    "MANUAL_RUN_RETRAIN", 
-                    "RETRAIN_SCHEDULE", 
-                    schedule_id, 
-                    f"Run Now: {schedule_dict.get('name')}"
-                )
+            # 6. Jalankan Pattern Discovery Auditing (Opsional)
+            new_patterns_count = 0
+            try:
+                trained_model = load_isolation_model(domain)
+                config = DOMAIN_ISO_CONFIG[domain]
+                x_eval = feature_df.drop(columns=["is_fraud", *config["drop_cols"]], errors="ignore")
+                
+                preds = trained_model.predict(x_eval)
+                feature_df["IS_ANOMALY"] = (preds == -1).astype(int)
+                anomaly_df = feature_df[feature_df["IS_ANOMALY"] == 1]
 
+                new_patterns_count = self.pattern_discovery.discover_patterns_from_anomalies(
+                    domain=domain,
+                    anomaly_df=anomaly_df
+                )
+            except Exception as e:
+                logger.warning(f"Pattern discovery skipped or failed during retrain: {str(e)}")
+                new_patterns_count = 0
+
+            # 7. Tandai Feedback di DB bahwa sudah sukses dipakai latihan
+            if feedbacks:
+                for fb in feedbacks:
+                    fb.is_used_in_retrain = True
+                    fb.retrained_at = datetime.now(timezone.utc)
+
+            # 8. Catat Histori ke Database Audit Trail
+            details = {
+                "status": "success",
+                "domain": domain,
+                "total_records_trained": len(df_combined),
+                "feedback_records_used": len(feedbacks),
+                "anomalies_found": training_result.get("anomalies_found", 0),
+                "new_patterns_discovered": new_patterns_count,
+                "duration_seconds": (datetime.now() - start_time).total_seconds()
+            }
+            
             self._record_history(
-                schedule_id=schedule_id, 
-                trigger_source=trigger, 
+                schedule_id=schedule_id,
+                trigger_source=trigger_source,
                 status="SUCCESS",
-                details=result, 
-                admin_id=admin_id, 
-                model_id=new_model.id
+                details=details,
+                admin_id=admin_id
             )
             
-            if schedule_id:
-                self.db.query(RetrainSchedule).filter(
-                    RetrainSchedule.id == schedule_id
-                ).update({"updated_at": datetime.now(timezone.utc)})
-
-            try:
-                from app.application.services.dataset_retention_service import DatasetRetentionService
-                retention_service = DatasetRetentionService(self.db)
-                retention_result = retention_service.cleanup_old_datasets(
-                    keep_latest=3,
-                    older_than_days=30,
-                    remove_files=False
-                )
-                result["retention_cleanup"] = retention_result
-            except Exception as cleanup_err:
-                print(f"[Retention Warning] {cleanup_err}")
-
             self.db.commit()
-            return result
+            return details
 
         except Exception as e:
             self.db.rollback()
-            
+            # --- PERBAIKAN: FIX FOREIGNKEYVIOLATION ---
+            # Catat error tanpa menyertakan dataset_id yang mungkin menyebabkan FK violation saat rollback
             self._record_history(
-                schedule_id=schedule_id, 
-                trigger_source=trigger, 
-                status="FAILED", 
-                details={"error": str(e)}, 
+                schedule_id=schedule_id,
+                trigger_source=trigger_source,
+                status="FAILED",
+                details={"error": str(e)},
                 admin_id=admin_id
             )
             self.db.commit()
-            
-            return {"status": "error", "message": str(e)}
+            raise HTTPException(status_code=500, detail=f"Training gagal: {str(e)}")
 
     # ==========================================
     # 🛠️ INTERNAL HELPERS
     # ==========================================
     def _run_training_logic(self, file_path: Path, domain: str) -> Dict[str, Any]:
-        """Logika inti ML (Build Features -> Isolation Forest -> Pattern Discovery)."""
-        df = pd.read_csv(file_path)
+        """Logika inti ML (Build Features -> Isolation Forest -> Pattern Discovery) dengan ML Feedback Loop."""
+        
+        # ==========================================
+        # 1. BACA DATA HISTORIS DARI CSV (Base Data)
+        # ==========================================
+        import pandas as pd # Pastikan pd di-import
+        df_base = pd.read_csv(file_path)
+        
+        # Paksa nama kolom CSV jadi lowercase agar cocok dengan Database
+        df_base.columns = df_base.columns.str.lower()
         
         if domain == "auto_detect":
-            domain = detect_domain(df.columns.tolist()) or "agenusa"
+            # Asumsi fungsi detect_domain sudah meng-handle lowercase
+            domain = detect_domain(df_base.columns.tolist()) or "agenusa"
 
-        feature_df = build_features(domain, df)
+        # ==========================================
+        # 2. EKSTRAKSI GOLDEN DATASET (Feedback Analis)
+        # ==========================================
+        # Tarik data koreksi fraud dari ml_feedback_logs
+        feedbacks = self.db.query(MLFeedbackLog).filter(
+            MLFeedbackLog.is_used_for_training == False
+        ).all()
+
+        df_combined = df_base.copy()
+        
+        if feedbacks:
+            # Ubah data SQLAlchemy ke List of Dictionaries agar bisa masuk Pandas
+            feedback_data = []
+            for fb in feedbacks:
+                row_dict = {c.name: getattr(fb, c.name) for c in fb.__table__.columns}
+                feedback_data.append(row_dict)
+            
+            df_feedback = pd.DataFrame(feedback_data)
+            
+            # Gabungkan CSV + Database
+            df_combined = pd.concat([df_base, df_feedback], ignore_index=True)
+            
+            # Ubah tipe Decimal dari PostgreSQL menjadi Float agar Machine Learning tidak crash
+            df_combined = df_combined.apply(pd.to_numeric, errors='ignore')
+
+            # Tandai feedback agar tidak dipelajari dua kali di masa depan
+            for fb in feedbacks:
+                fb.is_used_for_training = True
+        else:
+            # Tetap pasang pelindung tipe data meski tidak ada feedback baru
+            df_combined = df_combined.apply(pd.to_numeric, errors='ignore')
+
+        # ==========================================
+        # 3. FEATURE ENGINEERING & TRAINING MODEL
+        # ==========================================
+        feature_df = build_features(domain, df_combined)
 
         training_result = self.training_engine.train_and_detect(
             feature_df=feature_df,
@@ -402,12 +509,16 @@ class RetrainService:
 
         anomaly_df = training_result["anomaly_df"]
         
+        # ==========================================
+        # 4. PATTERN DISCOVERY
+        # ==========================================
         new_patterns_count = self.pattern_discovery.extract_and_save_patterns(self.db, domain, anomaly_df)
 
         return {
             "status": "success",
             "domain": domain,
-            "total_records": len(df),
+            "total_records": len(df_combined),
+            "feedback_records_used": len(feedbacks), # Audit trail
             "anomalies_found": training_result["anomalies_found"],
             "new_patterns_discovered": new_patterns_count,
             "model_path": training_result["model_path"]

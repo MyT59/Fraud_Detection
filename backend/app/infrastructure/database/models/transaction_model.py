@@ -4,6 +4,7 @@ from sqlalchemy import (
     Column, BigInteger, Integer, String, Numeric, Boolean, Text,
     DateTime, ForeignKey, Enum, UniqueConstraint, text, Float
 )
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -30,7 +31,7 @@ class Transaction(Base):
     anomaly_score = Column(Float)
     risk_score = Column(Float)
     risk_level = Column(String(50))
-    score_breakdown = Column(JSONB)
+    score_breakdown = Column(MutableDict.as_mutable(JSONB),default=dict)
     is_flagged_ml = Column(Boolean, default=False, server_default=text("false"))
     violation_reason = Column(Text)
     violation_rule_ids = Column(JSONB)

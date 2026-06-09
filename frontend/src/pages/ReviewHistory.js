@@ -6,121 +6,46 @@ import HistoryDetailModal from "../components/reviewhistory/HistoryDetailModal";
 import api from "../services/apiService";
 import "./ReviewHistory.css";
 
-const mapReviewItem = (r, idx) => {
-  const actionMap = {
-    FRAUD: "rejected",
-    SAFE: "approved",
-  };
-  const action = actionMap[r.decision?.toUpperCase()] ?? "approved";
-
-  const txnDisplay = r.transaction_id
+/**
+ * mapReviewItem
+ * Memetakan item dari GET /reviews/history ke format internal FE.
+ *
+ * Hanya menggunakan field yang BENAR-BENAR ada di ReviewHistoryItem schema BE:
+ *   id, transaction_id, alert_id, decision, review_note,
+ *   previous_status, final_status, reviewed_by, created_at
+ *
+ * Field yang TIDAK ada di BE dan TIDAK boleh digunakan:
+ *   service, amount, risk_score, account_id, matched_patterns,
+ *   reviewer_name, reviewer_role, duration
+ */
+const mapReviewItem = (r) => ({
+  // Identifikasi
+  id: `review-${r.id}`,
+  reviewId: r.id,
+  transactionId: r.transaction_id
     ? `TRX-${String(r.transaction_id).padStart(6, "0")}`
-    : `RVW-${String(r.id).padStart(6, "0")}`;
+    : `RVW-${String(r.id).padStart(6, "0")}`,
+  transactionIdRaw: r.transaction_id ?? null,
+  alertId: r.alert_id ?? null,
 
-  return {
-    id: `review-${r.id}`,
-    reviewId: r.id,
-    transactionId: txnDisplay,
-    transactionIdRaw: r.transaction_id,
-    alertId: r.alert_id,
+  // Keputusan
+  decision: (r.decision || "").toUpperCase(), // "SAFE" | "FRAUD"
 
-    action,
-    decision: r.decision,
-    previousStatus: r.previous_status,
-    finalStatus: r.final_status,
+  // Status
+  previousStatus: r.previous_status ?? null,
+  finalStatus: r.final_status ?? null,
 
-    reviewer: r.reviewer_name ?? `Analyst #${r.reviewed_by ?? "?"}`,
-    reviewerRole: r.reviewer_role ?? "Fraud Analyst",
-    reviewedBy: r.reviewed_by,
+  // Reviewer — hanya ID, nama tidak ada di BE schema
+  reviewedBy: r.reviewed_by ?? null,
 
-    timestamp: r.created_at,
-    duration: "—",
+  // Catatan
+  reviewNote: r.review_note ?? null,
 
-    notes: r.review_note ?? "",
+  // Waktu
+  createdAt: r.created_at ?? null,
+});
 
-    service: r.service ?? r.domain ?? null,
-    accountId: r.account_id ?? r.customer_id ?? "—",
-    amount: parseFloat(r.amount ?? r.bill_amount ?? 0),
-    riskScore:
-      r.risk_score != null
-        ? Math.round(r.risk_score <= 1 ? r.risk_score * 100 : r.risk_score)
-        : 0,
-
-    matchedPatterns: r.matched_patterns
-      ? r.matched_patterns.split("|").filter(Boolean)
-      : [],
-  };
-};
-
-const SAMPLE = [
-  {
-    id: "review-1",
-    reviewId: 1,
-    transactionId: "TRX-000042",
-    transactionIdRaw: 42,
-    alertId: 1024,
-    action: "rejected",
-    decision: "FRAUD",
-    previousStatus: "UNDER_REVIEW",
-    finalStatus: "FRAUD",
-    reviewer: "Admin User",
-    reviewerRole: "Senior Analyst",
-    reviewedBy: 1,
-    timestamp: new Date().toISOString(),
-    duration: "—",
-    notes:
-      "Multiple patterns confirmed: bruteforce PIN + money mule destination.",
-    service: "agenusa",
-    accountId: "ACC-001",
-    amount: 895000,
-    riskScore: 96,
-    matchedPatterns: ["brute_force_pin", "money_mule_destination"],
-  },
-  {
-    id: "review-2",
-    reviewId: 2,
-    transactionId: "TRX-000009",
-    transactionIdRaw: 9,
-    alertId: 1025,
-    action: "rejected",
-    decision: "FRAUD",
-    previousStatus: "UNDER_REVIEW",
-    finalStatus: "FRAUD",
-    reviewer: "Jane Smith",
-    reviewerRole: "Fraud Analyst",
-    reviewedBy: 2,
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    duration: "—",
-    notes: "Refund abuse + burst payment pattern via API channel.",
-    service: "nusabill",
-    accountId: "CUST-009",
-    amount: 315845,
-    riskScore: 95,
-    matchedPatterns: ["refund_abuse", "burst_payment"],
-  },
-  {
-    id: "review-3",
-    reviewId: 3,
-    transactionId: "TRX-000003",
-    transactionIdRaw: 3,
-    alertId: 1026,
-    action: "approved",
-    decision: "SAFE",
-    previousStatus: "UNDER_REVIEW",
-    finalStatus: "SAFE",
-    reviewer: "John Doe",
-    reviewerRole: "Junior Analyst",
-    reviewedBy: 3,
-    timestamp: new Date(Date.now() - 7200000).toISOString(),
-    duration: "—",
-    notes: "Midnight withdrawal pattern — verified, no conclusive fraud.",
-    service: "agenusa",
-    accountId: "ACC-003",
-    amount: 234802,
-    riskScore: 78,
-    matchedPatterns: [],
-  },
-];
+// ─── Komponen Utama ───────────────────────────────────────────────
 
 const ReviewHistory = () => {
   const [items, setItems] = useState([]);
@@ -136,6 +61,8 @@ const ReviewHistory = () => {
   const [selectedItem, setSelectedItem] = useState(null);
 
   const abortRef = useRef(null);
+
+  // ─── Fetch History ─────────────────────────────────────────────
 
   const fetchHistory = useCallback(async (targetPage) => {
     if (abortRef.current) abortRef.current.abort();
@@ -155,26 +82,26 @@ const ReviewHistory = () => {
       setApiError(false);
     } catch (err) {
       if (err.name === "AbortError") return;
-      console.warn(
-        "ReviewHistory: API error, menggunakan sample data.",
-        err.message,
-      );
+      console.error("[ReviewHistory] Gagal memuat history:", err.message);
+      // ❌ TIDAK fallback ke dummy — tampilkan error state
       setApiError(true);
-      setItems(SAMPLE);
-      setTotalItems(SAMPLE.length);
+      setItems([]);
+      setTotalItems(0);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // ─── Fetch Metrics ─────────────────────────────────────────────
+
   const fetchMetrics = useCallback(async () => {
     setMetricsLoading(true);
     try {
       const data = await api.get("/reviews/metrics");
-
-      setMetrics(data);
+      setMetrics(data?.data ?? data ?? null);
     } catch (err) {
-      console.warn("ReviewHistory: Gagal fetch metrics.", err.message);
+      console.warn("[ReviewHistory] Gagal fetch metrics:", err.message);
+      // Metrics gagal tidak kritis — halaman tetap bisa digunakan
     } finally {
       setMetricsLoading(false);
     }
@@ -188,47 +115,50 @@ const ReviewHistory = () => {
     fetchMetrics();
   }, [fetchMetrics]);
 
-  const handlePageChange = (newPage) => {
-    if (newPage < 1 || newPage > Math.ceil(totalItems / LIMIT)) return;
-    setPage(newPage);
+  // ─── Handlers ──────────────────────────────────────────────────
 
+  const handlePageChange = (newPage) => {
+    const maxPage = Math.ceil(totalItems / LIMIT);
+    if (newPage < 1 || newPage > maxPage) return;
+    setPage(newPage);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleRefresh = () => {
+    setApiError(false);
     setPage(1);
     fetchHistory(1);
     fetchMetrics();
   };
 
+  // ─── Render ────────────────────────────────────────────────────
+
   if (loading && page === 1 && items.length === 0) {
     return <PageLoader message="Memuat Review History..." />;
   }
 
-  const totalPages = Math.ceil(totalItems / LIMIT);
+  const totalPages = Math.max(1, Math.ceil(totalItems / LIMIT));
 
   return (
     <div className="rh-page-wrapper">
+      {/* Banner Error — tampil jika API gagal, tanpa dummy data */}
       {apiError && (
         <div className="rh-offline-banner">
-          <i className="bi bi-exclamation-triangle-fill"></i>
+          <i className="bi bi-exclamation-triangle-fill" />
           <span>
-            Backend tidak tersedia — menampilkan <strong>data sampel</strong>.
-            Jalankan uvicorn agar data review nyata ditampilkan.
+            <strong>Gagal memuat data.</strong> Tidak dapat terhubung ke server.
+            Periksa koneksi atau pastikan backend berjalan.
           </span>
           <button className="rh-refresh-btn" onClick={handleRefresh}>
-            <i className="bi bi-arrow-clockwise"></i>
-            Coba lagi
+            <i className="bi bi-arrow-clockwise" /> Coba Lagi
           </button>
         </div>
       )}
 
-      <HistoryStats
-        data={items}
-        metrics={metrics}
-        metricsLoading={metricsLoading}
-      />
+      {/* Stats — dari metrics API, bukan dari dummy */}
+      <HistoryStats metrics={metrics} metricsLoading={metricsLoading} />
 
+      {/* Tabel History */}
       <HistoryTable
         data={items}
         loading={loading}
@@ -239,8 +169,10 @@ const ReviewHistory = () => {
         onPageChange={handlePageChange}
         onViewDetail={setSelectedItem}
         onRefresh={handleRefresh}
+        apiError={apiError}
       />
 
+      {/* Modal Detail */}
       {selectedItem && (
         <HistoryDetailModal
           item={selectedItem}

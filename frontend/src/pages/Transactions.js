@@ -1,172 +1,168 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import TransactionTable from "../components/transactions/TransactionTable";
 import PaginationComponent from "../components/transactions/PaginationComponent";
 import TransactionDetailModal from "../components/transactions/TransactionDetailModal";
 import "./Transactions.css";
 import PageLoader from "../components/common/PageLoader";
+import transactionService from "../services/transactionService";
 
-const BASE_URL = process.env.REACT_APP_ML_API_URL || "http://localhost:8000";
 const ITEMS_PER_PAGE = 10;
+const SEARCH_DEBOUNCE_MS = 400;
+
+const STATUS_LABEL = {
+  PENDING: "Pending",
+  UNDER_REVIEW: "Under Review",
+  SAFE: "Safe",
+  FRAUD: "Fraud",
+};
+
+// Sort key FE → field name BE
+const SORT_BY_MAP = {
+  amount: "amount",
+  risk: "risk_score",
+  date: "transaction_time",
+};
 
 const Transactions = () => {
   const [loading, setLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(false);
   const [apiError, setApiError] = useState(false);
-  const [allTxn, setAllTxn] = useState([]);
-  const [apiStats, setApiStats] = useState(null);
+
+  const [rows, setRows] = useState([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [stats, setStats] = useState({
+    total: 0,
+    fraud: 0,
+    safe: 0,
+    under_review: 0,
+  });
+
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTxn, setSelectedTxn] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [colSort, setColSort] = useState({ key: null, dir: "asc" });
   const [colFilter, setColFilter] = useState({
     service: "all",
     status: "all",
-    type: "all",
     dateFrom: "",
     dateTo: "",
   });
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        const [txnRes, feedbackRes] = await Promise.all([
-          fetch(`${BASE_URL}/transactions/all?limit=10000&offset=0`),
-          fetch(`${BASE_URL}/review/feedback`).catch(() => null),
-        ]);
-        if (!txnRes.ok) throw new Error(`HTTP ${txnRes.status}`);
-        const json = await txnRes.json();
-        let txns = json.transactions || [];
+  // Debounce search input
+  const debounceTimer = useRef(null);
+  const handleSearchChange = (val) => {
+    setSearchQuery(val);
+    setCurrentPage(1);
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      setDebouncedSearch(val);
+    }, SEARCH_DEBOUNCE_MS);
+  };
 
-        if (feedbackRes && feedbackRes.ok) {
-          const fb = await feedbackRes.json();
-          const decisionMap = {};
-          (fb.records || []).forEach((r) => {
-            if (!decisionMap[r.transaction_id])
-              decisionMap[r.transaction_id] = r.decision;
-          });
-          txns = txns.map((t) =>
-            decisionMap[t.transactionId]
-              ? {
-                  ...t,
-                  status: decisionMap[t.transactionId],
-                  reviewedViaManual: true,
-                }
-              : t,
-          );
-        }
-        setAllTxn(txns);
-        setApiStats(json.stats || null);
+  // Build query params dari state
+  const buildParams = useCallback(() => {
+    const params = {
+      page: currentPage,
+      size: ITEMS_PER_PAGE,
+      sort_by: SORT_BY_MAP[colSort.key] || "transaction_time",
+      sort_order: colSort.key ? colSort.dir : "desc",
+    };
+
+    if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+    if (colFilter.service !== "all") params.service_source = colFilter.service;
+    if (colFilter.status !== "all") params.final_status = colFilter.status;
+    if (colFilter.dateFrom)
+      params.start_date = colFilter.dateFrom + "T00:00:00";
+    if (colFilter.dateTo) params.end_date = colFilter.dateTo + "T23:59:59";
+
+    return params;
+  }, [currentPage, colSort, debouncedSearch, colFilter]);
+
+  // Fetch dari BE
+  const fetchTransactions = useCallback(
+    async (isInitial = false) => {
+      if (isInitial) setLoading(true);
+      else setTableLoading(true);
+
+      try {
+        const response =
+          await transactionService.getTransactions(buildParams());
+
+        setRows(response.data || []);
+        setTotalRecords(response.total_records || 0);
+        setTotalPages(response.total_pages || 0);
+        setStats({
+          total: response.summary?.total_transactions || 0,
+          fraud: response.summary?.fraud || 0,
+          safe: response.summary?.safe || 0,
+          under_review: response.summary?.under_review || 0,
+        });
+        setApiError(false);
       } catch (err) {
-        console.warn(
-          "Transactions: backend offline, pakai data generated.",
-          err.message,
-        );
-        setApiError(true);
-        setAllTxn(generateFallback());
+        console.error("Transactions: fetch gagal.", err.message);
+        if (isInitial) {
+          setApiError(true);
+          const fallback = generateFallback();
+          setRows(fallback.slice(0, ITEMS_PER_PAGE));
+          setTotalRecords(fallback.length);
+          setTotalPages(Math.ceil(fallback.length / ITEMS_PER_PAGE));
+          setStats({
+            total: fallback.length,
+            fraud: fallback.filter((t) => t.final_status === "FRAUD").length,
+            safe: fallback.filter((t) => t.final_status === "SAFE").length,
+            under_review: fallback.filter(
+              (t) => t.final_status === "UNDER_REVIEW",
+            ).length,
+          });
+        }
       } finally {
         setLoading(false);
+        setTableLoading(false);
       }
-    };
-    fetchAll();
-  }, []);
-
-  const filtered = useMemo(() => {
-    let arr = [...allTxn];
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      arr = arr.filter(
-        (t) =>
-          t.transactionId.toLowerCase().includes(q) ||
-          t.accountId.toLowerCase().includes(q) ||
-          (t.destId || "").toLowerCase().includes(q),
-      );
-    }
-
-    if (colFilter.service !== "all")
-      arr = arr.filter((t) => t.service === colFilter.service);
-    if (colFilter.status !== "all")
-      arr = arr.filter((t) => t.status === colFilter.status);
-    if (colFilter.type !== "all")
-      arr = arr.filter((t) => (t.type || t.channel || "") === colFilter.type);
-    if (colFilter.dateFrom)
-      arr = arr.filter(
-        (t) =>
-          t.timestamp && new Date(t.timestamp) >= new Date(colFilter.dateFrom),
-      );
-    if (colFilter.dateTo)
-      arr = arr.filter(
-        (t) =>
-          t.timestamp &&
-          new Date(t.timestamp) <= new Date(colFilter.dateTo + "T23:59:59"),
-      );
-
-    if (colSort.key) {
-      const dir = colSort.dir === "asc" ? 1 : -1;
-      arr = [...arr].sort((a, b) => {
-        if (colSort.key === "amount") return (a.amount - b.amount) * dir;
-        if (colSort.key === "risk") return (a.riskScore - b.riskScore) * dir;
-        if (colSort.key === "date") {
-          const ta = new Date(a.timestamp || a.time).getTime();
-          const tb = new Date(b.timestamp || b.time).getTime();
-          return (ta - tb) * dir;
-        }
-        return 0;
-      });
-    }
-
-    return arr;
-  }, [allTxn, searchQuery, colFilter, colSort]);
-
-  const stats = useMemo(
-    () =>
-      apiStats ?? {
-        total: allTxn.length,
-        pending: allTxn.filter((t) => t.status === "pending").length,
-        approved: allTxn.filter((t) => t.status === "approved").length,
-        rejected: allTxn.filter((t) => t.status === "rejected").length,
-        fraud: allTxn.filter((t) => t.isRealFraud).length,
-        highRisk: allTxn.filter((t) => t.riskScore >= 65).length,
-      },
-    [apiStats, allTxn],
+    },
+    [buildParams],
   );
 
-  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-  const indexFirst = (currentPage - 1) * ITEMS_PER_PAGE;
-  const indexLast = indexFirst + ITEMS_PER_PAGE;
-  const currentRows = filtered.slice(indexFirst, indexLast);
+  // Initial load
+  useEffect(() => {
+    fetchTransactions(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch saat filter / sort / page / search berubah (bukan initial)
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    fetchTransactions(false);
+  }, [fetchTransactions]);
 
   const handleSortChange = (key, dir) => {
     setColSort({ key, dir: key ? dir : "asc" });
     setCurrentPage(1);
   };
+
   const handleColFilterChange = (updates) => {
     setColFilter((prev) => ({ ...prev, ...updates }));
     setCurrentPage(1);
   };
 
-  const activeFilterCount = useMemo(() => {
-    let n = 0;
-    if (colFilter.service !== "all") n++;
-    if (colFilter.status !== "all") n++;
-    if (colFilter.type !== "all") n++;
-    if (colFilter.dateFrom) n++;
-    if (colFilter.dateTo) n++;
-    if (colSort.key) n++;
-    return n;
-  }, [colFilter, colSort]);
-
   const handleResetAll = () => {
-    setColFilter({
-      service: "all",
-      status: "all",
-      type: "all",
-      dateFrom: "",
-      dateTo: "",
-    });
+    setColFilter({ service: "all", status: "all", dateFrom: "", dateTo: "" });
     setColSort({ key: null, dir: "asc" });
     setSearchQuery("");
+    setDebouncedSearch("");
     setCurrentPage(1);
   };
 
@@ -192,13 +188,14 @@ const Transactions = () => {
 
   const activeChips = useMemo(() => {
     const chips = [];
-    if (searchQuery.trim())
+    if (debouncedSearch.trim())
       chips.push({
         id: "search",
         icon: "bi-search",
-        label: `"${searchQuery.trim()}"`,
+        label: `"${debouncedSearch.trim()}"`,
         onRemove: () => {
           setSearchQuery("");
+          setDebouncedSearch("");
           setCurrentPage(1);
         },
       });
@@ -206,47 +203,29 @@ const Transactions = () => {
       chips.push({
         id: "service",
         icon: "bi-grid-1x2",
-        label: colFilter.service === "agenusa" ? "AGENUSA" : "NUSABILL",
-        onRemove: () => {
-          handleColFilterChange({ service: "all" });
-        },
+        label: colFilter.service,
+        onRemove: () => handleColFilterChange({ service: "all" }),
       });
     if (colFilter.status !== "all")
       chips.push({
         id: "status",
         icon: "bi-flag",
-        label:
-          colFilter.status.charAt(0).toUpperCase() + colFilter.status.slice(1),
-        onRemove: () => {
-          handleColFilterChange({ status: "all" });
-        },
-      });
-    if (colFilter.type !== "all")
-      chips.push({
-        id: "type",
-        icon: "bi-tag",
-        label: colFilter.type,
-        onRemove: () => {
-          handleColFilterChange({ type: "all" });
-        },
+        label: STATUS_LABEL[colFilter.status] || colFilter.status,
+        onRemove: () => handleColFilterChange({ status: "all" }),
       });
     if (colFilter.dateFrom)
       chips.push({
         id: "dateFrom",
         icon: "bi-calendar-event",
         label: `Dari ${fmtDateChip(colFilter.dateFrom)}`,
-        onRemove: () => {
-          handleColFilterChange({ dateFrom: "" });
-        },
+        onRemove: () => handleColFilterChange({ dateFrom: "" }),
       });
     if (colFilter.dateTo)
       chips.push({
         id: "dateTo",
         icon: "bi-calendar-check",
         label: `S/d ${fmtDateChip(colFilter.dateTo)}`,
-        onRemove: () => {
-          handleColFilterChange({ dateTo: "" });
-        },
+        onRemove: () => handleColFilterChange({ dateTo: "" }),
       });
     if (colSort.key) {
       const sortLabel =
@@ -267,26 +246,27 @@ const Transactions = () => {
       });
     }
     return chips;
-  }, [searchQuery, colFilter, colSort]);
+  }, [debouncedSearch, colFilter, colSort]);
 
   const handleViewDetails = (t) => {
     setSelectedTxn(t);
     setIsModalOpen(true);
   };
 
-  if (loading) return <PageLoader message="Memuat data transaksi..." />;
+  const indexFirst = (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const indexLast = Math.min(currentPage * ITEMS_PER_PAGE, totalRecords);
 
   const STAT_ITEMS = [
     { key: "total", label: "Total", icon: "bi-list-ul", color: "#3b82f6" },
     {
-      key: "pending",
-      label: "Pending",
+      key: "under_review",
+      label: "Under Review",
       icon: "bi-hourglass-split",
       color: "#f59e0b",
     },
     {
-      key: "approved",
-      label: "Approved",
+      key: "safe",
+      label: "Safe",
       icon: "bi-check-circle-fill",
       color: "#10b981",
     },
@@ -301,9 +281,11 @@ const Transactions = () => {
       label: "Hasil Filter",
       icon: "bi-funnel-fill",
       color: "#06b6d4",
-      val: filtered.length,
+      val: totalRecords,
     },
   ];
+
+  if (loading) return <PageLoader message="Memuat data transaksi..." />;
 
   return (
     <div className="transactions-page">
@@ -329,7 +311,7 @@ const Transactions = () => {
                     className="bi bi-circle-fill"
                     style={{ fontSize: ".45rem" }}
                   ></i>
-                  {allTxn.length.toLocaleString()} transaksi
+                  {stats.total.toLocaleString()} transaksi
                 </span>
               )}
             </div>
@@ -355,17 +337,18 @@ const Transactions = () => {
               <input
                 type="text"
                 className="txn-search-input"
-                placeholder="Cari ID, Account, atau Dest…"
+                placeholder="Cari Transaction ID atau User Account…"
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => handleSearchChange(e.target.value)}
               />
               {searchQuery && (
                 <button
                   className="txn-search-clear"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => {
+                    setSearchQuery("");
+                    setDebouncedSearch("");
+                    setCurrentPage(1);
+                  }}
                 >
                   <i className="bi bi-x-circle"></i>
                 </button>
@@ -402,23 +385,42 @@ const Transactions = () => {
             </div>
           )}
 
-          <TransactionTable
-            transactions={currentRows}
-            onViewDetails={handleViewDetails}
-            colSort={colSort}
-            colFilter={colFilter}
-            onSortChange={handleSortChange}
-            onColFilterChange={handleColFilterChange}
-            onApprove={(t) => alert(`Transaction ${t.transactionId} approved!`)}
-            onReject={(t) => alert(`Transaction ${t.transactionId} rejected!`)}
-          />
+          {/* Overlay loading saat ganti page/filter — tanpa replace seluruh tabel */}
+          <div style={{ position: "relative" }}>
+            {tableLoading && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "rgba(255,255,255,0.6)",
+                  zIndex: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: "8px",
+                }}
+              >
+                <div className="spinner-border text-danger" role="status">
+                  <span className="visually-hidden">Memuat...</span>
+                </div>
+              </div>
+            )}
+            <TransactionTable
+              transactions={rows}
+              onViewDetails={handleViewDetails}
+              colSort={colSort}
+              colFilter={colFilter}
+              onSortChange={handleSortChange}
+              onColFilterChange={handleColFilterChange}
+            />
+          </div>
 
           <div className="card-footer">
             <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
               <div className="pagination-info">
-                {filtered.length === 0
+                {totalRecords === 0
                   ? "Tidak ada transaksi ditemukan"
-                  : `Menampilkan ${indexFirst + 1}–${Math.min(indexLast, filtered.length)} dari ${filtered.length} transaksi`}
+                  : `Menampilkan ${indexFirst}–${indexLast} dari ${totalRecords.toLocaleString()} transaksi`}
               </div>
               <PaginationComponent
                 currentPage={currentPage}
@@ -439,10 +441,12 @@ const Transactions = () => {
   );
 };
 
+// --- Fallback Seeded Random Generator ---
 const seededRand = (s) => {
   const x = Math.sin(s + 1) * 10000;
   return x - Math.floor(x);
 };
+
 const generateFallback = () => {
   const rows = [];
   for (let i = 1; i <= 60; i++) {
@@ -451,24 +455,26 @@ const generateFallback = () => {
       r3 = seededRand(i * 17);
     const risk = Math.min(99, Math.max(5, Math.floor(r * 95)));
     rows.push({
-      id: `AGN-${String(i).padStart(6, "0")}`,
-      service: "agenusa",
-      transactionId: `AGN-${String(i).padStart(6, "0")}`,
-      accountId: `ACCT1${String(10000 + ((i * 37) % 900)).slice(1)}`,
-      destId: `DST3${String(10000 + ((i * 53) % 900)).slice(1)}`,
-      type: "Transfer",
-      channel: null,
-      refundFlag: false,
+      id: i,
+      original_trx_id: `AGN-${String(i).padStart(6, "0")}`,
+      service_source: "AGENUSA",
+      user_account_id: `ACCT1${String(10000 + ((i * 37) % 900)).slice(1)}`,
       amount: Math.floor(50000 + r * 950000),
-      paymentAmount: null,
-      timestamp: new Date(
+      risk_score: risk,
+      risk_level:
+        risk >= 80
+          ? "CRITICAL"
+          : risk >= 60
+            ? "HIGH"
+            : risk >= 40
+              ? "MEDIUM"
+              : "LOW",
+      final_status: risk >= 65 ? "FRAUD" : r2 > 0.6 ? "SAFE" : "UNDER_REVIEW",
+      transaction_time: new Date(
         Date.now() - Math.floor(r3 * 60) * 86400000,
       ).toISOString(),
-      time: new Date(Date.now() - Math.floor(r3 * 60) * 86400000).toISOString(),
-      patterns: [],
-      riskScore: risk,
-      status: risk >= 65 ? "pending" : r2 > 0.4 ? "approved" : "pending",
-      isRealFraud: risk >= 65,
+      city: ["Jakarta", "Surabaya", "Bandung", "Medan"][Math.floor(r2 * 4)],
+      country: "Indonesia",
     });
   }
   for (let i = 1; i <= 40; i++) {
@@ -476,29 +482,32 @@ const generateFallback = () => {
       r2 = seededRand(i * 19),
       r3 = seededRand(i * 29);
     const risk = Math.min(99, Math.max(5, Math.floor(r * 95)));
-    const billAmt = Math.floor(50000 + r * 700000);
     rows.push({
-      id: `NUS-${String(i).padStart(6, "0")}`,
-      service: "nusabill",
-      transactionId: `NUS-${String(i).padStart(6, "0")}`,
-      accountId: `CUST1${String(10000 + ((i * 61) % 900)).slice(1)}`,
-      destId: `BILL${String(100000 + ((i * 97) % 900000))}`,
-      type: null,
-      channel: ["API", "Web", "Mobile"][Math.floor(r2 * 3)],
-      refundFlag: false,
-      amount: billAmt,
-      paymentAmount: billAmt,
-      timestamp: new Date(
+      id: i + 60,
+      original_trx_id: `NUS-${String(i).padStart(6, "0")}`,
+      service_source: "NUSABILL",
+      user_account_id: `CUST1${String(10000 + ((i * 61) % 900)).slice(1)}`,
+      amount: Math.floor(50000 + r * 700000),
+      risk_score: risk,
+      risk_level:
+        risk >= 80
+          ? "CRITICAL"
+          : risk >= 60
+            ? "HIGH"
+            : risk >= 40
+              ? "MEDIUM"
+              : "LOW",
+      final_status: risk >= 65 ? "FRAUD" : r2 > 0.6 ? "SAFE" : "PENDING",
+      transaction_time: new Date(
         Date.now() - Math.floor(r3 * 60) * 86400000,
       ).toISOString(),
-      time: new Date(Date.now() - Math.floor(r3 * 60) * 86400000).toISOString(),
-      patterns: [],
-      riskScore: risk,
-      status: risk >= 65 ? "pending" : r2 > 0.4 ? "approved" : "pending",
-      isRealFraud: risk >= 65,
+      city: ["Bali", "Yogyakarta", "Makassar", "Semarang"][Math.floor(r2 * 4)],
+      country: "Indonesia",
     });
   }
-  return rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  return rows.sort(
+    (a, b) => new Date(b.transaction_time) - new Date(a.transaction_time),
+  );
 };
 
 export default Transactions;

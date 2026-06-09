@@ -1,41 +1,54 @@
 import React from "react";
 
-const TYPE_OPTIONS = [
-  { value: "all", label: "Semua Tipe" },
-  { value: "fraud", label: "Fraud Detected" },
-  { value: "rule", label: "Rule Triggered" },
-  { value: "blacklist", label: "Blacklist Hit" },
-  { value: "review", label: "Manual Review" },
-  { value: "system", label: "System Alert" },
-];
-
+// Sesuai enum BE: AlertStatusEnum
 const STATUS_OPTIONS = [
   { value: "all", label: "Semua Status" },
-  { value: "unread", label: "Belum Dibaca (OPEN)" },
-  { value: "read", label: "In Progress" },
-  { value: "resolved", label: "Resolved" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
+  { value: "OPEN", label: "Open" },
+  { value: "IN_PROGRESS", label: "In Progress (Diklaim)" },
+  { value: "RESOLVED", label: "Resolved" },
+  { value: "REOPENED", label: "Reopened" },
+  { value: "OVERRIDDEN", label: "Overridden" },
 ];
 
+// Sesuai enum BE: SeverityLevelEnum / field severity di FraudAlert
 const SEVERITY_OPTIONS = [
   { value: "all", label: "Semua Level" },
-  { value: "critical", label: "Critical" },
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Low" },
+  { value: "CRITICAL", label: "Critical" },
+  { value: "HIGH", label: "High" },
+  { value: "MEDIUM", label: "Medium" },
+  { value: "LOW", label: "Low" },
+];
+
+const TYPE_OPTIONS = [
+  { value: "all", label: "Semua Tipe" },
+  { value: "RULE", label: "Rule Engine" },
+  { value: "PATTERN", label: "Pattern Detection (ML)" },
+  { value: "COMBINED", label: "Combined Detection" },
+  { value: "BLACKLIST", label: "Blacklist Hit" },
+  { value: "ML", label: "ML Anomaly" },
+  { value: "RULE_ML", label: "Rule + ML" },
+  { value: "PATTERN_ML", label: "Pattern + ML" },
+  { value: "COMBINED_ML", label: "Combined + ML" },
+];
+
+const SORT_OPTIONS = [
+  { value: "newest", label: "Terbaru" },
+  { value: "oldest", label: "Terlama" },
+  { value: "priority_desc", label: "Prioritas Tertinggi" },
+  { value: "priority_asc", label: "Prioritas Terendah" },
 ];
 
 const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
   return (
     <div className="alerts-filter-card">
       <div className="alerts-filter-row">
+        {/* Search */}
         <div className="alerts-search-wrap">
-          <i className="bi bi-search alerts-search-icon"></i>
+          <i className="bi bi-search alerts-search-icon" />
           <input
             type="text"
             className="alerts-search-input"
-            placeholder="Cari pesan, ID transaksi..."
+            placeholder="Cari judul, pesan, atau Transaction ID..."
             value={filters.search}
             onChange={(e) => onFilterChange({ search: e.target.value })}
           />
@@ -44,11 +57,12 @@ const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
               className="alerts-search-clear"
               onClick={() => onFilterChange({ search: "" })}
             >
-              <i className="bi bi-x-lg"></i>
+              <i className="bi bi-x-lg" />
             </button>
           )}
         </div>
 
+        {/* Filter Tipe */}
         <select
           className="alerts-select"
           value={filters.type}
@@ -61,6 +75,7 @@ const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
           ))}
         </select>
 
+        {/* Filter Severity */}
         <select
           className="alerts-select"
           value={filters.severity}
@@ -73,6 +88,7 @@ const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
           ))}
         </select>
 
+        {/* Filter Status */}
         <select
           className="alerts-select"
           value={filters.status}
@@ -85,14 +101,38 @@ const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
           ))}
         </select>
 
+        {/* Sort */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <label
+            style={{
+              fontSize: "0.85rem",
+              fontWeight: "600",
+              color: "#6b7280",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Sort By
+          </label>
+          <select
+            className="alerts-select"
+            value={filters.sortBy || "newest"}
+            onChange={(e) => onFilterChange({ sortBy: e.target.value })}
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <button className="alerts-btn-outline" onClick={onReset}>
-          <i className="bi bi-arrow-counterclockwise"></i> Reset
+          <i className="bi bi-arrow-counterclockwise" /> Reset
         </button>
       </div>
 
       <div className="alerts-filter-meta">
-        <i className="bi bi-funnel"></i>
-        Menampilkan <strong>{totalResults}</strong> alert
+        Menampilkan <strong>{totalResults}</strong> alert sesuai filter
       </div>
     </div>
   );

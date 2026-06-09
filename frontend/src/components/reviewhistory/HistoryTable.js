@@ -1,16 +1,23 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import useRole from "../../hooks/useRole";
 import "./HistoryTable.css";
 
-const fmt = (amount) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(amount);
+/**
+ * HistoryTable
+ *
+ * Hanya merender field yang tersedia dari BE ReviewHistoryItem schema:
+ *   id, transaction_id, alert_id, decision, review_note,
+ *   previous_status, final_status, reviewed_by, created_at
+ *
+ * Kolom yang DIHAPUS karena tidak ada di BE:
+ *   Layanan (service), Amount, Account/Customer, Risk Score,
+ *   Reviewer name/role
+ */
 
 const fmtTs = (ds) => {
-  const d = new Date(ds);
-  return d.toLocaleDateString("id-ID", {
+  if (!ds) return "—";
+  return new Date(ds).toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -20,6 +27,7 @@ const fmtTs = (ds) => {
 };
 
 const timeAgo = (ds) => {
+  if (!ds) return "";
   const diff = (Date.now() - new Date(ds).getTime()) / 1000;
   if (diff < 60) return `${Math.floor(diff)}s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
@@ -27,34 +35,99 @@ const timeAgo = (ds) => {
   return `${Math.floor(diff / 86400)}d ago`;
 };
 
-const ACTION_META = {
-  approved: { icon: "bi-check-circle-fill", label: "Safe", cls: "approved" },
-  rejected: { icon: "bi-x-circle-fill", label: "Fraud", cls: "rejected" },
-  flagged: { icon: "bi-flag-fill", label: "Flagged", cls: "flagged" },
-  escalated: {
-    icon: "bi-arrow-up-circle-fill",
-    label: "Escalated",
-    cls: "escalated",
-  },
+// Decision badge — sesuai enum BE: SAFE | FRAUD
+const DECISION_META = {
+  SAFE: { icon: "bi-check-circle-fill", label: "SAFE", cls: "approved" },
+  FRAUD: { icon: "bi-x-circle-fill", label: "FRAUD", cls: "rejected" },
 };
 
-const ServiceBadge = ({ service }) => (
-  <span
+const DecisionBadge = ({ decision }) => {
+  const meta =
+    DECISION_META[(decision || "").toUpperCase()] || DECISION_META.SAFE;
+  return (
+    <span className={`rh-pill ${meta.cls}`}>
+      <i className={`bi ${meta.icon}`} /> {meta.label}
+    </span>
+  );
+};
+
+// Status Badge — untuk previous_status / final_status
+// Indicator bahwa review ini bisa di-override (hanya tampil untuk canManage)
+// Mengarahkan user ke tab Review Management di ManualReview
+const OverridableIndicator = ({ onClick }) => (
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick();
+    }}
+    title="Kelola di Manual Review (Override / Delete)"
     style={{
-      display: "inline-block",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: ".3rem",
       padding: "2px 7px",
-      borderRadius: "4px",
-      fontSize: ".65rem",
+      border: "1px solid #bfdbfe",
+      borderRadius: "10px",
+      background: "#eff6ff",
+      color: "#1d4ed8",
+      fontSize: ".68rem",
       fontWeight: 700,
-      letterSpacing: ".04em",
-      background: service === "agenusa" ? "#eff6ff" : "#fdf4ff",
-      color: service === "agenusa" ? "#1d4ed8" : "#7c3aed",
-      border: `1px solid ${service === "agenusa" ? "#bfdbfe" : "#e9d5ff"}`,
+      cursor: "pointer",
+      transition: "all .15s",
+      whiteSpace: "nowrap",
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.background = "#dbeafe";
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.background = "#eff6ff";
     }}
   >
-    {service === "agenusa" ? "AGENUSA" : "NUSABILL"}
-  </span>
+    <i className="bi bi-arrow-repeat" /> Override
+  </button>
 );
+
+const StatusBadge = ({ status }) => {
+  if (!status) return <span className="rh-empty">—</span>;
+  const colorMap = {
+    FRAUD: { bg: "#fee2e2", color: "#b91c1c" },
+    SAFE: { bg: "#dcfce7", color: "#15803d" },
+    UNDER_REVIEW: { bg: "#eff6ff", color: "#1d4ed8" },
+    PENDING: { bg: "#f1f5f9", color: "#475569" },
+    RESOLVED: { bg: "#f0fdf4", color: "#15803d" },
+  };
+  const style = colorMap[status.toUpperCase()] || {
+    bg: "#f1f5f9",
+    color: "#475569",
+  };
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "2px 8px",
+        borderRadius: "10px",
+        fontSize: ".7rem",
+        fontWeight: 700,
+        background: style.bg,
+        color: style.color,
+      }}
+    >
+      {status}
+    </span>
+  );
+};
+
+// Sortable options
+const TIMESTAMP_OPTS = [
+  { value: "createdAt-desc", label: "Terbaru", icon: "bi-sort-down" },
+  { value: "createdAt-asc", label: "Terlama", icon: "bi-sort-up" },
+];
+
+const DECISION_OPTS = [
+  { value: "all", label: "Semua Keputusan", icon: "bi-grid" },
+  { value: "SAFE", label: "SAFE", icon: "bi-check-circle" },
+  { value: "FRAUD", label: "FRAUD", icon: "bi-x-circle" },
+];
 
 const ColDropdown = ({ options, activeValue, onSelect, isActive }) => {
   const [open, setOpen] = useState(false);
@@ -76,11 +149,9 @@ const ColDropdown = ({ options, activeValue, onSelect, isActive }) => {
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        title="Filter / Urutkan"
       >
-        <i className={`bi ${isActive ? "bi-funnel-fill" : "bi-funnel"}`}></i>
+        <i className={`bi ${isActive ? "bi-funnel-fill" : "bi-funnel"}`} />
       </button>
-
       {open && (
         <div className="htcol-dropdown">
           {options.map((opt) => (
@@ -92,10 +163,10 @@ const ColDropdown = ({ options, activeValue, onSelect, isActive }) => {
                 setOpen(false);
               }}
             >
-              <i className={`bi ${opt.icon}`}></i>
+              <i className={`bi ${opt.icon}`} />
               {opt.label}
               {activeValue === opt.value && (
-                <i className="bi bi-check2 htcol-check"></i>
+                <i className="bi bi-check2 htcol-check" />
               )}
             </button>
           ))}
@@ -107,7 +178,7 @@ const ColDropdown = ({ options, activeValue, onSelect, isActive }) => {
 
 const SkeletonRow = () => (
   <tr className="htable-row htable-row--skeleton">
-    {[...Array(9)].map((_, i) => (
+    {[...Array(6)].map((_, i) => (
       <td key={i}>
         <div className="hcell-skeleton" />
       </td>
@@ -156,7 +227,7 @@ const Pagination = ({
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
         >
-          <i className="bi bi-chevron-left"></i>
+          <i className="bi bi-chevron-left" />
         </button>
         {getPages().map((p, i) =>
           p === "..." ? (
@@ -178,397 +249,280 @@ const Pagination = ({
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === eff || totalItems === 0}
         >
-          <i className="bi bi-chevron-right"></i>
+          <i className="bi bi-chevron-right" />
         </button>
       </div>
     </div>
   );
 };
 
-const TIMESTAMP_OPTS = [
-  { value: "timestamp-desc", label: "Terbaru", icon: "bi-sort-down" },
-  { value: "timestamp-asc", label: "Terlama", icon: "bi-sort-up" },
-];
-const LAYANAN_OPTS = [
-  { value: "all", label: "Semua Layanan", icon: "bi-grid" },
-  { value: "agenusa", label: "Agenusa", icon: "bi-building" },
-  { value: "nusabill", label: "Nusabill", icon: "bi-receipt" },
-];
-const AMOUNT_OPTS = [
-  {
-    value: "amount-desc",
-    label: "Terbanyak",
-    icon: "bi-sort-numeric-down-alt",
-  },
-  { value: "amount-asc", label: "Terkecil", icon: "bi-sort-numeric-up" },
-];
-const RISK_OPTS = [
-  {
-    value: "riskScore-desc",
-    label: "Tertinggi",
-    icon: "bi-sort-numeric-down-alt",
-  },
-  { value: "riskScore-asc", label: "Terendah", icon: "bi-sort-numeric-up" },
-];
-
-const DEFAULT_COL = "timestamp";
-const DEFAULT_DIR = "desc";
-
-const PILL_META = {
-  "layanan:agenusa": {
-    label: "Agenusa",
-    group: "Layanan",
-    icon: "bi-building",
-    bg: "#eff6ff",
-    color: "#1d4ed8",
-    border: "#bfdbfe",
-  },
-  "layanan:nusabill": {
-    label: "Nusabill",
-    group: "Layanan",
-    icon: "bi-receipt",
-    bg: "#fdf4ff",
-    color: "#7c3aed",
-    border: "#e9d5ff",
-  },
-  "sort:timestamp-desc": {
-    label: "Terbaru",
-    group: "Waktu",
-    icon: "bi-sort-down",
-    bg: "#f0fdf4",
-    color: "#15803d",
-    border: "#bbf7d0",
-  },
-  "sort:timestamp-asc": {
-    label: "Terlama",
-    group: "Waktu",
-    icon: "bi-sort-up",
-    bg: "#f0fdf4",
-    color: "#15803d",
-    border: "#bbf7d0",
-  },
-  "sort:amount-desc": {
-    label: "Amount Terbanyak",
-    group: "Amount",
-    icon: "bi-sort-numeric-down-alt",
-    bg: "#fff7ed",
-    color: "#c2410c",
-    border: "#fed7aa",
-  },
-  "sort:amount-asc": {
-    label: "Amount Terkecil",
-    group: "Amount",
-    icon: "bi-sort-numeric-up",
-    bg: "#fff7ed",
-    color: "#c2410c",
-    border: "#fed7aa",
-  },
-  "sort:riskScore-desc": {
-    label: "Risk Tertinggi",
-    group: "Risk",
-    icon: "bi-sort-numeric-down-alt",
-    bg: "#fef2f2",
-    color: "#b91c1c",
-    border: "#fecaca",
-  },
-  "sort:riskScore-asc": {
-    label: "Risk Terendah",
-    group: "Risk",
-    icon: "bi-sort-numeric-up",
-    bg: "#fef2f2",
-    color: "#b91c1c",
-    border: "#fecaca",
-  },
-};
+// ─── Main Table Component ─────────────────────────────────────────
 
 const HistoryTable = ({
   data = [],
-  loading = false,
-  totalItems = 0,
-  page = 1,
-  totalPages = 1,
-  perPage = 10,
+  loading,
+  totalItems,
+  page,
+  totalPages,
+  perPage,
   onPageChange,
   onViewDetail,
   onRefresh,
+  apiError,
 }) => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterLayanan, setFilterLayanan] = useState("all");
-  const [sortList, setSortList] = useState([]);
+  const { canManage } = useRole();
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState("createdAt-desc");
+  const [filterDecision, setFilterDecision] = useState("all");
 
-  useEffect(() => {}, [data]);
-
-  const handleSort = (sortVal) => {
-    const lastDash = sortVal.lastIndexOf("-");
-    const col = sortVal.slice(0, lastDash);
-    const dir = sortVal.slice(lastDash + 1);
-    const isDefault = col === DEFAULT_COL && dir === DEFAULT_DIR;
-
-    setSortList((prev) => {
-      const filtered = prev.filter((s) => s.col !== col);
-      if (isDefault) return filtered;
-      return [...filtered, { col, dir }];
-    });
-  };
-
-  const handleLayanan = (val) => setFilterLayanan(val);
-
-  const getSortActiveVal = (col) => {
-    const entry = sortList.find((s) => s.col === col);
-    if (entry) return `${entry.col}-${entry.dir}`;
-    if (col === DEFAULT_COL) return `${DEFAULT_COL}-${DEFAULT_DIR}`;
-    return null;
-  };
-
-  const isSortActive = (col) => sortList.some((s) => s.col === col);
-
-  const activePills = useMemo(() => {
-    const pills = [];
-    if (filterLayanan !== "all")
-      pills.push({
-        key: `layanan:${filterLayanan}`,
-        type: "layanan",
-        col: null,
-      });
-    sortList.forEach(({ col, dir }) =>
-      pills.push({ key: `sort:${col}-${dir}`, type: "sort", col }),
-    );
-    return pills;
-  }, [filterLayanan, sortList]);
-
-  const hasActiveFilters = activePills.length > 0;
-
-  const handleRemovePill = (pill) => {
-    if (pill.type === "layanan") setFilterLayanan("all");
-    else if (pill.type === "sort")
-      setSortList((prev) => prev.filter((s) => s.col !== pill.col));
-  };
-
-  const handleResetAll = () => {
-    setFilterLayanan("all");
-    setSortList([]);
-    setSearchTerm("");
-  };
-
+  // Filter & sort lokal (client-side) di atas data dari server
   const processed = useMemo(() => {
-    let arr = [...data];
+    let result = [...data];
 
-    if (searchTerm.trim()) {
-      const q = searchTerm.trim().toLowerCase();
-      arr = arr.filter(
-        (d) =>
-          d.transactionId.toLowerCase().includes(q) ||
-          (d.accountId && d.accountId.toLowerCase().includes(q)) ||
-          (d.reviewer && d.reviewer.toLowerCase().includes(q)),
+    // Filter: search (transaction ID atau alert ID)
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter(
+        (r) =>
+          r.transactionId?.toLowerCase().includes(q) ||
+          String(r.alertId ?? "").includes(q) ||
+          String(r.reviewedBy ?? "").includes(q),
       );
     }
 
-    if (filterLayanan !== "all")
-      arr = arr.filter((d) => d.service === filterLayanan);
+    // Filter: decision
+    if (filterDecision !== "all") {
+      result = result.filter((r) => r.decision === filterDecision);
+    }
 
-    const sortCols = [...sortList].reverse();
-    const hasTimestamp = sortList.some((s) => s.col === DEFAULT_COL);
-    if (!hasTimestamp) sortCols.push({ col: DEFAULT_COL, dir: DEFAULT_DIR });
-
-    arr.sort((a, b) => {
-      for (const { col, dir } of sortCols) {
-        let av = a[col],
-          bv = b[col];
-        if (col === "timestamp") {
-          av = new Date(av);
-          bv = new Date(bv);
-        }
-        if (av < bv) return dir === "asc" ? -1 : 1;
-        if (av > bv) return dir === "asc" ? 1 : -1;
-      }
-      return 0;
+    // Sort
+    result.sort((a, b) => {
+      if (sortKey === "createdAt-asc")
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      return new Date(b.createdAt) - new Date(a.createdAt); // default: desc
     });
 
-    return arr;
-  }, [data, searchTerm, filterLayanan, sortList]);
+    return result;
+  }, [data, search, sortKey, filterDecision]);
+
+  const hasActiveFilters =
+    search || filterDecision !== "all" || sortKey !== "createdAt-desc";
+
+  const handleGoToManagement = () => {
+    navigate("/manual-review", { state: { activeTab: "management" } });
+  };
+
+  const handleReset = () => {
+    setSearch("");
+    setSortKey("createdAt-desc");
+    setFilterDecision("all");
+  };
 
   return (
-    <div className="htable-section">
-      <div className="htable-header">
-        <span className="htable-title">
-          <i className="bi bi-clock-history"></i>
-          Review Audit Log
-        </span>
-        <div style={{ display: "flex", alignItems: "center", gap: ".75rem" }}>
-          <span className="htable-meta">{totalItems} Total entries</span>
-          {onRefresh && (
-            <button
-              className="htable-refresh-btn"
-              onClick={onRefresh}
-              title="Refresh data"
-              disabled={loading}
-            >
-              <i
-                className={`bi bi-arrow-clockwise${loading ? " spin" : ""}`}
-              ></i>
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="htable-searchbar">
-        <div className="htable-search-wrap">
-          <i className="bi bi-search htable-search-icon"></i>
-          <input
-            type="text"
-            className="htable-search-input"
-            placeholder="Cari txn ID, account, reviewer..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          {searchTerm && (
-            <button
-              className="htable-search-clear"
-              onClick={() => setSearchTerm("")}
-            >
-              <i className="bi bi-x"></i>
-            </button>
-          )}
-        </div>
-        <span className="htable-search-count">
-          <i className="bi bi-funnel"></i>
-          {processed.length} entries shown
-        </span>
-      </div>
-
-      <div
-        className={`htable-active-filters${!hasActiveFilters ? " htable-active-filters--empty" : ""}`}
-      >
-        <span className="htaf-label">
-          <i className="bi bi-funnel-fill"></i>
-          Filter Aktif:
-        </span>
-
-        <div className="htaf-pills">
-          {!hasActiveFilters ? (
-            <span className="htaf-empty">
-              <i className="bi bi-dash-circle"></i>
-              Belum ada filter dipilih
-            </span>
-          ) : (
-            activePills.map((pill) => {
-              const meta = PILL_META[pill.key];
-              if (!meta) return null;
-              return (
-                <span
-                  key={pill.key}
-                  className="htaf-pill"
-                  style={{
-                    background: meta.bg,
-                    color: meta.color,
-                    borderColor: meta.border,
-                  }}
-                >
-                  <i className={`bi ${meta.icon}`}></i>
-                  <span className="htaf-pill-group">{meta.group}:</span>
-                  <span className="htaf-pill-label">{meta.label}</span>
-                  <button
-                    className="htaf-pill-remove"
-                    onClick={() => handleRemovePill(pill)}
-                    title={`Hapus filter ${meta.label}`}
-                    style={{ color: meta.color }}
-                  >
-                    <i className="bi bi-x"></i>
-                  </button>
-                </span>
-              );
-            })
-          )}
-        </div>
-
-        <button
-          className={`htaf-reset-btn${!hasActiveFilters ? " htaf-reset-btn--disabled" : ""}`}
-          onClick={hasActiveFilters ? handleResetAll : undefined}
-          disabled={!hasActiveFilters}
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "10px",
+        overflow: "hidden",
+      }}
+    >
+      {/* Banner for canManage — shortcut ke Review Management */}
+      {canManage && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: ".75rem",
+            padding: ".75rem 1.25rem",
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderBottom: "none",
+            borderRadius: "10px 10px 0 0",
+            fontSize: ".82rem",
+            color: "#1d4ed8",
+            flexWrap: "wrap",
+          }}
         >
-          <i className="bi bi-arrow-counterclockwise"></i>
-          Reset Semua
+          <i
+            className="bi bi-shield-fill-exclamation"
+            style={{ flexShrink: 0 }}
+          />
+          <span style={{ flex: 1 }}>
+            Sebagai <strong>Manager/Admin</strong>, kamu bisa melakukan Override
+            atau Delete review dari halaman{" "}
+            <strong>Manual Review → Review Management</strong>.
+          </span>
+          <button
+            onClick={handleGoToManagement}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: ".4rem",
+              padding: ".4rem .875rem",
+              background: "#2563eb",
+              color: "#fff",
+              border: "none",
+              borderRadius: "7px",
+              fontSize: ".78rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <i className="bi bi-arrow-right-circle-fill" /> Kelola Review
+          </button>
+        </div>
+      )}
+
+      {/* Filter Bar */}
+      <div
+        className={`rh-filterbar${canManage ? " rh-filterbar--no-top-radius" : ""}`}
+      >
+        {/* Search */}
+        <div className="rh-search-wrap">
+          <i className="bi bi-search rh-search-icon" />
+          <input
+            className="rh-search-input"
+            placeholder="Cari Transaction ID, Alert ID, Reviewer ID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className="rh-search-clear" onClick={() => setSearch("")}>
+              <i className="bi bi-x" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Decision */}
+        <select
+          style={{
+            height: 36,
+            padding: "0 10px",
+            border: "1.5px solid #e2e8f0",
+            borderRadius: "8px",
+            fontSize: ".85rem",
+            color: "#374151",
+            background: "#f8fafc",
+            cursor: "pointer",
+          }}
+          value={filterDecision}
+          onChange={(e) => setFilterDecision(e.target.value)}
+        >
+          {DECISION_OPTS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Reset */}
+        {hasActiveFilters && (
+          <button className="rh-clear-all" onClick={handleReset}>
+            <i className="bi bi-x-circle" /> Reset Filter
+          </button>
+        )}
+
+        {/* Refresh */}
+        <button
+          onClick={onRefresh}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: ".35rem",
+            padding: ".4rem .75rem",
+            border: "1px solid #e2e8f0",
+            borderRadius: "7px",
+            background: "#f8fafc",
+            fontSize: ".8rem",
+            fontWeight: 600,
+            color: "#374151",
+            cursor: "pointer",
+            marginLeft: "auto",
+          }}
+        >
+          <i className="bi bi-arrow-clockwise" /> Refresh
         </button>
+
+        <span className="rh-result-count">
+          <i className="bi bi-list-ul" /> {processed.length} entri
+        </span>
       </div>
 
+      {/* Table */}
       <div className="htable-wrapper">
-        {!loading && processed.length === 0 ? (
+        {apiError ? (
           <div className="htable-empty">
-            <i className="bi bi-inbox"></i>
-            <p>No review history found</p>
-            <span>Try adjusting your filters or check back later.</span>
+            <i className="bi bi-wifi-off" />
+            <p>Data tidak tersedia</p>
+            <span>
+              Tidak dapat terhubung ke server. Klik Refresh untuk mencoba lagi.
+            </span>
+          </div>
+        ) : !loading && processed.length === 0 ? (
+          <div className="htable-empty">
+            <i className="bi bi-inbox" />
+            <p>Tidak ada riwayat review</p>
+            <span>Belum ada review yang tercatat, atau coba ubah filter.</span>
           </div>
         ) : (
           <table className="htable">
             <thead>
               <tr>
+                {/* Timestamp — sortable */}
                 <th>
                   <div className="htable-th-inner">
-                    <span>Timestamp</span>
+                    <span>Waktu</span>
                     <ColDropdown
                       options={TIMESTAMP_OPTS}
-                      activeValue={getSortActiveVal("timestamp")}
-                      onSelect={handleSort}
-                      isActive={isSortActive("timestamp")}
+                      activeValue={sortKey}
+                      onSelect={setSortKey}
+                      isActive={sortKey !== "createdAt-desc"}
                     />
                   </div>
                 </th>
-                <th>
-                  <div className="htable-th-inner">
-                    <span>Layanan</span>
-                    <ColDropdown
-                      options={LAYANAN_OPTS}
-                      activeValue={filterLayanan}
-                      onSelect={handleLayanan}
-                      isActive={filterLayanan !== "all"}
-                    />
-                  </div>
-                </th>
+                {/* Transaction ID */}
                 <th>
                   <div className="htable-th-inner">
                     <span>Transaction ID</span>
                   </div>
                 </th>
-                <th className="hide-md">
-                  <div className="htable-th-inner">
-                    <span>Account / Customer</span>
-                  </div>
-                </th>
+                {/* Alert ID */}
                 <th>
                   <div className="htable-th-inner">
-                    <span>Amount</span>
-                    <ColDropdown
-                      options={AMOUNT_OPTS}
-                      activeValue={getSortActiveVal("amount")}
-                      onSelect={handleSort}
-                      isActive={isSortActive("amount")}
-                    />
+                    <span>Alert ID</span>
                   </div>
                 </th>
-                <th className="hide-md">
-                  <div className="htable-th-inner">
-                    <span>Risk</span>
-                    <ColDropdown
-                      options={RISK_OPTS}
-                      activeValue={getSortActiveVal("riskScore")}
-                      onSelect={handleSort}
-                      isActive={isSortActive("riskScore")}
-                    />
-                  </div>
-                </th>
-                <th className="hide-md">
-                  <div className="htable-th-inner">
-                    <span>Reviewer</span>
-                  </div>
-                </th>
-                <th>
-                  <div className="htable-th-inner">
-                    <span>Notes</span>
-                  </div>
-                </th>
+                {/* Decision — filterable */}
                 <th>
                   <div className="htable-th-inner">
                     <span>Decision</span>
+                    <ColDropdown
+                      options={DECISION_OPTS}
+                      activeValue={filterDecision}
+                      onSelect={setFilterDecision}
+                      isActive={filterDecision !== "all"}
+                    />
+                  </div>
+                </th>
+                {/* Previous → Final Status */}
+                <th className="hide-md">
+                  <div className="htable-th-inner">
+                    <span>Status</span>
+                  </div>
+                </th>
+                {/* Reviewer ID */}
+                <th className="hide-md">
+                  <div className="htable-th-inner">
+                    <span>Reviewer ID</span>
+                  </div>
+                </th>
+                {/* Notes */}
+                <th>
+                  <div className="htable-th-inner">
+                    <span>Notes</span>
                   </div>
                 </th>
               </tr>
@@ -577,124 +531,114 @@ const HistoryTable = ({
             <tbody>
               {loading
                 ? [...Array(perPage)].map((_, i) => <SkeletonRow key={i} />)
-                : processed.map((item) => {
-                    const meta =
-                      ACTION_META[item.action] ?? ACTION_META.approved;
-                    const initials = (item.reviewer || "?")
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase();
+                : processed.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="htable-row"
+                      onClick={() => onViewDetail(item)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      {/* Waktu */}
+                      <td>
+                        <div className="hcell-ts">{fmtTs(item.createdAt)}</div>
+                        <div className="hcell-ts-ago">
+                          {timeAgo(item.createdAt)}
+                        </div>
+                      </td>
 
-                    return (
-                      <tr
-                        key={item.id}
-                        className="htable-row"
-                        onClick={() => onViewDetail(item)}
-                      >
-                        <td>
-                          <div className="hcell-ts">
-                            {fmtTs(item.timestamp)}
-                          </div>
-                          <div className="hcell-ts-ago">
-                            {timeAgo(item.timestamp)}
-                          </div>
-                        </td>
-                        <td>
-                          {item.service ? (
-                            <ServiceBadge service={item.service} />
-                          ) : (
-                            <span
-                              style={{ color: "#94a3b8", fontSize: ".8rem" }}
-                            >
-                              —
-                            </span>
+                      {/* Transaction ID */}
+                      <td>
+                        <span className="hcell-txnid">
+                          {item.transactionId}
+                        </span>
+                      </td>
+
+                      {/* Alert ID */}
+                      <td>
+                        {item.alertId != null ? (
+                          <span className="hcell-txnid">#{item.alertId}</span>
+                        ) : (
+                          <span className="hcell-empty">—</span>
+                        )}
+                      </td>
+
+                      {/* Decision */}
+                      <td>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: ".5rem",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <DecisionBadge decision={item.decision} />
+                          {canManage && (
+                            <OverridableIndicator
+                              onClick={handleGoToManagement}
+                            />
                           )}
-                        </td>
-                        <td>
-                          <span className="hcell-txnid">
-                            {item.transactionId}
-                          </span>
-                        </td>
-                        <td className="hide-md">
+                        </div>
+                      </td>
+
+                      {/* Status: previous → final */}
+                      <td className="hide-md">
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: ".4rem",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <StatusBadge status={item.previousStatus} />
+                          {item.previousStatus && item.finalStatus && (
+                            <i
+                              className="bi bi-arrow-right"
+                              style={{ color: "#94a3b8", fontSize: ".75rem" }}
+                            />
+                          )}
+                          <StatusBadge status={item.finalStatus} />
+                        </div>
+                      </td>
+
+                      {/* Reviewer ID — nama tidak ada di BE */}
+                      <td className="hide-md">
+                        {item.reviewedBy != null ? (
                           <span
                             style={{
                               fontFamily: "IBM Plex Mono, monospace",
-                              fontSize: ".75rem",
-                              color: "#334155",
+                              fontSize: ".78rem",
                               fontWeight: 600,
+                              color: "#334155",
                             }}
                           >
-                            {item.accountId || "—"}
+                            <i
+                              className="bi bi-person-fill"
+                              style={{ marginRight: 4, color: "#7c3aed" }}
+                            />
+                            #{item.reviewedBy}
                           </span>
-                        </td>
-                        <td>
-                          <span className="hcell-amount">
-                            {item.amount ? fmt(item.amount) : "—"}
-                          </span>
-                        </td>
-                        <td className="hide-md">
-                          {item.riskScore > 0 ? (
-                            <span
-                              className="hcell-risk"
-                              style={{
-                                color:
-                                  item.riskScore >= 80
-                                    ? "#dc2626"
-                                    : item.riskScore >= 60
-                                      ? "#d97706"
-                                      : "#16a34a",
-                              }}
-                            >
-                              {item.riskScore}
-                              <span className="hcell-risk-max">/100</span>
-                            </span>
-                          ) : (
-                            <span
-                              style={{ color: "#94a3b8", fontSize: ".8rem" }}
-                            >
-                              —
-                            </span>
-                          )}
-                        </td>
-                        <td className="hide-md">
-                          <div className="hreviewer-row">
-                            <div className="hreviewer-avatar">{initials}</div>
-                            <div>
-                              <div className="hreviewer-name">
-                                {item.reviewer}
-                              </div>
-                              <div className="hreviewer-role">
-                                {item.reviewerRole}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          {item.notes ? (
-                            <button
-                              className="hbtn-view"
-                              onClick={() => onViewDetail(item)}
-                            >
-                              <i className="bi bi-chat-left-text"></i>View Notes
-                            </button>
-                          ) : (
-                            <span className="hcell-empty">—</span>
-                          )}
-                        </td>
-                        <td>
-                          <div className="haction-cell">
-                            <span className={`haction-dot ${meta.cls}`}></span>
-                            <span className={`haction-label ${meta.cls}`}>
-                              <i className={`bi ${meta.icon}`}></i>
-                              {meta.label}
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        ) : (
+                          <span className="hcell-empty">—</span>
+                        )}
+                      </td>
+
+                      {/* Notes */}
+                      <td onClick={(e) => e.stopPropagation()}>
+                        {item.reviewNote ? (
+                          <button
+                            className="hbtn-view"
+                            onClick={() => onViewDetail(item)}
+                          >
+                            <i className="bi bi-chat-left-text" /> Lihat
+                          </button>
+                        ) : (
+                          <span className="hcell-empty">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
             </tbody>
           </table>
         )}

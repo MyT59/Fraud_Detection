@@ -26,14 +26,15 @@ router = APIRouter(prefix="/alerts", tags=["Alerts"])
 def get_alerts(
     status: str = None,
     severity: str = None,
+    alert_type: str = None, # 🚀 PARAMETER BARU DARI FRONTEND
     service: str = None,
     priority: str = None,
     page: int = 1,
     limit: int = 10,
     db: Session = Depends(get_db)
 ):
-    return get_all_alerts(db, status, severity, service, priority, page, limit)
-
+    # 🚀 Teruskan parameter alert_type ke service
+    return get_all_alerts(db, status, severity, service, priority, page, limit, alert_type)
 
 @router.get("/metrics")
 def get_alert_metrics(db: Session = Depends(get_db)):
@@ -53,22 +54,35 @@ def get_priority_distribution(
 ):
     return get_priority_distribution_service(db)
 
-@router.get("/my-queue")
-def get_my_queue(
-    db: Session = Depends(get_db),
-    user=Depends(get_current_user)
-):
-    return get_my_queue_service(db, user.id)
-
 @router.get("/open-queue")
 def get_open_queue(
-    priority: str = None, # Menampung query parameter: ?priority=CRITICAL
-    limit: int = 50,
+    priority: str = None,
+    page: int = 1,
+    limit: int = 10,
     db: Session = Depends(get_db),
     user = Depends(get_current_user) # Proteksi rute agar hanya bisa diakses analis yang login
 ):
     # 1. Parameter 'priority' diteruskan ke level Service
-    return get_open_queue_service(db, priority_label=priority, limit=limit)
+    return get_open_queue_service(
+        db,
+        priority_label=priority,
+        page=page,
+        limit=limit
+    )
+
+@router.get("/my-queue")
+def get_my_queue(
+    page: int = 1,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    return get_my_queue_service(
+        db,
+        user.id,
+        page=page,
+        limit=limit
+    )
 
 @router.get("/{alert_id}")
 def get_alert_detail(alert_id: int, db: Session = Depends(get_db)):
@@ -76,14 +90,13 @@ def get_alert_detail(alert_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{alert_id}/status")
-def update_alert_status(
+def update_status(
     alert_id: int,
     status: str,
+    background_tasks: BackgroundTasks, # 🚀 PERBAIKAN 1: Hapus "= BackgroundTasks()"
     db: Session = Depends(get_db),
-    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")),
-    background_tasks: BackgroundTasks = BackgroundTasks() # 🎯 1. Suntikkan BackgroundTasks di sini
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
-    # 🎯 2. Teruskan variabel background_tasks ke dalam service
     return update_alert_status_service(
         db=db,
         alert_id=alert_id,
@@ -95,15 +108,17 @@ def update_alert_status(
 @router.patch("/{alert_id}/resolve")
 def resolve_alert(
     alert_id: int,
+    background_tasks: BackgroundTasks, # 🚀 PERBAIKAN 2: Tambahkan parameter ini di sini
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
     """Endpoint khusus agar FE bisa panggil /alerts/{id}/resolve dengan mudah"""
     return update_alert_status_service(
-        db,
-        alert_id,
-        "RESOLVED",
-        user.id
+        db=db,
+        alert_id=alert_id,
+        status="RESOLVED",
+        user_id=user.id,
+        background_tasks=background_tasks # 🚀 PERBAIKAN 3: Teruskan parameternya ke dalam service
     )
 
 @router.post("/{alert_id}/claim")
