@@ -17,6 +17,9 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from ...paths import DATA_DIR, MODELS_DIR, PROJECT_ROOT
 from .feature_builder import build_features
 from .model_loader import DOMAIN_ISO_CONFIG
+from ...core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 
 def _build_pipeline(feature_df: pd.DataFrame, contamination: float) -> tuple[Pipeline, list[str], list[str]]:
@@ -69,9 +72,12 @@ def _round_threshold(value: float, decimals: int = 4) -> float:
     return rounded
 
 
+@log_performance(label="ML.train_one")
 def train_one(domain: str, csv_path: Path, contamination: float, output_dir: Path | None = None) -> dict[str, Any]:
     output_dir = MODELS_DIR if output_dir is None else output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"[TRAIN] Start — domain={domain} dataset={csv_path} contamination={contamination}")
 
     config = DOMAIN_ISO_CONFIG[domain]
     data = pd.read_csv(csv_path)
@@ -88,6 +94,10 @@ def train_one(domain: str, csv_path: Path, contamination: float, output_dir: Pat
     high_risk_th = _round_threshold(float(np.quantile(scores, 0.03)), decimals=4)
     review_th = _round_threshold(float(np.quantile(scores, 0.10)), decimals=4)
     if high_risk_th >= review_th:
+        logger.error(
+            f"[TRAIN] FAILED — domain={domain} threshold order invalid "
+            f"(high_risk={high_risk_th} >= review={review_th})"
+        )
         raise ValueError(
             "Threshold order invalid: high_risk_score_threshold harus lebih kecil "
             "dari review_score_threshold."
@@ -112,13 +122,22 @@ def train_one(domain: str, csv_path: Path, contamination: float, output_dir: Pat
         "model_path": str(model_path.relative_to(PROJECT_ROOT)),
     }
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+    logger.info(
+        f"[TRAIN] Done — domain={domain} rows={len(x)} anomaly_rate={anomaly_rate:.4f} "
+        f"high_risk_th={high_risk_th} review_th={review_th} model_path={model_path}"
+    )
+
     return meta
 
 
+@log_performance(label="ML.train_all")
 def train_all(output_dir: Path | None = None) -> dict[str, Any]:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     target_dir = MODELS_DIR / timestamp if output_dir is None else output_dir
     target_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"[TRAIN_ALL] Start — output_dir={target_dir}")
 
     summary = {
         "agenusa": train_one(
@@ -137,12 +156,18 @@ def train_all(output_dir: Path | None = None) -> dict[str, Any]:
 
     summary_path = target_dir / "isolation_training_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    logger.info(f"[TRAIN_ALL] Done — summary saved to {summary_path}")
+
     return summary
 
+@log_performance(label="ML.train_from_dataframe")
 def train_from_dataframe(domain: str, df: pd.DataFrame, contamination: float, output_dir: Path | None = None) -> dict[str, Any]:
     """Fungsi khusus untuk Retrain Service yang mengirimkan Dataframe gabungan (CSV + DB)"""
     output_dir = MODELS_DIR if output_dir is None else output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"[RETRAIN] Start — domain={domain} rows={len(df)} contamination={contamination}")
 
     config = DOMAIN_ISO_CONFIG[domain]
     
@@ -186,7 +211,13 @@ def train_from_dataframe(domain: str, df: pd.DataFrame, contamination: float, ou
         "model_path": str(model_path.relative_to(PROJECT_ROOT)),
     }
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    
+
+    logger.info(
+        f"[RETRAIN] Done — domain={domain} rows={len(x)} anomaly_rate={anomaly_rate:.4f} "
+        f"high_risk_th={high_risk_th} review_th={review_th} "
+        f"anomalies_found={len(anomaly_df)} model_path={model_path}"
+    )
+
     return {
         "meta": meta,
         "model_path": str(model_path),

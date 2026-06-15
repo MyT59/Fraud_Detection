@@ -41,6 +41,7 @@ const ACTION_GROUPS_MAP = {
     "ACCOUNT_SUSPENDED",
     "ACCOUNT_ROLE_CHANGED",
   ],
+  reports: ["REPORT_GENERATED", "REPORT_DOWNLOADED"],
 };
 
 // Mapping action_type → display group
@@ -175,6 +176,17 @@ export const ACTION_META = {
     color: "blue",
     title: "Manual Retrain",
   },
+  // Reports
+  REPORT_GENERATED: {
+    icon: "bi-file-earmark-text",
+    color: "blue",
+    title: "Report Generated",
+  },
+  REPORT_DOWNLOADED: {
+    icon: "bi-download",
+    color: "green",
+    title: "Report Downloaded",
+  },
 };
 
 export const DEFAULT_META = {
@@ -240,6 +252,13 @@ export const FILTER_CONFIG = [
     icon: "bi-person-gear",
     color: "user",
     dot: "gray",
+  },
+  {
+    label: "Reports",
+    value: "reports",
+    icon: "bi-file-earmark-text",
+    color: "system",
+    dot: "blue",
   },
 ];
 

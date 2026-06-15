@@ -1,6 +1,9 @@
 from typing import Any
 from .predictor import IsolationPredictor
 from .model_loader import load_isolation_meta
+from ...core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 predictor = IsolationPredictor()
 
@@ -9,6 +12,7 @@ predictor = IsolationPredictor()
 # NEW API: SNAPSHOT-BASED SCORING (Real-time inference)
 # =====================================================================
 
+@log_performance(label="ML.score_transaction_snapshot")
 def score_transaction_snapshot(
     snapshot: dict[str, Any],
 ) -> dict[str, Any]:
@@ -49,12 +53,16 @@ def score_transaction_snapshot(
         ValueError: Jika snapshot invalid atau domain unknown
     """
     if not snapshot:
+        logger.error("[SCORE] Snapshot kosong — request ditolak")
         raise ValueError("Snapshot kosong")
 
     transaction = snapshot.get("transaction", {})
     domain = transaction.get("domain")
 
     if not domain:
+        logger.error(
+            f"[SCORE] Domain tidak ditemukan di snapshot — tx_id={transaction.get('id')}"
+        )
         raise ValueError("Domain tidak ditemukan di snapshot transaction")
 
     # ===== PREDICT SCORE =====
@@ -100,6 +108,12 @@ def score_transaction_snapshot(
         }
     }
 
+    logger.info(
+        f"[SCORE] tx_id={result['transaction_id']} domain={domain} "
+        f"score={result['score']} risk_level={risk_level} "
+        f"is_anomaly={result['is_anomaly']} model_version={meta.get('version')}"
+    )
+
     return result
 
 
@@ -107,6 +121,7 @@ def score_transaction_snapshot(
 # LEGACY API: BATCH-BASED SCORING (Deprecated)
 # =====================================================================
 
+@log_performance(label="ML.score_history_isolation")
 def score_history_isolation(
     domain: str,
     records: list[dict[str, Any]],
@@ -122,6 +137,11 @@ def score_history_isolation(
 
     raw_results = predictor.predict_scores(domain, records)
     meta = load_isolation_meta(domain)
+
+    logger.info(
+        f"[SCORE_HISTORY] domain={domain} total_records={len(raw_results)} "
+        f"model_version={meta.get('version')}"
+    )
 
     return {
         "domain": domain,

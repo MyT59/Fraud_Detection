@@ -13,17 +13,19 @@ from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelE
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from sqlalchemy.orm.exc import StaleDataError
-import logging
 from datetime import datetime, timezone
+from app.core.logging import get_logger, log_performance
 
 from app.infrastructure.repositories.alert_repository import AlertRepository
 from app.infrastructure.repositories.review_repository import ReviewRepository
 from app.infrastructure.repositories.transaction_repository import TransactionRepository
+from app.infrastructure.database.models.admin_model import Admin
 from app.infrastructure.repositories.pattern_repository import PatternRepository
 from app.infrastructure.database.models.ml_feedback_log_model import MLFeedbackLog
-# Inisialisasi logger untuk memantau error di terminal
-logger = logging.getLogger(__name__)
+# Inisialisasi logger pusat untuk service ini
+logger = get_logger(__name__)
 
+@log_performance(label="ReviewService.review_transaction")
 def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note: str, confidence: str): 
     allowed = ["SAFE", "FRAUD"]
     decision = decision.upper()
@@ -101,14 +103,20 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
 
         now_utc = datetime.now(timezone.utc)
 
+        # Ambil nama reviewer untuk disimpan sebagai snapshot immutable
+        # Tetap aman jika admin tidak ditemukan (SET NULL pada FK)
+        reviewer = db.query(Admin).filter(Admin.id == reviewer_id).first()
+        reviewer_name_snapshot = reviewer.full_name if reviewer else None
+
         review = ManualReview(
             transaction_id=trx.id,
             alert_id=alert.id,
-            reviewer_id=reviewer_id, 
+            reviewer_id=reviewer_id,
+            reviewer_name=reviewer_name_snapshot,  # ✅ Snapshot immutable untuk audit trail
             decision=decision,
             review_note=note,
             decision_confidence=confidence,
-            previous_status=str(trx.final_status.value), 
+            previous_status=str(trx.final_status.value),
             final_status=target_status,
             transaction_snapshot=transaction_snapshot,
             review_started_at=alert.created_at,
@@ -193,6 +201,7 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
         raise HTTPException(status_code=500, 
                             detail="Internal Server Error")
 
+@log_performance(label="ReviewService.get_review_history")
 def get_review_history(db, page: int = 1, limit: int = 10):
     query = db.query(ManualReview).join(Transaction).filter(ManualReview.is_deleted == False)
     total = query.count()
@@ -212,14 +221,100 @@ def get_review_history(db, page: int = 1, limit: int = 10):
                 "transaction_id": r.transaction_id,
                 "alert_id": r.alert_id,
                 "decision": r.decision,
+                "decision_confidence": r.decision_confidence,
                 "review_note": r.review_note,
                 "previous_status": r.previous_status,
                 "final_status": r.final_status,
                 "reviewed_by": r.reviewer_id,
-                "created_at": r.created_at
+                "reviewer_name": r.reviewer_name,
+                "created_at": r.created_at,
+                "review_started_at": r.review_started_at,
+                "review_completed_at": r.review_completed_at,
+                "is_overridden": r.is_overridden or False,
+                "overridden_by": r.overridden_by,
+                "overridden_at": r.overridden_at,
+                "override_reason": r.override_reason,
+                "transaction_snapshot": r.transaction_snapshot,
             }
             for r in reviews
         ]
+    }
+
+
+@log_performance(label="ReviewService.get_my_review_history")
+def get_my_review_history(db, reviewer_id: int, page: int = 1, limit: int = 10):
+    """
+    Riwayat review milik analis yang sedang login.
+    FRAUD_ANALYST hanya bisa lihat history miliknya sendiri.
+    """
+    review_repo = ReviewRepository(db)
+    total, reviews = review_repo.get_history_by_reviewer(reviewer_id, page, limit)
+
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "items": [
+            {
+                "id": r.id,
+                "transaction_id": r.transaction_id,
+                "alert_id": r.alert_id,
+                "decision": r.decision,
+                "decision_confidence": r.decision_confidence,
+                "review_note": r.review_note,
+                "previous_status": r.previous_status,
+                "final_status": r.final_status,
+                "reviewed_by": r.reviewer_id,
+                "reviewer_name": r.reviewer_name,
+                "created_at": r.created_at,
+                "review_started_at": r.review_started_at,
+                "review_completed_at": r.review_completed_at,
+                "is_overridden": r.is_overridden or False,
+                "overridden_by": r.overridden_by,
+                "overridden_at": r.overridden_at,
+                "override_reason": r.override_reason,
+                "transaction_snapshot": r.transaction_snapshot,
+            }
+            for r in reviews
+        ]
+    }
+
+
+@log_performance(label="ReviewService.get_my_review_metrics_service")
+def get_my_review_metrics_service(db, reviewer_id: int):
+    """
+    Metrics personal milik analis yang sedang login.
+    FRAUD_ANALYST lihat stats miliknya sendiri, bukan seluruh tim.
+    """
+    from app.infrastructure.repositories.alert_repository import AlertRepository
+
+    review_repo = ReviewRepository(db)
+    alert_repo  = AlertRepository(db)
+
+    review_counts    = review_repo.get_decision_counts_by_reviewer(reviewer_id)
+    avg_duration_sec = review_repo.get_avg_duration_by_reviewer(reviewer_id)
+
+    total_rev = review_counts["total"]
+    fraud_cnt = review_counts["fraud"]
+    safe_cnt  = review_counts["safe"]
+
+    confirmation_rate  = round((fraud_cnt / total_rev * 100), 2) if total_rev > 0 else 0.0
+    avg_duration_min   = round((avg_duration_sec / 60), 2)
+
+    # Alert yang sedang di-klaim oleh analis ini
+    in_progress_alerts = db.query(ManualReview).filter(
+        ManualReview.reviewer_id == reviewer_id,
+        ManualReview.is_deleted == False
+    ).count()
+
+    return {
+        "total_reviews": total_rev,
+        "fraud_count": fraud_cnt,
+        "safe_count": safe_cnt,
+        "fraud_confirmation_rate": confirmation_rate,
+        "avg_review_duration_minutes": avg_duration_min,
+        "open_alerts": alert_repo.get_open_alert_count(),
+        "in_progress_alerts": in_progress_alerts
     }
 
 def update_pattern_accuracy(db, trx, is_fraud: bool):
@@ -260,6 +355,7 @@ def update_pattern_accuracy(db, trx, is_fraud: bool):
         # =========================
         apply_pattern_lifecycle(db, pattern)
 
+@log_performance(label="ReviewService.get_review_metrics_service")
 def get_review_metrics_service(db):
     review_repo = ReviewRepository(db)
     alert_repo = AlertRepository(db)
@@ -286,6 +382,7 @@ def get_review_metrics_service(db):
         "in_progress_alerts": in_progress_alerts
     }
 
+@log_performance(label="ReviewService.get_analyst_performance_service")
 def get_analyst_performance_service(db):
     review_repo = ReviewRepository(db)
     metrics = review_repo.get_analyst_performance_metrics()
@@ -302,6 +399,7 @@ def get_analyst_performance_service(db):
         for m in metrics
     ]
 
+@log_performance(label="ReviewService.get_review_timeline_analytics_service")
 def get_review_timeline_analytics_service(db):
     """
     Mengorkestrasi pengambilan data analytics lini waktu (time-series)
@@ -316,6 +414,7 @@ def get_review_timeline_analytics_service(db):
     }
 
 # 🔥 TAMBAHAN BARU POIN 14: Soft Delete Review (Compliance Hardening)
+@log_performance(label="ReviewService.soft_delete_review_service")
 def soft_delete_review_service(db, review_id: int, admin_id: int):
     review = db.query(ManualReview).filter(ManualReview.id == review_id, ManualReview.is_deleted == False).first()
     if not review:
@@ -328,7 +427,9 @@ def soft_delete_review_service(db, review_id: int, admin_id: int):
     log_activity(
         db=db,
         admin=type("obj", (object,), {"id": admin_id})(),
-        action_type="SOFT_DELETE_REVIEW",
+        action_type=ActivityActionEnum.SOFT_DELETE_REVIEW,
+        module_source=EventSourceEnum.MANUAL_REVIEW,
+        severity=SeverityLevelEnum.HIGH,
         target_type=TargetType.TRANSACTION,
         target_id=review.transaction_id,
         details=f"Review ID {review.id} soft deleted for compliance reason by Admin ID {admin_id}."
@@ -336,6 +437,7 @@ def soft_delete_review_service(db, review_id: int, admin_id: int):
     db.commit()
     return {"status": "success", "message": "Review history successfully soft deleted for compliance tracking."}
 
+@log_performance(label="ReviewService.override_review_decision_service")
 def override_review_decision_service(db, review_id: int, admin_id: int, new_decision: str, reason: str):
     review = db.query(ManualReview).filter(ManualReview.id == review_id, 
                                            ManualReview.is_deleted == False).first()
@@ -401,6 +503,7 @@ def override_review_decision_service(db, review_id: int, admin_id: int, new_deci
         db.rollback()
         raise HTTPException(status_code=404, detail="Locking Error: Data ini baru saja diubah oleh proses paralel lain.")
     
+@log_performance(label="ReviewService.log_false_negative_service")
 def log_false_negative_service(db, transaction_id: int, admin_id: int, reason: str):
     """
     Fitur khusus pimpinan untuk menandai transaksi sukses yang ternyata lolos dari ML (False Negative).
@@ -448,7 +551,9 @@ def log_false_negative_service(db, transaction_id: int, admin_id: int, reason: s
     log_activity(
         db=db,
         admin=type("obj", (object,), {"id": admin_id})(),
-        action_type="REPORT_FALSE_NEGATIVE",
+        action_type=ActivityActionEnum.REPORT_FALSE_NEGATIVE,
+        module_source=EventSourceEnum.MANUAL_REVIEW,
+        severity=SeverityLevelEnum.HIGH,
         target_type=TargetType.TRANSACTION,
         target_id=trx.id,
         details=f"Transaction reported as False Negative by Risk Manager ID {admin_id}. Reason: {reason}"

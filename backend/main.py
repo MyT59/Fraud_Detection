@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from slowapi.middleware import SlowAPIMiddleware
+from app.core.logging import RequestLoggingMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from app.core.rate_limiter import limiter 
@@ -32,10 +33,12 @@ from app.presentation.routes.activity_log_routes import router as activity_log_r
 from app.presentation.routes.rule_routes import router as rule_router
 from app.presentation.routes.notification_routes import router as notification_router
 from app.presentation.routes.ws_routes import router as ws_router
-from app.presentation.routes import session_routes
+from app.presentation.routes.session_routes import router as session_router
 from app.presentation.routes.isolation_routes import router as isolation_router
 from app.presentation.routes.retrain_routes import router as retrain_router
 from app.presentation.routes.analytics_routes import router as analytics_router
+from app.presentation.routes.report_routes import router as report_router
+from app.presentation.routes.simulator_routes import router as simulator_router
 
 # SERVICES
 from app.application.services.dashboard_service import DashboardService
@@ -43,7 +46,7 @@ from app.application.services.isolation_ml_service import (
     DOMAIN_DEFAULT_THRESHOLDS,
     get_available_domains,
 )
-from app.application.services.scheduler_service import run_sla_escalation_task
+from app.application.services.scheduler_service import run_sla_escalation_task, run_dataset_retention_task
 
 # INFRASTRUCTURE & MODELS
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
@@ -82,6 +85,24 @@ async def lifespan(app: FastAPI):
         print("🚀 [System] SLA Escalation Engine aktif (Patroli setiap 5 menit). ✅")
     except Exception as e:
         print(f"❌ [System] Gagal mendaftarkan SLA Escalation Engine: {e}")
+
+    # ==========================================
+    # REGISTRASI DATASET RETENTION JOB
+    # ==========================================
+    try:
+        scheduler_service.scheduler.add_job(
+            func=run_dataset_retention_task,
+            trigger="cron",
+            day_of_week="sun",  # Setiap Minggu
+            hour=3,
+            minute=0,           # Jam 3 pagi WIB (UTC+7 = 20:00 UTC Sabtu)
+            id="dataset_retention_job",
+            replace_existing=True,
+            name="Dataset Retention Cleanup"
+        )
+        print("🚀 [System] Dataset Retention Job aktif (Setiap Minggu jam 03:00). ✅")
+    except Exception as e:
+        print(f"❌ [System] Gagal mendaftarkan Dataset Retention Job: {e}")
 
 
     # ==========================================
@@ -140,6 +161,7 @@ async def redis_listener():
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 
 # =========================
 # REGISTER ROUTES
@@ -157,10 +179,12 @@ app.include_router(blacklist_router)
 app.include_router(pattern_router)
 app.include_router(activity_log_router)
 app.include_router(rule_router)
-app.include_router(session_routes.router)
+app.include_router(session_router)
 app.include_router(isolation_router)
 app.include_router(retrain_router)
 app.include_router(analytics_router)
+app.include_router(report_router)
+app.include_router(simulator_router)
 
 # =========================
 # HEALTH CHECK (MERGED)
@@ -173,36 +197,6 @@ def root():
         "available_domains": get_available_domains(),
         "default_thresholds": DOMAIN_DEFAULT_THRESHOLDS,
     }
-
-
-# =========================
-# OPTIONAL: QUICK TEST ENDPOINT
-# (buat generate transaksi + alert)
-# =========================
-@app.get("/test/generate")
-def generate_test():
-    db = SessionLocal()
-
-    try:
-        data = {
-            "original_trx_id": str(uuid.uuid4()),
-            "service_source": "AGENUSA",
-            "user_account_id": "USER_API_TEST",
-            "amount": 2000000,
-            "transaction_time": datetime.now(timezone.utc)
-        }
-
-        trx = process_transaction(data, db)
-
-        return {
-            "trx_id": trx.id,
-            "score": trx.risk_score,
-            "status": trx.final_status,
-            "reason": trx.violation_reason
-        }
-
-    finally:
-        db.close()
 
 # =========================
 # TEST DASHBOARD (ALL ENDPOINT)

@@ -32,12 +32,14 @@ class AdminResponse(BaseModel):
     email: str
     role: str
     is_active: bool
-    is_deleted: bool = False 
+    is_deleted: bool = False
+    is_password_temporary: bool = False
     department: Optional[str] = None
     phone_number: Optional[str] = None
     notes: Optional[str] = None
     created_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
+
 class ProfileUpdateRequest(BaseModel):
     full_name: Optional[str] = None
     phone_number: Optional[str] = None

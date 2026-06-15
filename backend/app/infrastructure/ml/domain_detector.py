@@ -1,5 +1,9 @@
 from typing import Optional, List
 
+from ...core.logging import get_logger
+
+logger = get_logger(__name__)
+
 # Kolom wajib per domain untuk auto-detect
 _AGENUSA_SIGNATURE = {
     "TERMINAL_ID", "MERCHANT_ID", "ACCOUNT_NUMBER", 
@@ -23,7 +27,15 @@ def detect_domain(columns: List[str]) -> Optional[str]:
     
     # Jika tidak ada irisan sama sekali dengan kedua signature
     if score_agenusa == 0 and score_nusabill == 0:
+        logger.warning(
+            f"[DOMAIN_DETECT] Tidak ada domain yang cocok — columns={list(col_set)}"
+        )
         return None
-        
+
     # Tentukan domain berdasarkan skor tertinggi
-    return "agenusa" if score_agenusa >= score_nusabill else "nusabill"
+    domain = "agenusa" if score_agenusa >= score_nusabill else "nusabill"
+    logger.debug(
+        f"[DOMAIN_DETECT] domain={domain} score_agenusa={score_agenusa} "
+        f"score_nusabill={score_nusabill}"
+    )
+    return domain

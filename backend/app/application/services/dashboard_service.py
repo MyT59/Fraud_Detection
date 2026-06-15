@@ -1,5 +1,9 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import case, func
+
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 from datetime import datetime, timedelta, timezone
 
 from app.infrastructure.database.models.transaction_model import Transaction
@@ -55,40 +59,50 @@ def format_time(dt):
 class DashboardService:
 
     @staticmethod
+    @log_performance
     def get_kpi(db: Session):
-        agenusa = db.query(func.count(Transaction.id)).filter(Transaction.service_source == "AGENUSA").scalar()
-        nusabill = db.query(func.count(Transaction.id)).filter(Transaction.service_source == "NUSABILL").scalar()
+        # 1 aggregate query menggantikan 4 query COUNT terpisah
+        row = db.query(
+            func.count(Transaction.id).label("total"),
+            func.sum(
+                case((Transaction.service_source == "AGENUSA", 1), else_=0)
+            ).label("agenusa"),
+            func.sum(
+                case((Transaction.service_source == "NUSABILL", 1), else_=0)
+            ).label("nusabill"),
+            func.sum(
+                case(((Transaction.service_source == "AGENUSA") & (Transaction.final_status == "FRAUD"), 1), else_=0)
+            ).label("fraud_agenusa"),
+            func.sum(
+                case(((Transaction.service_source == "NUSABILL") & (Transaction.final_status == "FRAUD"), 1), else_=0)
+            ).label("fraud_nusabill"),
+        ).one()
 
-        fraud_agenusa = db.query(func.count(Transaction.id)).filter(
-            Transaction.service_source == "AGENUSA", Transaction.final_status == "FRAUD"
-        ).scalar()
+        agenusa      = int(row.agenusa or 0)
+        nusabill     = int(row.nusabill or 0)
+        fraud_agenusa = int(row.fraud_agenusa or 0)
+        fraud_nusabill = int(row.fraud_nusabill or 0)
 
-        fraud_nusabill = db.query(func.count(Transaction.id)).filter(
-            Transaction.service_source == "NUSABILL", Transaction.final_status == "FRAUD"
-        ).scalar()
+        total_tx    = agenusa + nusabill
+        total_fraud = fraud_agenusa + fraud_nusabill
+        fraud_rate  = (total_fraud / total_tx * 100) if total_tx else 0
 
-        total_tx = (agenusa or 0) + (nusabill or 0)
-        total_fraud = (fraud_agenusa or 0) + (fraud_nusabill or 0)
-        fraud_rate = (total_fraud / total_tx * 100) if total_tx else 0
         latest_active_model = db.query(MLModel)\
             .filter(MLModel.is_active == True)\
             .order_by(MLModel.created_at.desc())\
             .first()
-        accuracy = None
-        
-        if latest_active_model and latest_active_model.metrics:
-            raw_accuracy = latest_active_model.metrics.get("accuracy") or latest_active_model.metrics.get("accuracy_score")
-            
-            if raw_accuracy is not None:
-                try:
-                    accuracy = float(raw_accuracy)
-                    if accuracy < 1.0:
-                        accuracy = accuracy * 100
-                except (ValueError, TypeError):
-                    accuracy = None
+        anomaly_rate = None
 
-        if accuracy is None:
-            accuracy = 94.20
+        if latest_active_model and latest_active_model.metrics:
+            raw_rate = latest_active_model.metrics.get("anomaly_rate")
+            if raw_rate is not None:
+                try:
+                    anomaly_rate = float(raw_rate)
+                    # Normalise: kalau dalam bentuk desimal (0.05) → persen (5.0)
+                    if anomaly_rate < 1.0:
+                        anomaly_rate = anomaly_rate * 100
+                except (ValueError, TypeError):
+                    anomaly_rate = None
 
         return {
             "total_agenusa": agenusa or 0,
@@ -96,7 +110,7 @@ class DashboardService:
             "fraud_agenusa": fraud_agenusa or 0,
             "fraud_nusabill": fraud_nusabill or 0,
             "fraud_rate": round(fraud_rate, 2),
-            "model_accuracy": round(accuracy, 2)
+            "anomaly_rate": round(anomaly_rate, 2) if anomaly_rate is not None else None
         }
     
     @staticmethod
@@ -135,6 +149,7 @@ class DashboardService:
         return result
 
     @staticmethod
+    @log_performance
     def get_top_patterns(db: Session):
         raw_data = db.query(
             Transaction.violation_pattern_ids,
@@ -182,6 +197,7 @@ class DashboardService:
         return {"labels": [str(d[0]) for d in data], "datasets": [{"label": "Alerts", "data": [d[1] for d in data]}]}
 
     @staticmethod
+    @log_performance
     def get_system_health(db: Session):
         services = HealthCheckService.get_all_services(db)
         total = len(services)
@@ -200,6 +216,7 @@ class DashboardService:
         }
     
     @staticmethod
+    @log_performance
     def get_activity_timeline(db: Session, type: str = None):
         timeline = []
         fraud_trx = TransactionRepository(db).get_recent_fraud()        

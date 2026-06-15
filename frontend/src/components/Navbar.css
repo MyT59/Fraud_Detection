@@ -92,6 +92,11 @@
   gap: 16px;
 }
 
+/* Wrapper untuk bell + dropdown (supaya dropdown posisi relative ke bell) */
+.nav-item-wrapper {
+  position: relative;
+}
+
 .nav-item {
   position: relative;
   width: 40px;
@@ -114,6 +119,35 @@
   color: #262626;
 }
 
+/* State aktif saat dropdown terbuka */
+.nav-item--active {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+/* Badge angka (menggantikan dot lama) */
+.notification-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background: #dc2626;
+  border-radius: 9px;
+  border: 2px solid #ffffff;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+/* Dot lama (dipertahankan kalau masih dipakai di tempat lain) */
 .notification-dot {
   position: absolute;
   top: 8px;

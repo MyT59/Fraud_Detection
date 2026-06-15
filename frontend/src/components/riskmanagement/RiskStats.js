@@ -1,46 +1,142 @@
 import React from "react";
 import "./RiskStats.css";
 
-const RiskStats = ({ blacklist, rules }) => {
-  const totalBlacklisted = blacklist.length;
-  const activeRules = rules.filter((r) => r.enabled).length;
-  const blockedToday = blacklist.filter((b) => b.hitCount > 0).length;
-  const pendingReview = blacklist.filter((b) => b.status === "pending").length;
+const RiskStats = ({
+  blacklist = [],
+  rules = [],
+  patterns = [],
+  activeTab = "blacklist",
+}) => {
+  const blTotal = blacklist.length;
+  const blPending = blacklist.filter((b) => b.status === "pending").length;
+  const blActive = blacklist.filter(
+    (b) => b.status === "active" || b.is_active,
+  ).length;
+  const blTotalHits = blacklist.reduce((sum, b) => sum + (b.hitCount || 0), 0);
 
-  const stats = [
+  const rlTotal = rules.length;
+  const rlActive = rules.filter((r) => r.enabled).length;
+  const rlBlock = rules.filter((r) => r.action === "block").length;
+  const rlReview = rules.filter((r) => r.action === "review").length;
+
+  const ptTotal = patterns.length;
+  const ptActive = patterns.filter((p) => p.is_active).length;
+  const ptCandidates = patterns.filter((p) => !p.is_active).length;
+  const ptBlock = patterns.filter(
+    (p) => p.is_active && p.action === "BLOCK",
+  ).length;
+
+  const blacklistStats = [
     {
       icon: "bi-ban",
       colorClass: "c-red",
-      value: totalBlacklisted,
-      label: "Total Rekening Blacklist",
-      trend: "up",
-      trendText: "+12 minggu ini",
+      value: blTotal,
+      label: "Total Blacklist",
+      trend: "flat",
+      trendText: "Semua entri terdaftar",
     },
     {
-      icon: "bi-shield-exclamation",
+      icon: "bi-hourglass-split",
       colorClass: "c-amber",
-      value: pendingReview,
+      value: blPending,
       label: "Menunggu Verifikasi",
-      trend: "flat",
-      trendText: "Perlu ditinjau",
+      trend: blPending > 0 ? "up" : "flat",
+      trendText: blPending > 0 ? "Perlu ditinjau" : "Semua sudah ditinjau",
     },
     {
-      icon: "bi-gear-fill",
+      icon: "bi-shield-fill-check",
       colorClass: "c-blue",
-      value: activeRules,
-      label: "Rule Aktif",
+      value: blActive,
+      label: "Aktif Diblokir",
       trend: "flat",
-      trendText: `dari ${rules.length} total rule`,
+      trendText: `dari ${blTotal} total entri`,
     },
     {
       icon: "bi-lightning-charge-fill",
       colorClass: "c-green",
-      value: blockedToday,
-      label: "Berhasil Diblokir",
-      trend: "down",
-      trendText: "Total hit tercatat",
+      value: blTotalHits,
+      label: "Total Hit",
+      trend: blTotalHits > 0 ? "down" : "flat",
+      trendText: "Transaksi berhasil diblokir",
     },
   ];
+
+  const rulesStats = [
+    {
+      icon: "bi-journal-code",
+      colorClass: "c-blue",
+      value: rlTotal,
+      label: "Total Rules",
+      trend: "flat",
+      trendText: "Semua rule terdaftar",
+    },
+    {
+      icon: "bi-toggle-on",
+      colorClass: "c-green",
+      value: rlActive,
+      label: "Rule Aktif",
+      trend: "flat",
+      trendText: `dari ${rlTotal} total rule`,
+    },
+    {
+      icon: "bi-ban",
+      colorClass: "c-red",
+      value: rlBlock,
+      label: "Rule BLOCK",
+      trend: "flat",
+      trendText: "Tolak transaksi otomatis",
+    },
+    {
+      icon: "bi-eye-fill",
+      colorClass: "c-amber",
+      value: rlReview,
+      label: "Rule REVIEW",
+      trend: "flat",
+      trendText: "Kirim ke Manual Review",
+    },
+  ];
+
+  const patternStats = [
+    {
+      icon: "bi-shield-shaded",
+      colorClass: "c-red",
+      value: ptTotal,
+      label: "Total Pattern",
+      trend: "flat",
+      trendText: "Aktif + kandidat",
+    },
+    {
+      icon: "bi-shield-fill-check",
+      colorClass: "c-green",
+      value: ptActive,
+      label: "Pattern Aktif",
+      trend: "flat",
+      trendText: "Dievaluasi engine",
+    },
+    {
+      icon: "bi-hourglass-split",
+      colorClass: "c-amber",
+      value: ptCandidates,
+      label: "Kandidat",
+      trend: ptCandidates > 0 ? "up" : "flat",
+      trendText: ptCandidates > 0 ? "Menunggu aktivasi" : "Tidak ada kandidat",
+    },
+    {
+      icon: "bi-ban",
+      colorClass: "c-blue",
+      value: ptBlock,
+      label: "Pattern BLOCK",
+      trend: "flat",
+      trendText: "Auto-promote tertinggi",
+    },
+  ];
+
+  const stats =
+    activeTab === "rules"
+      ? rulesStats
+      : activeTab === "patterns"
+        ? patternStats
+        : blacklistStats;
 
   return (
     <div className="rms-grid">
@@ -54,13 +150,7 @@ const RiskStats = ({ blacklist, rules }) => {
             <span className="rms-label">{s.label}</span>
             <span className={`rms-trend ${s.trend}`}>
               <i
-                className={`bi ${
-                  s.trend === "up"
-                    ? "bi-arrow-up-short"
-                    : s.trend === "down"
-                      ? "bi-arrow-down-short"
-                      : "bi-dash"
-                }`}
+                className={`bi ${s.trend === "up" ? "bi-arrow-up-short" : s.trend === "down" ? "bi-arrow-down-short" : "bi-dash"}`}
               />
               {s.trendText}
             </span>

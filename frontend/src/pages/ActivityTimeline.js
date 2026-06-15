@@ -34,65 +34,6 @@ const getPeriodStartDate = (period) => {
   return null;
 };
 
-const exportCSV = (logs) => {
-  activityLogService.exportToCSV(
-    logs,
-    `activity_timeline_${new Date().toISOString().slice(0, 10)}`,
-  );
-};
-
-const exportExcel = (logs) => {
-  if (!logs.length) return;
-  const headers = [
-    "ID",
-    "Tanggal",
-    "Action Type",
-    "Module",
-    "Severity",
-    "Admin",
-    "Email",
-    "Target Type",
-    "Target ID",
-    "Details",
-  ];
-  const escape = (val) => {
-    if (val === null || val === undefined) return "";
-    return typeof val === "object" ? JSON.stringify(val) : String(val);
-  };
-  const rows = logs.map((a) => [
-    a.id,
-    new Date(a.created_at).toLocaleString("id-ID"),
-    a.action_type,
-    a.module_source,
-    a.severity,
-    a.admin_name,
-    a.admin_email,
-    a.target_type,
-    a.target_id,
-    escape(a.details),
-  ]);
-  const tableRows = rows
-    .map((r) => `<tr>${r.map((v) => `<td>${escape(v)}</td>`).join("")}</tr>`)
-    .join("");
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
-    xmlns:x="urn:schemas-microsoft-com:office:excel"
-    xmlns="http://www.w3.org/TR/REC-html40">
-    <head><meta charset="UTF-8"></head><body>
-    <table border="1">
-      <thead><tr>${headers.map((h) => `<th style="background:#6366f1;color:#fff;font-weight:bold">${h}</th>`).join("")}</tr></thead>
-      <tbody>${tableRows}</tbody>
-    </table></body></html>`;
-  const blob = new Blob([html], {
-    type: "application/vnd.ms-excel;charset=utf-8;",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `activity_timeline_${new Date().toISOString().slice(0, 10)}.xls`;
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
 const ActivityTimeline = () => {
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -110,9 +51,7 @@ const ActivityTimeline = () => {
   const [timeFilter, setTimeFilter] = useState("all_time");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [exportOpen, setExportOpen] = useState(false);
 
-  const exportRef = useRef(null);
   const sentinelRef = useRef(null);
   const debounceTimer = useRef(null);
   const abortRef = useRef(null);
@@ -231,16 +170,6 @@ const ActivityTimeline = () => {
     return () => observer.disconnect();
   }, [hasMore, loadingMore, initialLoading, fetchMore]);
 
-  // Close export dropdown on outside click
-  useEffect(() => {
-    const handler = (e) => {
-      if (exportRef.current && !exportRef.current.contains(e.target))
-        setExportOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
   // Debounce search
   const handleSearchChange = (val) => {
     setSearchQuery(val);
@@ -253,12 +182,6 @@ const ActivityTimeline = () => {
 
   const handleFilterChange = (val) => setActiveFilter(val);
   const handleTimeFilterChange = (val) => setTimeFilter(val);
-
-  const handleExport = (format) => {
-    setExportOpen(false);
-    if (format === "csv") exportCSV(items);
-    else if (format === "excel") exportExcel(items);
-  };
 
   if (initialLoading)
     return <PageLoader message="Memuat activity timeline..." />;
@@ -292,50 +215,18 @@ const ActivityTimeline = () => {
             </span>
           )}
 
-          <div className="export-wrapper" ref={exportRef}>
-            <button
-              className="btn-outline-indigo"
-              onClick={() => setExportOpen((v) => !v)}
-            >
-              <i className="bi bi-download"></i>
-              Export Log
-              <i
-                className={`bi bi-chevron-${exportOpen ? "up" : "down"} export-chevron`}
-              ></i>
-            </button>
-
-            {exportOpen && (
-              <div className="export-dropdown">
-                <div className="export-dropdown-header">
-                  Export {items.length} loaded activities
-                </div>
-                <button
-                  className="export-option"
-                  onClick={() => handleExport("csv")}
-                >
-                  <span className="export-option-icon csv-icon">
-                    <i className="bi bi-filetype-csv"></i>
-                  </span>
-                  <div className="export-option-text">
-                    <strong>CSV File</strong>
-                    <span>Comma-separated values</span>
-                  </div>
-                </button>
-                <button
-                  className="export-option"
-                  onClick={() => handleExport("excel")}
-                >
-                  <span className="export-option-icon excel-icon">
-                    <i className="bi bi-file-earmark-spreadsheet"></i>
-                  </span>
-                  <div className="export-option-text">
-                    <strong>Excel File</strong>
-                    <span>Microsoft Excel format</span>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
+          <a
+            href="/reports"
+            className="btn-outline-indigo"
+            title="Export via Reports"
+          >
+            <i className="bi bi-download"></i>
+            Export Log
+            <i
+              className="bi bi-box-arrow-up-right ms-1"
+              style={{ fontSize: ".7rem" }}
+            ></i>
+          </a>
         </div>
       </div>
 

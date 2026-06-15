@@ -44,13 +44,11 @@ const refreshAccessToken = async () => {
   const refreshToken = storage.getRefreshToken();
   if (!refreshToken) throw new Error("No refresh token");
 
-  const res = await fetch(
-    `${API_BASE}/refresh?refresh_token=${encodeURIComponent(refreshToken)}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    },
-  );
+  const res = await fetch(`${API_BASE}/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }), // ✅ FIX: pakai body bukan query params
+  });
 
   if (!res.ok) throw new Error("Refresh token expired");
 
@@ -145,12 +143,28 @@ export const api = {
   del: (endpoint, options = {}) => request("DELETE", endpoint, null, options),
   delete: (endpoint, options = {}) =>
     request("DELETE", endpoint, null, options),
+
+  postForm: async (endpoint, formData, options = {}) => {
+    const url = `${API_BASE}${endpoint}`;
+    const token = storage.getAccessToken();
+    const headers = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    };
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: formData,
+      signal: options.signal,
+    });
+    return handleResponse(res);
+  },
 };
 
 export const authService = {
   login: async (email, password) => {
-    const params = new URLSearchParams({ email, password });
-    const data = await api.post(`/login?${params.toString()}`);
+    // ✅ FIX: pakai body bukan query params
+    const data = await api.post("/login", { email, password });
 
     storage.setTokens(data.access_token, data.refresh_token);
 
@@ -183,11 +197,10 @@ export const authService = {
   },
 
   changePassword: (oldPassword, newPassword) => {
-    const params = new URLSearchParams({
+    return api.post("/accounts/change-password", {
       old_password: oldPassword,
       new_password: newPassword,
     });
-    return api.post(`/accounts/change-password?${params.toString()}`);
   },
 
   hasRole: (role) => {

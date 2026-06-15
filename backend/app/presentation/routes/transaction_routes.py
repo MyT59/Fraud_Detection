@@ -13,6 +13,9 @@ from app.presentation.schemas.transaction_schema import (
     TransactionListResponse,
     TransactionDetailResponse
 )
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -20,6 +23,7 @@ router = APIRouter(prefix="/transactions", tags=["Transactions"])
     "",
     response_model=TransactionListResponse
 )
+@log_performance(label="TransactionRoutes.get_transactions")
 def get_transactions(
     search: str | None = None,
     service_source: str | None = None,

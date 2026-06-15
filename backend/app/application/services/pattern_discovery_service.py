@@ -4,6 +4,9 @@ from typing import List, Dict, Any
 
 # Import fungsi andalanmu untuk simpan pattern ke DB (sudah handle rules_hash & dedup)
 from app.application.services.pattern_learning_service import save_generated_patterns
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 class PatternDiscoveryService:
     def __init__(self):
@@ -58,6 +61,7 @@ class PatternDiscoveryService:
             }
         }
 
+    @log_performance(label="PatternDiscoveryService.extract_and_save_patterns")
     def extract_and_save_patterns(self, db: Session, domain: str, anomaly_df: pd.DataFrame) -> int:
         """
         Menganalisa dataframe berisi data-data yang diprediksi FRAUD/ANOMALI oleh ML,

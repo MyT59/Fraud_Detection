@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 const ROWS_PER_PAGE_OPTIONS = [5, 10, 15, 25];
 
 const FORMAT_OPTIONS = ["PDF", "Excel", "CSV"];
-const STATUS_OPTIONS = ["Completed", "Processing", "Failed"];
+const STATUS_OPTIONS = ["COMPLETED", "PROCESSING", "FAILED", "PENDING"];
 
 const FORMAT_META = {
   PDF: {
@@ -11,6 +11,12 @@ const FORMAT_META = {
     color: "#dc2626",
     bg: "#fef2f2",
     border: "#fecaca",
+  },
+  XLSX: {
+    icon: "bi-filetype-xlsx",
+    color: "#16a34a",
+    bg: "#f0fdf4",
+    border: "#bbf7d0",
   },
   Excel: {
     icon: "bi-filetype-xlsx",
@@ -163,13 +169,16 @@ const ConfirmModal = ({ config, onConfirm, onCancel }) => {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {config.report?.type}
+                  {config.report?.report_name || config.report?.type}
                 </div>
                 <div
                   style={{ fontSize: ".75rem", color: "#a3a3a3", marginTop: 2 }}
                 >
-                  {config.report?.id} · {config.report?.format} ·{" "}
-                  {config.report?.size}
+                  {String(config.report?.id || "").slice(0, 8)}… ·{" "}
+                  {config.report?.format} ·{" "}
+                  {config.report?.total_records
+                    ? `${config.report.total_records} rows`
+                    : "—"}
                 </div>
               </div>
             </div>
@@ -682,15 +691,28 @@ const ReportList = ({
 
   const getStatusBadge = (status) => {
     const cfg = {
-      Completed: { class: "bg-success", icon: "check-circle-fill" },
-      Processing: { class: "bg-warning text-dark", icon: "hourglass-split" },
-      Failed: { class: "bg-danger", icon: "x-circle-fill" },
+      COMPLETED: {
+        class: "bg-success",
+        icon: "check-circle-fill",
+        label: "Completed",
+      },
+      PROCESSING: {
+        class: "bg-warning text-dark",
+        icon: "hourglass-split",
+        label: "Processing",
+      },
+      PENDING: {
+        class: "bg-warning text-dark",
+        icon: "hourglass-split",
+        label: "Pending",
+      },
+      FAILED: { class: "bg-danger", icon: "x-circle-fill", label: "Failed" },
     };
-    const c = cfg[status] ?? cfg["Completed"];
+    const c = cfg[status] ?? cfg["COMPLETED"];
     return (
       <span className={`badge ${c.class}`}>
         <i className={`bi bi-${c.icon} me-1`}></i>
-        {status}
+        {c.label}
       </span>
     );
   };
@@ -856,8 +878,12 @@ const ReportList = ({
                           />
                         </span>
                         <div>
-                          <div className="report-type-name">{report.type}</div>
-                          <div className="report-id-tag">{report.id}</div>
+                          <div className="report-type-name">
+                            {report.report_name}
+                          </div>
+                          <div className="report-id-tag">
+                            {String(report.id).slice(0, 8)}…
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -877,19 +903,22 @@ const ReportList = ({
 
                     <td className="col-date">
                       <span className="date-text">
-                        {formatDate(report.generatedDate)}
+                        {formatDate(report.created_at)}
                       </span>
                     </td>
 
                     <td className="col-status">
-                      {report.status === "Processing" ? (
+                      {report.status === "PROCESSING" ||
+                      report.status === "PENDING" ? (
                         <span className="badge bg-warning text-dark">
                           <span
                             className="spinner-border spinner-border-sm me-1"
                             style={{ width: "9px", height: "9px" }}
                             role="status"
                           />
-                          Processing
+                          {report.status === "PENDING"
+                            ? "Pending"
+                            : "Processing"}
                         </span>
                       ) : (
                         getStatusBadge(report.status)
@@ -897,13 +926,17 @@ const ReportList = ({
                     </td>
 
                     <td className="col-size">
-                      <span className="size-text">{report.size}</span>
+                      <span className="size-text">
+                        {report.total_records
+                          ? `${report.total_records} rows`
+                          : "—"}
+                      </span>
                     </td>
 
                     <td className="col-by">
                       <span className="by-text">
                         <i className="bi bi-person-fill me-1"></i>
-                        {report.generatedBy}
+                        {report.generated_by_admin?.full_name || "System"}
                       </span>
                     </td>
 
@@ -915,11 +948,11 @@ const ReportList = ({
                         <button
                           className="action-btn action-btn-preview"
                           onClick={() => onViewReport(report)}
-                          title="Preview"
+                          title="Preview / Download"
                         >
                           <i className="bi bi-eye"></i>
                         </button>
-                        {report.status === "Completed" && (
+                        {report.status === "COMPLETED" && (
                           <>
                             <button
                               className="action-btn action-btn-download"

@@ -13,6 +13,42 @@ const STATUS_META = {
   review: { label: "Under Review", bg: "#fef3c7", color: "#92400e" },
 };
 
+// [FIX] Export sederhana untuk satu pattern sebagai JSON.
+// Tombol "Export Report" sebelumnya tidak punya handler sama sekali.
+function exportPatternReport(pattern) {
+  const payload = {
+    id: pattern.id,
+    name: pattern.name,
+    category: pattern.category,
+    risk_level: pattern.riskLevel,
+    status: pattern.status,
+    occurrences: pattern.occurrences,
+    accuracy: pattern.accuracy,
+    false_positive_rate: pattern.falsePositiveRate,
+    avg_loss_idr: pattern.avgLossIDR,
+    share_of_flagged_pct: pattern.trend,
+    last_updated: pattern.lastUpdated,
+    indicators: pattern.indicators,
+    recommended_actions: pattern.recommendedActions,
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `pattern-report_${pattern.id}_${pattern.name
+    .toLowerCase()
+    .replace(/\s+/g, "-")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
+}
+
 const PatternDetailModal = ({ pattern, onClose }) => {
   if (!pattern) return null;
   const risk = RISK_META[pattern.riskLevel] || RISK_META.medium;
@@ -112,24 +148,29 @@ const PatternDetailModal = ({ pattern, onClose }) => {
 
           <div className="pdm-section">
             <div className="pdm-section-title">
-              <i className="bi bi-bar-chart-line"></i>Detection Rate Trend
+              <i className="bi bi-bar-chart-line"></i>Detection Share
             </div>
             <div className="pdm-trend-row">
-              <span className="pdm-trend-label">This month vs last month</span>
-              <span
-                className={`pdm-trend-val ${pattern.trend > 0 ? "up" : "down"}`}
-              >
-                <i
-                  className={`bi bi-arrow-${pattern.trend > 0 ? "up" : "down"}-right`}
-                ></i>
-                {Math.abs(pattern.trend)}%
+              {/*
+                [FIX] Label sebelumnya "This month vs last month" tidak sesuai
+                dengan data dari BE. Field `trend` dihitung BE sebagai:
+                (tx_count_pattern_ini / total_flagged_transactions) * 100
+                yaitu proporsi pattern ini terhadap seluruh transaksi yang
+                ter-flag, bukan perbandingan antar bulan.
+              */}
+              <span className="pdm-trend-label">
+                Share dari total transaksi flagged
+              </span>
+              <span className="pdm-trend-val up">
+                <i className="bi bi-pie-chart-fill"></i>
+                {pattern.trend}%
               </span>
             </div>
             <div className="pdm-trend-bar-wrap">
               <div
                 className="pdm-trend-bar-fill"
                 style={{
-                  width: `${Math.min(100, pattern.accuracy)}%`,
+                  width: `${Math.min(100, pattern.trend)}%`,
                   background: risk.color,
                 }}
               ></div>
@@ -151,7 +192,11 @@ const PatternDetailModal = ({ pattern, onClose }) => {
           <button className="pdm-btn-close" onClick={onClose}>
             <i className="bi bi-x-circle"></i>Close
           </button>
-          <button className="pdm-btn-report">
+          {/* [FIX] Tombol sebelumnya tidak punya onClick handler */}
+          <button
+            className="pdm-btn-report"
+            onClick={() => exportPatternReport(pattern)}
+          >
             <i className="bi bi-file-earmark-text"></i>Export Report
           </button>
         </div>

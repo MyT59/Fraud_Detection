@@ -37,7 +37,7 @@ const SecuritySettings = () => {
   const handleRevokeSession = async (sessionId) => {
     setRevokingId(sessionId);
     try {
-      await api.post(`/${sessionId}/revoke`);
+      await api.post(`/sessions/${sessionId}/revoke`);
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
     } catch {
       alert("Gagal mencabut sesi. Coba lagi.");
@@ -81,9 +81,7 @@ const SecuritySettings = () => {
         });
       }, 1500);
     } catch (err) {
-      setPasswordError(
-        err?.response?.data?.detail || "Gagal mengubah password. Coba lagi.",
-      );
+      setPasswordError(err.message || "Gagal mengubah password. Coba lagi.");
     } finally {
       setPasswordSaving(false);
     }

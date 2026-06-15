@@ -4,50 +4,19 @@ import HistoryStats from "../components/reviewhistory/HistoryStats";
 import HistoryTable from "../components/reviewhistory/HistoryTable";
 import HistoryDetailModal from "../components/reviewhistory/HistoryDetailModal";
 import api from "../services/apiService";
+import useRole from "../hooks/useRole";
+import {
+  fetchMyReviewHistory,
+  fetchMyReviewMetrics,
+  mapHistoryItem,
+} from "../services/reviewApiService";
 import "./ReviewHistory.css";
-
-/**
- * mapReviewItem
- * Memetakan item dari GET /reviews/history ke format internal FE.
- *
- * Hanya menggunakan field yang BENAR-BENAR ada di ReviewHistoryItem schema BE:
- *   id, transaction_id, alert_id, decision, review_note,
- *   previous_status, final_status, reviewed_by, created_at
- *
- * Field yang TIDAK ada di BE dan TIDAK boleh digunakan:
- *   service, amount, risk_score, account_id, matched_patterns,
- *   reviewer_name, reviewer_role, duration
- */
-const mapReviewItem = (r) => ({
-  // Identifikasi
-  id: `review-${r.id}`,
-  reviewId: r.id,
-  transactionId: r.transaction_id
-    ? `TRX-${String(r.transaction_id).padStart(6, "0")}`
-    : `RVW-${String(r.id).padStart(6, "0")}`,
-  transactionIdRaw: r.transaction_id ?? null,
-  alertId: r.alert_id ?? null,
-
-  // Keputusan
-  decision: (r.decision || "").toUpperCase(), // "SAFE" | "FRAUD"
-
-  // Status
-  previousStatus: r.previous_status ?? null,
-  finalStatus: r.final_status ?? null,
-
-  // Reviewer — hanya ID, nama tidak ada di BE schema
-  reviewedBy: r.reviewed_by ?? null,
-
-  // Catatan
-  reviewNote: r.review_note ?? null,
-
-  // Waktu
-  createdAt: r.created_at ?? null,
-});
 
 // ─── Komponen Utama ───────────────────────────────────────────────
 
 const ReviewHistory = () => {
+  const { isFraudAnalyst } = useRole();
+
   const [items, setItems] = useState([]);
   const [metrics, setMetrics] = useState(null);
 
@@ -63,49 +32,64 @@ const ReviewHistory = () => {
   const abortRef = useRef(null);
 
   // ─── Fetch History ─────────────────────────────────────────────
+  // FRAUD_ANALYST → GET /reviews/my-history (hanya miliknya)
+  // RISK_MANAGER & SUPER_ADMIN → GET /reviews/history (semua reviewer)
 
-  const fetchHistory = useCallback(async (targetPage) => {
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+  const fetchHistory = useCallback(
+    async (targetPage) => {
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-    setLoading(true);
-    try {
-      const data = await api.get(
-        `/reviews/history?page=${targetPage}&limit=${LIMIT}`,
-        { signal: controller.signal },
-      );
+      setLoading(true);
+      try {
+        let data;
+        if (isFraudAnalyst) {
+          data = await fetchMyReviewHistory({ page: targetPage, limit: LIMIT });
+        } else {
+          data = await api.get(
+            `/reviews/history?page=${targetPage}&limit=${LIMIT}`,
+            { signal: controller.signal },
+          );
+        }
 
-      const mapped = (data.items ?? []).map(mapReviewItem);
-      setItems(mapped);
-      setTotalItems(data.total ?? 0);
-      setApiError(false);
-    } catch (err) {
-      if (err.name === "AbortError") return;
-      console.error("[ReviewHistory] Gagal memuat history:", err.message);
-      // ❌ TIDAK fallback ke dummy — tampilkan error state
-      setApiError(true);
-      setItems([]);
-      setTotalItems(0);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        const mapped = (data.items ?? []).map(mapHistoryItem);
+        setItems(mapped);
+        setTotalItems(data.total ?? 0);
+        setApiError(false);
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        console.error("[ReviewHistory] Gagal memuat history:", err.message);
+        setApiError(true);
+        setItems([]);
+        setTotalItems(0);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isFraudAnalyst],
+  );
 
   // ─── Fetch Metrics ─────────────────────────────────────────────
+  // FRAUD_ANALYST → GET /reviews/my-metrics (metrics miliknya)
+  // RISK_MANAGER & SUPER_ADMIN → GET /reviews/metrics (global)
 
   const fetchMetrics = useCallback(async () => {
     setMetricsLoading(true);
     try {
-      const data = await api.get("/reviews/metrics");
+      let data;
+      if (isFraudAnalyst) {
+        data = await fetchMyReviewMetrics();
+      } else {
+        data = await api.get("/reviews/metrics");
+      }
       setMetrics(data?.data ?? data ?? null);
     } catch (err) {
       console.warn("[ReviewHistory] Gagal fetch metrics:", err.message);
-      // Metrics gagal tidak kritis — halaman tetap bisa digunakan
     } finally {
       setMetricsLoading(false);
     }
-  }, []);
+  }, [isFraudAnalyst]);
 
   useEffect(() => {
     fetchHistory(page);
@@ -141,6 +125,31 @@ const ReviewHistory = () => {
 
   return (
     <div className="rh-page-wrapper">
+      {/* Info banner — tunjukkan context history ke user */}
+      {!apiError && (
+        <div
+          style={{
+            padding: ".625rem 1rem",
+            marginBottom: "1rem",
+            background: isFraudAnalyst ? "#eff6ff" : "#f0fdf4",
+            border: `1px solid ${isFraudAnalyst ? "#bfdbfe" : "#bbf7d0"}`,
+            borderRadius: "8px",
+            fontSize: ".82rem",
+            color: isFraudAnalyst ? "#1d4ed8" : "#15803d",
+            display: "flex",
+            alignItems: "center",
+            gap: ".5rem",
+          }}
+        >
+          <i
+            className={`bi ${isFraudAnalyst ? "bi-person-fill" : "bi-people-fill"}`}
+          />
+          {isFraudAnalyst
+            ? "Menampilkan riwayat review milik Anda sendiri."
+            : "Menampilkan riwayat review seluruh tim (semua analis)."}
+        </div>
+      )}
+
       {/* Banner Error — tampil jika API gagal, tanpa dummy data */}
       {apiError && (
         <div className="rh-offline-banner">

@@ -3,6 +3,10 @@ import pandas as pd
 from typing import Any, Optional
 from datetime import datetime
 
+from ...core.logging import get_logger
+
+logger = get_logger(__name__)
+
 # ========================================================================
 # SNAPSHOT-BASED FEATURE ENGINEERING (NEW)
 # ========================================================================
@@ -335,6 +339,10 @@ def build_agenusa_features(df: pd.DataFrame) -> pd.DataFrame:
     
     missing = [c for c in required_cols if c not in data.columns]
     if missing:
+        logger.error(
+            f"[FEATURE_BUILD] domain=agenusa kolom wajib hilang — missing={missing} "
+            f"available={list(data.columns)}"
+        )
         raise ValueError(
             f"Missing required columns in agenusa: {missing}. "
             f"Available columns: {list(data.columns)}"
@@ -410,6 +418,10 @@ def build_nusabill_features(df: pd.DataFrame) -> pd.DataFrame:
     
     missing = [c for c in required_cols if c not in data.columns]
     if missing:
+        logger.error(
+            f"[FEATURE_BUILD] domain=nusabill kolom wajib hilang — missing={missing} "
+            f"available={list(data.columns)}"
+        )
         raise ValueError(
             f"Missing required columns in nusabill: {missing}. "
             f"Available columns: {list(data.columns)}"
@@ -530,6 +542,7 @@ def build_features_from_snapshot(domain: str, snapshot: dict) -> dict[str, Any]:
     elif domain == "nusabill":
         return build_nusabill_features_from_snapshot(snapshot)
     else:
+        logger.error(f"[FEATURE_BUILD] Domain tidak dikenal — domain={domain}")
         raise ValueError(f"Domain tidak dikenal: {domain}")
 
 
@@ -551,6 +564,7 @@ def build_features(domain: str, df: pd.DataFrame) -> pd.DataFrame:
     elif domain == "nusabill":
         processed_df = build_nusabill_features(df)
     else:
+        logger.error(f"[FEATURE_BUILD] Domain tidak dikenal — domain={domain}")
         raise ValueError(f"Domain tidak dikenal: {domain}")
 
     # 🔥 FIX AKURASI: Paksa seluruh kolom hasil akhir menjadi UPPERCASE

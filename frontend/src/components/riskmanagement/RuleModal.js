@@ -41,9 +41,12 @@ const OPS = [">", "<", ">=", "<=", "=", "≠", "termasuk", "tidak termasuk"];
 
 const EMPTY = {
   name: "",
+  rule_key: "",
   description: "",
   priority: 5,
   action: "flag",
+  service_scope: "ALL",
+  severity: "MEDIUM",
   condField: FIELDS[0],
   condOp: ">",
   condValue: "",
@@ -118,6 +121,7 @@ const RuleModal = ({ isOpen, onClose, onSubmit, editData }) => {
   const validate = () => {
     const e = {};
     if (!form.name.trim()) e.name = "Nama rule wajib diisi.";
+    if (!isEdit && !form.rule_key.trim()) e.rule_key = "Rule key wajib diisi.";
     if (!form.condValue.trim()) e.condValue = "Nilai kondisi wajib diisi.";
     return e;
   };
@@ -204,6 +208,26 @@ const RuleModal = ({ isOpen, onClose, onSubmit, editData }) => {
           </Field>
 
           <div className="rum-row">
+            <Field
+              label="Rule Key"
+              req={!isEdit}
+              opt={isEdit}
+              err={errors.rule_key}
+            >
+              <input
+                className={`rum-input ${errors.rule_key ? "err" : ""} rum-mono`}
+                type="text"
+                placeholder="cth: large_trx_new_account"
+                value={form.rule_key}
+                disabled={isEdit}
+                onChange={(e) =>
+                  set(
+                    "rule_key",
+                    e.target.value.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
+                  )
+                }
+              />
+            </Field>
             <Field label="Deskripsi" opt>
               <input
                 className="rum-input"
@@ -213,6 +237,8 @@ const RuleModal = ({ isOpen, onClose, onSubmit, editData }) => {
                 onChange={(e) => set("description", e.target.value)}
               />
             </Field>
+          </div>
+          <div className="rum-row">
             <Field label="Prioritas (1=tertinggi)">
               <input
                 className="rum-input"
@@ -227,6 +253,36 @@ const RuleModal = ({ isOpen, onClose, onSubmit, editData }) => {
                   )
                 }
               />
+            </Field>
+          </div>
+
+          <div className="rum-row">
+            <Field label="Service Scope">
+              <div className="rum-select-wrap">
+                <select
+                  className="rum-select"
+                  value={form.service_scope}
+                  onChange={(e) => set("service_scope", e.target.value)}
+                >
+                  <option value="ALL">ALL</option>
+                  <option value="AGENUSA">AGENUSA</option>
+                  <option value="NUSABILL">NUSABILL</option>
+                </select>
+              </div>
+            </Field>
+            <Field label="Severity">
+              <div className="rum-select-wrap">
+                <select
+                  className="rum-select"
+                  value={form.severity}
+                  onChange={(e) => set("severity", e.target.value)}
+                >
+                  <option value="LOW">LOW</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="CRITICAL">CRITICAL</option>
+                </select>
+              </div>
             </Field>
           </div>
 

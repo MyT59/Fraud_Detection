@@ -1,13 +1,18 @@
 from app.infrastructure.database.enums import TransactionStatusEnum
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 
+@log_performance(label="EnsembleEngine.run_ensemble_engine")
 def run_ensemble_engine(
     rule_score=0,
     rule_actions=None,
     pattern_score=0,
     pattern_actions=None,
     ml_score=0,
-    pattern_violations=None
+    pattern_violations=None,
+    transaction_id=None,
 ):
     rule_actions = rule_actions or []
     pattern_actions = pattern_actions or []
@@ -19,6 +24,11 @@ def run_ensemble_engine(
     # PRIORITY: HARD BLOCK FROM ENGINES
     # =========================================================================
     if "BLOCK" in pattern_actions:
+        logger.warning(
+            f"[ENSEMBLE] tx_id={transaction_id} PATTERN_BLOCK — final_score=100 final_status=FRAUD "
+            f"rule_score={rule_score} pattern_score={pattern_score} ml_score={ml_score} "
+            f"pattern_actions={pattern_actions}"
+        )
         return {
             "final_score": 100,
             "final_status": "FRAUD",
@@ -26,6 +36,11 @@ def run_ensemble_engine(
         }
     
     if "BLOCK" in rule_actions:
+        logger.warning(
+            f"[ENSEMBLE] tx_id={transaction_id} RULE_BLOCK — final_score=95 final_status=FRAUD "
+            f"rule_score={rule_score} pattern_score={pattern_score} ml_score={ml_score} "
+            f"rule_actions={rule_actions}"
+        )
         return {
             "final_score": 95,
             "final_status": "FRAUD",
@@ -36,6 +51,10 @@ def run_ensemble_engine(
 
     if any("Decline Velocity" in p for p in pattern_names):
         # Abaikan rule konvensional jika pola fraud velocity sudah sangat jelas
+        logger.info(
+            f"[ENSEMBLE] tx_id={transaction_id} Decline Velocity pattern terdeteksi — "
+            f"rule_score di-override dari {rule_score} menjadi 0"
+        )
         rule_score = 0
         rule_actions = []
 
@@ -60,7 +79,16 @@ def run_ensemble_engine(
     # Jika skor tinggi (terdeteksi anomali/pattern berat) tapi rule tidak melakukan BLOCK,
     # alihkan status menjadi UNDER_REVIEW agar ditinjau analis, tanpa merusak nilai skor aslinya.
     if total_score > 85 and "BLOCK" not in actions:
+        logger.info(
+            f"[ENSEMBLE] tx_id={transaction_id} Adjustment — total_score={total_score} > 85 "
+            f"tanpa BLOCK action, status dialihkan ke UNDER_REVIEW"
+        )
         status = TransactionStatusEnum.UNDER_REVIEW.value
+
+    logger.info(
+        f"[ENSEMBLE] tx_id={transaction_id} final_score={total_score} final_status={status} "
+        f"rule_score={rule_score} pattern_score={pattern_score} ml_score={ml_score}"
+    )
 
     return {
         "final_score": total_score,

@@ -1,4 +1,6 @@
 import enum
+from enum import Enum
+
 
 class BlacklistTypeEnum(str, enum.Enum):
     USER_ID = "USER_ID"
@@ -15,11 +17,15 @@ class BlacklistTypeEnum(str, enum.Enum):
     CUSTOMER_PHONE = "CUSTOMER_PHONE"
     CUSTOMER_EMAIL = "CUSTOMER_EMAIL"
     VIRTUAL_ACCOUNT_NUMBER = "VIRTUAL_ACCOUNT_NUMBER"
+
+
 class TransactionStatusEnum(str, enum.Enum):
     PENDING = "PENDING"
     UNDER_REVIEW = "UNDER_REVIEW"
     SAFE = "SAFE"
     FRAUD = "FRAUD"
+
+
 class RuleOperatorEnum(str, enum.Enum):
     EQ = "="
     NEQ = "!="
@@ -27,28 +33,50 @@ class RuleOperatorEnum(str, enum.Enum):
     LT = "<"
     GTE = ">="
     LTE = "<="
+
+
 class ServiceScopeEnum(str, enum.Enum):
     ALL = "ALL"
     AGENUSA = "AGENUSA"
     NUSABILL = "NUSABILL"
+
+
 class RuleActionEnum(str, enum.Enum):
     BLOCK = "BLOCK"
     REVIEW = "REVIEW"
     FLAG = "FLAG"
+
+
 class RuleSeverityEnum(str, enum.Enum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
     CRITICAL = "CRITICAL"
+
+
+# ==========================================
+# RISK LEVEL ENUM (Tambahan Baru)
+# ==========================================
+class RiskLevelEnum(str, enum.Enum):
+    SAFE = "SAFE"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
 class ReviewDecisionEnum(str, enum.Enum):
     SAFE = "SAFE"
     FRAUD = "FRAUD"
+
+
 class AlertStatusEnum(str, enum.Enum):
     OPEN = "OPEN"
     IN_PROGRESS = "IN_PROGRESS"
     RESOLVED = "RESOLVED"
     REOPENED = "REOPENED"
     OVERRIDDEN = "OVERRIDDEN"
+
 
 class ActivityActionEnum(str, enum.Enum):
     # Auth & Sessions
@@ -62,6 +90,11 @@ class ActivityActionEnum(str, enum.Enum):
     ACCOUNT_CREATED = "ACCOUNT_CREATED"
     ACCOUNT_SUSPENDED = "ACCOUNT_SUSPENDED"
     ACCOUNT_ROLE_CHANGED = "ACCOUNT_ROLE_CHANGED"
+    ACCOUNT_LOCKED = "ACCOUNT_LOCKED"
+    ACCOUNT_ACTIVATED = "ACCOUNT_ACTIVATED"
+    ACCOUNT_UPDATED = "ACCOUNT_UPDATED"
+    PASSWORD_CHANGED = "PASSWORD_CHANGED"
+    PASSWORD_RESET = "PASSWORD_RESET"
 
     # Rules Engine
     RULE_CREATED = "RULE_CREATED"
@@ -80,24 +113,55 @@ class ActivityActionEnum(str, enum.Enum):
     BLACKLIST_ADD = "BLACKLIST_ADD"
     BLACKLIST_REMOVE = "BLACKLIST_REMOVE"
     BLACKLIST_HIT = "BLACKLIST_HIT"
+    BLACKLIST_CREATED = "BLACKLIST_CREATED"
+    BLACKLIST_UPDATED = "BLACKLIST_UPDATED"
+    BLACKLIST_DELETED = "BLACKLIST_DELETED"
+    BLACKLIST_APPROVED = "BLACKLIST_APPROVED"
+    BLACKLIST_REJECTED = "BLACKLIST_REJECTED"
+    BLACKLIST_ACTIVATED = "BLACKLIST_ACTIVATED"
+    BLACKLIST_DEACTIVATED = "BLACKLIST_DEACTIVATED"
+    BLACKLIST_BULK_IMPORT = "BLACKLIST_BULK_IMPORT"
+    BLACKLIST_CREATED = "BLACKLIST_CREATED"
+    BLACKLIST_UPDATED = "BLACKLIST_UPDATED"
+    BLACKLIST_DELETED = "BLACKLIST_DELETED"
+    BLACKLIST_APPROVED = "BLACKLIST_APPROVED"
+    BLACKLIST_REJECTED = "BLACKLIST_REJECTED"
+    BLACKLIST_ACTIVATED = "BLACKLIST_ACTIVATED"
+    BLACKLIST_DEACTIVATED = "BLACKLIST_DEACTIVATED"
+    BLACKLIST_BULK_IMPORT = "BLACKLIST_BULK_IMPORT"
+    BLACKLIST_CREATED = "BLACKLIST_CREATED"
+    BLACKLIST_UPDATED = "BLACKLIST_UPDATED"
+    BLACKLIST_DELETED = "BLACKLIST_DELETED"
+    BLACKLIST_APPROVED = "BLACKLIST_APPROVED"
+    BLACKLIST_REJECTED = "BLACKLIST_REJECTED"
+    BLACKLIST_ACTIVATED = "BLACKLIST_ACTIVATED"
+    BLACKLIST_DEACTIVATED = "BLACKLIST_DEACTIVATED"
+    BLACKLIST_BULK_IMPORT = "BLACKLIST_BULK_IMPORT"
 
-# Alerts & Reviews
+    # Alerts & Reviews
     ALERT_CREATED = "ALERT_CREATED"   
     ALERT_CLAIMED = "ALERT_CLAIMED"   
     ALERT_RELEASED = "ALERT_RELEASED"
+    ALERT_UPDATED = "ALERT_UPDATED"
     REVIEW_APPROVED = "REVIEW_APPROVED"
     REVIEW_REJECTED = "REVIEW_REJECTED"
     REVIEW_OVERRIDDEN = "REVIEW_OVERRIDDEN"
+    SOFT_DELETE_REVIEW = "SOFT_DELETE_REVIEW"
+    REPORT_FALSE_NEGATIVE = "REPORT_FALSE_NEGATIVE"
+
+    # Reports
+    REPORT_GENERATED = "REPORT_GENERATED"
+    REPORT_DOWNLOADED = "REPORT_DOWNLOADED"
+
 
 class SeverityLevelEnum(str, enum.Enum):
-    # Tingkat keparahan 
     INFO = "INFO"
     WARNING = "WARNING"
     HIGH = "HIGH"
     CRITICAL = "CRITICAL"
 
+
 class EventSourceEnum(str, enum.Enum):
-    # Sumber modul yang melakukan aksi 
     AUTH = "AUTH"
     RULE_ENGINE = "RULE_ENGINE"
     PATTERN_ENGINE = "PATTERN_ENGINE"
@@ -105,11 +169,36 @@ class EventSourceEnum(str, enum.Enum):
     BLACKLIST = "BLACKLIST"
     ML = "ML"
     SYSTEM = "SYSTEM"
+    REPORTS = "REPORTS"
+
 
 class TimelineTypeEnum(str, enum.Enum):
-    # Standarisasi timeline di dashboard 
     TIMELINE_FRAUD = "TIMELINE_FRAUD"
     TIMELINE_ALERT = "TIMELINE_ALERT"
     TIMELINE_REVIEW = "TIMELINE_REVIEW"
     TIMELINE_SYSTEM = "TIMELINE_SYSTEM"
     TIMELINE_SECURITY = "TIMELINE_SECURITY"
+
+
+class ReportTypeEnum(str, Enum):
+    FRAUD_DETECTION = "FRAUD_DETECTION"
+    FRAUD_PATTERN   = "FRAUD_PATTERN"
+    TRANSACTION = "TRANSACTION"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+    ALERT = "ALERT"
+    BLACKLIST = "BLACKLIST"
+    ACTIVITY_LOG = "ACTIVITY_LOG"
+    ML_PERFORMANCE = "ML_PERFORMANCE"
+
+
+class ReportFormatEnum(str, Enum):
+    PDF = "PDF"
+    XLSX = "XLSX"
+    CSV = "CSV"
+
+
+class ReportStatusEnum(str, Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"

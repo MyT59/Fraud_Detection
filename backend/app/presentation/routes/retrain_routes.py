@@ -12,12 +12,13 @@ from app.application.services.retrain_service import RetrainService
 from app.application.services.scheduler_service import SchedulerService
 from app.core.scheduler import get_scheduler_service
 from app.core.security import get_current_user
-from app.core.rbac import is_risk_manager 
+from app.core.rbac import is_super_admin 
 from app.infrastructure.database.models.admin_model import Admin
 from app.infrastructure.database.models.retrain_history_model import RetrainHistory
 
 from app.presentation.schemas.retrain_schema import (
-    ScheduleCreate, 
+    ScheduleCreate,
+    ScheduleUpdate,
     ScheduleResponse, 
     StatusUpdate,
     RetrainHistoryResponse
@@ -120,7 +121,7 @@ def retrain_metrics(
 def create_schedule(
     data: ScheduleCreate, 
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(is_risk_manager),
+    current_admin: Admin = Depends(is_super_admin),
     scheduler_service: SchedulerService = Depends(get_scheduler_service)
 ):
     service = RetrainService(db)
@@ -132,6 +133,30 @@ def create_schedule(
     
     return new_schedule
 
+
+# ==========================================
+# ✏️  3. UPDATE JADWAL (FULL UPDATE)
+# ==========================================
+@router.put("/schedules/{schedule_id}", response_model=ScheduleResponse)
+def update_schedule(
+    schedule_id: uuid.UUID,
+    data: ScheduleUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(is_super_admin),
+    scheduler_service: SchedulerService = Depends(get_scheduler_service)
+):
+    service = RetrainService(db)
+    updated = service.update_schedule(schedule_id, data.dict(exclude_unset=True), admin_id=current_admin.id)
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    # Re-register job di scheduler dengan config terbaru
+    if updated.is_active:
+        scheduler_service.register_job(updated.to_dict())
+
+    return updated
+
 # ==========================================
 # 🔄 3. TOGGLE AKTIF/NON-AKTIF
 # ==========================================
@@ -140,7 +165,7 @@ def toggle_status(
     schedule_id: uuid.UUID,
     data: StatusUpdate,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(is_risk_manager),
+    current_admin: Admin = Depends(is_super_admin),
     scheduler_service: SchedulerService = Depends(get_scheduler_service)
 ):
     service = RetrainService(db)
@@ -164,7 +189,7 @@ def toggle_status(
 def delete_schedule(
     schedule_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(is_risk_manager),
+    current_admin: Admin = Depends(is_super_admin),
     scheduler_service: SchedulerService = Depends(get_scheduler_service)
 ):
     service = RetrainService(db)
@@ -185,7 +210,7 @@ def delete_schedule(
 def run_now(
     schedule_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(is_risk_manager)
+    current_admin: Admin = Depends(is_super_admin)
 ):
     service = RetrainService(db)
     # Ambil data schedule
@@ -207,13 +232,50 @@ async def upload_and_train(
     domain: str = Form("auto_detect"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(is_risk_manager)
+    current_admin: Admin = Depends(is_super_admin)
 ):
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are allowed")
 
     service = RetrainService(db)
     result = await service.upload_and_train(file, domain, admin_id=current_admin.id)
+    return result
+
+
+# ==========================================
+# 📊 MODEL STATS (Anomaly Rate, Threshold, Contamination)
+# ==========================================
+@router.get("/model-stats")
+def get_model_stats(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_user)
+):
+    from app.infrastructure.database.models.ml_model_model import MLModel as MLModelDB
+
+    domains = ["agenusa", "nusabill"]
+    result = {}
+
+    for domain in domains:
+        model = (
+            db.query(MLModelDB)
+            .filter(MLModelDB.target_service == domain, MLModelDB.is_active == True)
+            .order_by(MLModelDB.created_at.desc())
+            .first()
+        )
+        if model:
+            metrics = model.metrics or {}
+            result[domain] = {
+                "version": model.version_name,
+                "created_at": model.created_at.isoformat() if model.created_at else None,
+                "training_samples": metrics.get("training_samples"),
+                "anomalies_detected": metrics.get("anomalies_detected"),
+                "anomaly_rate": metrics.get("anomaly_rate"),
+                "contamination_rate": metrics.get("contamination_rate"),
+                "thresholds": metrics.get("thresholds", {}),
+            }
+        else:
+            result[domain] = None
+
     return result
 
 # ==========================================

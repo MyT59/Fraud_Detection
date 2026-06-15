@@ -7,6 +7,9 @@ from sqlalchemy.orm import Session
 from app.infrastructure.database.models.ml_dataset_model import (
     MLDataset,
 )
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 
 class DatasetRetentionService:
@@ -23,6 +26,7 @@ class DatasetRetentionService:
     def __init__(self, db: Session):
         self.db = db
 
+    @log_performance
     def cleanup_old_datasets(
         self,
         keep_latest: int = 3,
@@ -117,6 +121,7 @@ class DatasetRetentionService:
 
         return summary
 
+    @log_performance
     def get_archived_datasets(self) -> List[MLDataset]:
 
         return (
@@ -130,6 +135,7 @@ class DatasetRetentionService:
             .all()
         )
 
+    @log_performance
     def restore_dataset(
         self,
         dataset_id: int

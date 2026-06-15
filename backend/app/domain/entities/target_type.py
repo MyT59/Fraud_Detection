@@ -5,3 +5,4 @@ class TargetType:
     RULE = "RULE"
     ALERT = "ALERT"
     PATTERN = "PATTERN"
+    SESSION = "SESSION"

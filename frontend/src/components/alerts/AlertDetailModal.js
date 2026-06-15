@@ -50,6 +50,22 @@ const STATUS_META = {
 
 // Semua status yang bisa dipilih RISK_MANAGER & SUPER_ADMIN
 // Sesuai AlertStatusEnum dari BE
+const ALERT_TYPE_META = {
+  RULE: { icon: "bi-gear-fill", color: "#0891b2", bg: "#e0f2fe" },
+  PATTERN: { icon: "bi-diagram-3-fill", color: "#7c3aed", bg: "#f3e8ff" },
+  COMBINED: { icon: "bi-shield-shaded", color: "#dc2626", bg: "#fef2f2" },
+  BLACKLIST: { icon: "bi-ban", color: "#e11d48", bg: "#fff1f2" },
+  ML: { icon: "bi-cpu-fill", color: "#6366f1", bg: "#eef2ff" },
+  RULE_ML: { icon: "bi-gear-wide-connected", color: "#0369a1", bg: "#e0f2fe" },
+  PATTERN_ML: { icon: "bi-diagram-3-fill", color: "#7c3aed", bg: "#f3e8ff" },
+  COMBINED_ML: {
+    icon: "bi-shield-fill-exclamation",
+    color: "#dc2626",
+    bg: "#fef2f2",
+  },
+  FRAUD: { icon: "bi-shield-x", color: "#dc2626", bg: "#fef2f2" },
+};
+
 const STATUS_OPTIONS = [
   { value: "OPEN", label: "Open", icon: "bi-circle", color: "#1d4ed8" },
   {
@@ -77,6 +93,28 @@ const STATUS_OPTIONS = [
     color: "#dc2626",
   },
 ];
+
+const fmt = (amount) =>
+  amount != null
+    ? new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+      }).format(amount)
+    : "—";
+
+const PROCESSING_CODE_MAP = {
+  0: "Balance Inquiry",
+  10000: "Transfer",
+  200000: "Payment",
+  400000: "Withdrawal",
+  900000: "Reversal",
+};
+const procLabel = (code) => {
+  if (code == null) return "—";
+  const label = PROCESSING_CODE_MAP[Number(code)];
+  return label ? `${code} — ${label}` : String(code);
+};
 
 const formatDate = (iso) => {
   if (!iso) return "—";
@@ -114,6 +152,61 @@ const StatusBadge = ({ status }) => {
   return (
     <span className={`adm-badge ${meta.cls}`}>
       <i className={`bi ${meta.icon}`} /> {meta.label}
+    </span>
+  );
+};
+
+const AlertTypeBadge = ({ type }) => {
+  const meta = ALERT_TYPE_META[(type || "").toUpperCase()] ?? {
+    icon: "bi-bell",
+    color: "#6b7280",
+    bg: "#f1f5f9",
+  };
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "4px 10px",
+        borderRadius: 20,
+        fontSize: ".72rem",
+        fontWeight: 700,
+        letterSpacing: ".05em",
+        textTransform: "uppercase",
+        background: meta.bg,
+        color: meta.color,
+        border: `1px solid ${meta.color}30`,
+      }}
+    >
+      <i className={`bi ${meta.icon}`} /> {type}
+    </span>
+  );
+};
+
+const PriorityBadge = ({ label, value }) => {
+  const style = {
+    CRITICAL: { bg: "#fef2f2", color: "#dc2626" },
+    HIGH: { bg: "#fffbeb", color: "#d97706" },
+    MEDIUM: { bg: "#eff6ff", color: "#2563eb" },
+    LOW: { bg: "#f0fdf4", color: "#15803d" },
+  }[label?.toUpperCase()] ?? { bg: "#f1f5f9", color: "#6b7280" };
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "4px 10px",
+        borderRadius: 20,
+        fontSize: ".72rem",
+        fontWeight: 700,
+        background: style.bg,
+        color: style.color,
+        border: `1px solid ${style.color}30`,
+      }}
+    >
+      <i className="bi bi-speedometer2" /> {label} ({value?.toFixed(1)})
     </span>
   );
 };
@@ -334,6 +427,11 @@ const AlertDetailModal = ({
   const overlayRef = useRef(null);
 
   const isMLAlert = detail?.type?.includes("ML");
+  const isEscalated = detail?.is_escalated;
+  const priorityLabel = detail?.priority_label;
+  const claimedByName = detail?.claimed_by_name;
+  const resolvedByName = detail?.resolved_by_name;
+  const review = detail?.review ?? null;
   const violationList =
     detail?.transaction?.violation_reason?.split(" | ") ?? [];
 
@@ -422,7 +520,31 @@ const AlertDetailModal = ({
               <div className="adm-badges-row">
                 <SeverityBadge severity={detail.severity} />
                 <StatusBadge status={displayStatus} />
-                {/* Info badge jika status diubah manual */}
+                <AlertTypeBadge type={detail.type} />
+                {priorityLabel && (
+                  <PriorityBadge
+                    label={priorityLabel}
+                    value={detail.priority}
+                  />
+                )}
+                {isEscalated && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "4px 10px",
+                      borderRadius: 20,
+                      fontSize: ".72rem",
+                      fontWeight: 700,
+                      background: "#fef3c7",
+                      color: "#d97706",
+                      border: "1px solid #fde68a",
+                    }}
+                  >
+                    <i className="bi bi-arrow-up-circle-fill" /> ESCALATED
+                  </span>
+                )}
                 {localStatus && (
                   <span
                     style={{
@@ -456,31 +578,58 @@ const AlertDetailModal = ({
                     {detail.transaction_id ?? "—"}
                   </code>
                 </DetailRow>
-                <DetailRow label="Alert Type">
-                  <span className="adm-pill adm-alert-type">{detail.type}</span>
-                </DetailRow>
                 <DetailRow
                   label="Created At"
                   value={formatDate(detail.created_at)}
                 />
+
+                {/* Claimed info */}
                 {detail.claimed_at && (
                   <DetailRow
                     label="Claimed At"
                     value={formatDate(detail.claimed_at)}
                   />
                 )}
+                {(claimedByName || detail.claimed_by) && (
+                  <DetailRow label="Claimed By">
+                    <span className="adm-pill">
+                      <i
+                        className="bi bi-person-check-fill"
+                        style={{ color: "#2563eb", marginRight: 4 }}
+                      />
+                      {claimedByName ?? `Analyst #${detail.claimed_by}`}
+                    </span>
+                  </DetailRow>
+                )}
+
+                {/* Resolved info */}
                 {detail.resolved_at && (
                   <DetailRow
                     label="Resolved At"
                     value={formatDate(detail.resolved_at)}
                   />
                 )}
-                {detail.resolved_by && (
+                {(resolvedByName || detail.resolved_by) && (
                   <DetailRow label="Resolved By">
                     <span className="adm-pill">
-                      <i className="bi bi-person-fill" /> User #
-                      {detail.resolved_by}
+                      <i
+                        className="bi bi-person-fill"
+                        style={{ color: "#15803d", marginRight: 4 }}
+                      />
+                      {resolvedByName ?? `User #${detail.resolved_by}`}
                     </span>
+                  </DetailRow>
+                )}
+
+                {/* Version ID */}
+                {detail.version_id != null && (
+                  <DetailRow label="Version">
+                    <code
+                      className="adm-code"
+                      style={{ fontSize: ".75rem", color: "#6b7280" }}
+                    >
+                      v{detail.version_id}
+                    </code>
                   </DetailRow>
                 )}
               </div>
@@ -512,113 +661,589 @@ const AlertDetailModal = ({
               )}
 
               {/* Transaction details */}
-              {detail.transaction && (
-                <>
-                  <div className="adm-divider" />
-                  <div className="adm-message-block">
-                    <span className="adm-message-block__label">
-                      <i className="bi bi-receipt" /> Data Transaksi
-                    </span>
-                    <div className="adm-rows" style={{ marginTop: 12 }}>
-                      <DetailRow label="Original Trx ID">
-                        <code className="adm-code">
-                          {detail.transaction.original_trx_id}
-                        </code>
-                      </DetailRow>
-                      <DetailRow
-                        label="Service Source"
-                        value={detail.transaction.service_source}
-                      />
-                      <DetailRow label="Amount">
-                        Rp {detail.transaction.amount?.toLocaleString("id-ID")}
-                      </DetailRow>
-                      <DetailRow
-                        label="Account Number"
-                        value={detail.transaction.account_number}
-                      />
-                      <DetailRow
-                        label="Merchant ID"
-                        value={detail.transaction.merchant_id}
-                      />
-                      <DetailRow
-                        label="IP Address"
-                        value={detail.transaction.ip_address}
-                      />
+              {detail.transaction &&
+                (() => {
+                  const t = detail.transaction;
+                  const td = t.transaction_details ?? {};
+                  const isAgenusa =
+                    (t.service_source ?? "").toUpperCase() === "AGENUSA";
+                  const riskLevelStyle = {
+                    CRITICAL: { bg: "#fef2f2", color: "#dc2626" },
+                    HIGH: { bg: "#fffbeb", color: "#d97706" },
+                    MEDIUM: { bg: "#eff6ff", color: "#2563eb" },
+                    LOW: { bg: "#f0fdf4", color: "#15803d" },
+                  }[t.risk_level?.toUpperCase()] ?? {
+                    bg: "#f1f5f9",
+                    color: "#475569",
+                  };
+
+                  return (
+                    <>
+                      <div className="adm-divider" />
+
+                      {/* ── ML Detection ── */}
                       {detail.ml_score != null && (
-                        <DetailRow label="ML Score">
-                          <code
-                            className="adm-code"
-                            style={{ color: "#7c3aed", borderColor: "#c4b5fd" }}
-                          >
-                            {typeof detail.ml_score === "number"
-                              ? detail.ml_score.toFixed(6)
-                              : detail.ml_score}
-                          </code>
-                        </DetailRow>
-                      )}
-                      {detail.is_anomaly !== undefined &&
-                        detail.ml_score != null && (
-                          <DetailRow label="ML Anomaly">
-                            <span
-                              className={`adm-badge ${detail.is_anomaly ? "severity-critical" : "status-resolved"}`}
-                              style={{
-                                fontSize: "0.75rem",
-                                padding: "2px 8px",
-                              }}
-                            >
-                              {detail.is_anomaly ? "YES / ANOMALY" : "NO"}
-                            </span>
-                          </DetailRow>
-                        )}
-                      {detail.ml_patterns?.length > 0 && (
-                        <DetailRow label="ML Patterns">
+                        <div className="adm-message-block adm-ml-block">
+                          <span className="adm-message-block__label">
+                            <i className="bi bi-cpu-fill" /> ML Detection
+                          </span>
                           <div
                             style={{
                               display: "flex",
-                              gap: "4px",
+                              alignItems: "center",
+                              gap: "1rem",
+                              marginTop: 4,
                               flexWrap: "wrap",
-                              marginTop: "2px",
                             }}
                           >
-                            {detail.ml_patterns.map((pat, idx) => (
+                            <div
+                              style={{
+                                width: 56,
+                                height: 56,
+                                borderRadius: "50%",
+                                border: `3px solid #7c3aed`,
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                background: "#fff",
+                                flexShrink: 0,
+                              }}
+                            >
                               <span
-                                key={idx}
-                                className="adm-badge"
                                 style={{
-                                  backgroundColor: "#f3e8ff",
-                                  color: "#6b21a8",
-                                  border: "1px solid #d8b4fe",
-                                  textTransform: "none",
-                                  fontSize: "0.7rem",
+                                  fontSize: ".85rem",
+                                  fontWeight: 700,
+                                  color: "#7c3aed",
+                                  lineHeight: 1,
                                 }}
                               >
-                                {pat}
+                                {typeof detail.ml_score === "number"
+                                  ? detail.ml_score.toFixed(4)
+                                  : detail.ml_score}
                               </span>
-                            ))}
+                              <span
+                                style={{ fontSize: ".55rem", color: "#94a3b8" }}
+                              >
+                                IF Score
+                              </span>
+                            </div>
+                            <div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: ".4rem",
+                                  flexWrap: "wrap",
+                                  marginBottom: ".3rem",
+                                }}
+                              >
+                                <span
+                                  className={`adm-badge ${detail.is_anomaly ? "severity-critical" : "status-resolved"}`}
+                                  style={{ fontSize: ".72rem" }}
+                                >
+                                  {detail.is_anomaly ? "ANOMALY" : "NORMAL"}
+                                </span>
+                              </div>
+                              {detail.ml_patterns?.length > 0 && (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "4px",
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  {detail.ml_patterns.map((pat, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="adm-badge"
+                                      style={{
+                                        backgroundColor: "#f3e8ff",
+                                        color: "#6b21a8",
+                                        border: "1px solid #d8b4fe",
+                                        textTransform: "none",
+                                        fontSize: "0.7rem",
+                                      }}
+                                    >
+                                      {pat}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </DetailRow>
+                        </div>
                       )}
-                      <DetailRow label="Risk Score">
-                        <span className="adm-pill">
-                          {detail.transaction.risk_score}
+
+                      {/* ── Data Transaksi ── */}
+                      <div className="adm-message-block">
+                        <span className="adm-message-block__label">
+                          <i className="bi bi-receipt" /> Data Transaksi
                         </span>
-                      </DetailRow>
-                      <DetailRow label="Violation Reason">
-                        <ul className="adm-violation-list">
-                          {violationList.map((item, idx) => (
-                            <li key={idx} style={{ marginBottom: "2px" }}>
-                              {item}
-                            </li>
-                          ))}
-                        </ul>
-                      </DetailRow>
-                    </div>
-                  </div>
-                </>
-              )}
+                        <div className="adm-rows" style={{ marginTop: 12 }}>
+                          <DetailRow label="Original Trx ID">
+                            <code className="adm-code">
+                              {t.original_trx_id}
+                            </code>
+                          </DetailRow>
+                          <DetailRow label="Service" value={t.service_source} />
+                          <DetailRow label="Amount">
+                            <strong>{fmt(t.amount)}</strong>
+                          </DetailRow>
+                          <DetailRow
+                            label="Account"
+                            value={t.account_number ?? "—"}
+                          />
+                          <DetailRow
+                            label="User Account"
+                            value={t.user_account_id ?? "—"}
+                          />
+                          <DetailRow
+                            label="Terminal ID"
+                            value={t.terminal_id ?? "—"}
+                          />
+                          <DetailRow
+                            label="Merchant ID"
+                            value={t.merchant_id ?? "—"}
+                          />
+                          <DetailRow
+                            label="IP Address"
+                            value={t.ip_address ?? "—"}
+                          />
+                          <DetailRow
+                            label="Trx Time"
+                            value={
+                              t.transaction_time
+                                ? formatDate(t.transaction_time)
+                                : "—"
+                            }
+                          />
+                          <DetailRow
+                            label="Location"
+                            value={
+                              [t.city, t.country].filter(Boolean).join(", ") ||
+                              "—"
+                            }
+                          />
+                          <DetailRow label="ML Flagged">
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                color: t.is_flagged_ml ? "#dc2626" : "#15803d",
+                              }}
+                            >
+                              {t.is_flagged_ml ? "Ya ⚠️" : "Tidak"}
+                            </span>
+                          </DetailRow>
+
+                          {/* Service-specific fields dari transaction_details */}
+                          {isAgenusa ? (
+                            <>
+                              <DetailRow
+                                label="Dest Account"
+                                value={td.dest_account_number ?? "—"}
+                              />
+                              <DetailRow
+                                label="Issuer Bank"
+                                value={td.issuer_bank ?? "—"}
+                              />
+                              <DetailRow
+                                label="Dest Bank"
+                                value={td.dest_bank_code ?? "—"}
+                              />
+                              <DetailRow
+                                label="Processing"
+                                value={procLabel(td.processing_code)}
+                              />
+                              <DetailRow label="Response Code">
+                                {td.response_code != null ? (
+                                  <span
+                                    style={{
+                                      fontWeight: 700,
+                                      color:
+                                        String(td.response_code) === "0" ||
+                                        String(td.response_code) === "00"
+                                          ? "#15803d"
+                                          : "#dc2626",
+                                    }}
+                                  >
+                                    {String(td.response_code) === "0" ||
+                                    String(td.response_code) === "00"
+                                      ? "00 — Approved"
+                                      : `${td.response_code} — Declined`}
+                                  </span>
+                                ) : (
+                                  "—"
+                                )}
+                              </DetailRow>
+                            </>
+                          ) : (
+                            <>
+                              <DetailRow
+                                label="Customer ID"
+                                value={t.user_account_id ?? "—"}
+                              />
+                              <DetailRow label="Bill Amount">
+                                <strong>{fmt(td.bill_amount)}</strong>
+                              </DetailRow>
+                              <DetailRow label="Payment Amount">
+                                {(() => {
+                                  const bill = td.bill_amount ?? 0;
+                                  const paid =
+                                    td.payment_amount ?? t.amount ?? 0;
+                                  const diff = paid - bill;
+                                  return (
+                                    <span
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: ".4rem",
+                                      }}
+                                    >
+                                      <strong>{fmt(paid)}</strong>
+                                      {diff !== 0 && (
+                                        <span
+                                          style={{
+                                            fontSize: ".7rem",
+                                            fontWeight: 700,
+                                            padding: "1px 6px",
+                                            borderRadius: "8px",
+                                            background:
+                                              diff > 0 ? "#fef2f2" : "#fffbeb",
+                                            color:
+                                              diff > 0 ? "#dc2626" : "#92400e",
+                                          }}
+                                        >
+                                          {diff > 0 ? "+" : ""}
+                                          {fmt(diff)}
+                                        </span>
+                                      )}
+                                    </span>
+                                  );
+                                })()}
+                              </DetailRow>
+                              <DetailRow
+                                label="Channel"
+                                value={td.channel ?? "—"}
+                              />
+                              <DetailRow
+                                label="Status Tagihan"
+                                value={td.status_tagihan ?? "—"}
+                              />
+                              <DetailRow
+                                label="Bill Date"
+                                value={td.bill_date ?? "—"}
+                              />
+                              <DetailRow
+                                label="Payment Date"
+                                value={td.payment_date ?? "—"}
+                              />
+                              {td.nama_customer && (
+                                <DetailRow
+                                  label="Nama Customer"
+                                  value={td.nama_customer}
+                                />
+                              )}
+                            </>
+                          )}
+
+                          <DetailRow label="Risk Score">
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                color:
+                                  (t.risk_score ?? 0) >= 80
+                                    ? "#dc2626"
+                                    : (t.risk_score ?? 0) >= 50
+                                      ? "#d97706"
+                                      : "#15803d",
+                              }}
+                            >
+                              {t.risk_score ?? "—"}
+                            </span>
+                          </DetailRow>
+
+                          {t.risk_level && (
+                            <DetailRow label="Risk Level">
+                              <span
+                                style={{
+                                  fontWeight: 700,
+                                  padding: "2px 8px",
+                                  borderRadius: "8px",
+                                  fontSize: ".78rem",
+                                  background: riskLevelStyle.bg,
+                                  color: riskLevelStyle.color,
+                                }}
+                              >
+                                {t.risk_level}
+                              </span>
+                            </DetailRow>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ── Score Breakdown ── */}
+                      {t.score_breakdown &&
+                        Object.keys(t.score_breakdown).length > 0 && (
+                          <div
+                            className="adm-message-block"
+                            style={{ borderLeftColor: "#6366f1" }}
+                          >
+                            <span
+                              className="adm-message-block__label"
+                              style={{ color: "#6366f1" }}
+                            >
+                              <i className="bi bi-bar-chart-fill" /> Score
+                              Breakdown
+                            </span>
+                            <div className="adm-rows" style={{ marginTop: 12 }}>
+                              {t.score_breakdown.rule_score != null && (
+                                <DetailRow
+                                  label="Rule Score"
+                                  value={t.score_breakdown.rule_score}
+                                />
+                              )}
+                              {t.score_breakdown.pattern_score != null && (
+                                <DetailRow label="Pattern Score">
+                                  <span
+                                    style={{
+                                      fontWeight: 700,
+                                      color:
+                                        t.score_breakdown.pattern_score >= 50
+                                          ? "#dc2626"
+                                          : "#374151",
+                                    }}
+                                  >
+                                    {t.score_breakdown.pattern_score}
+                                  </span>
+                                </DetailRow>
+                              )}
+                              {t.score_breakdown.ml_score != null && (
+                                <DetailRow label="ML Score">
+                                  <code
+                                    className="adm-code"
+                                    style={{
+                                      color: "#7c3aed",
+                                      borderColor: "#c4b5fd",
+                                    }}
+                                  >
+                                    {typeof t.score_breakdown.ml_score ===
+                                    "number"
+                                      ? t.score_breakdown.ml_score.toFixed(6)
+                                      : t.score_breakdown.ml_score}
+                                  </code>
+                                </DetailRow>
+                              )}
+                              {t.score_breakdown.anomaly_score != null && (
+                                <DetailRow label="Anomaly Score">
+                                  <code className="adm-code">
+                                    {typeof t.score_breakdown.anomaly_score ===
+                                    "number"
+                                      ? t.score_breakdown.anomaly_score.toFixed(
+                                          6,
+                                        )
+                                      : t.score_breakdown.anomaly_score}
+                                  </code>
+                                </DetailRow>
+                              )}
+                              {t.score_breakdown.final_score != null && (
+                                <DetailRow label="Final Score">
+                                  <span
+                                    style={{
+                                      fontWeight: 700,
+                                      fontSize: "1rem",
+                                      color:
+                                        t.score_breakdown.final_score >= 80
+                                          ? "#dc2626"
+                                          : t.score_breakdown.final_score >= 50
+                                            ? "#d97706"
+                                            : "#15803d",
+                                    }}
+                                  >
+                                    {t.score_breakdown.final_score}
+                                  </span>
+                                </DetailRow>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                      {/* ── Violation Reason ── */}
+                      {violationList.length > 0 && (
+                        <div
+                          className="adm-message-block"
+                          style={{ borderLeftColor: "#dc2626" }}
+                        >
+                          <span
+                            className="adm-message-block__label"
+                            style={{ color: "#dc2626" }}
+                          >
+                            <i className="bi bi-exclamation-triangle-fill" />{" "}
+                            Violation Reasons
+                          </span>
+                          <ul
+                            className="adm-violation-list"
+                            style={{ marginTop: 4 }}
+                          >
+                            {violationList.map((item, idx) => (
+                              <li key={idx} style={{ marginBottom: "2px" }}>
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
             </>
           )}
         </div>
+
+        {/* ── Section 6: Review Result ── */}
+        {!loading && !error && review && (
+          <div style={{ padding: "0 24px 16px" }}>
+            <div
+              className="adm-message-block"
+              style={{
+                borderLeftColor:
+                  review.decision === "FRAUD" ? "#dc2626" : "#15803d",
+              }}
+            >
+              <span
+                className="adm-message-block__label"
+                style={{
+                  color: review.decision === "FRAUD" ? "#dc2626" : "#15803d",
+                }}
+              >
+                <i
+                  className={`bi ${review.decision === "FRAUD" ? "bi-x-circle-fill" : "bi-check-circle-fill"}`}
+                />{" "}
+                Review Result
+              </span>
+
+              <div className="adm-rows" style={{ marginTop: 8 }}>
+                {/* Decision */}
+                <DetailRow label="Decision">
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "3px 10px",
+                      borderRadius: 12,
+                      fontSize: ".78rem",
+                      fontWeight: 700,
+                      background:
+                        review.decision === "FRAUD" ? "#fee2e2" : "#dcfce7",
+                      color:
+                        review.decision === "FRAUD" ? "#b91c1c" : "#15803d",
+                    }}
+                  >
+                    <i
+                      className={`bi ${review.decision === "FRAUD" ? "bi-x-circle-fill" : "bi-check-circle-fill"}`}
+                    />
+                    {review.decision}
+                  </span>
+                </DetailRow>
+
+                {/* Confidence */}
+                {review.decision_confidence && (
+                  <DetailRow label="Confidence">
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        color:
+                          review.decision_confidence === "HIGH"
+                            ? "#15803d"
+                            : review.decision_confidence === "MEDIUM"
+                              ? "#d97706"
+                              : "#64748b",
+                      }}
+                    >
+                      {review.decision_confidence === "HIGH"
+                        ? "🟢"
+                        : review.decision_confidence === "MEDIUM"
+                          ? "🟡"
+                          : "🔴"}{" "}
+                      {review.decision_confidence}
+                    </span>
+                  </DetailRow>
+                )}
+
+                {/* Reviewer */}
+                <DetailRow label="Reviewer">
+                  <span className="adm-pill">
+                    <i
+                      className="bi bi-person-badge-fill"
+                      style={{ color: "#7c3aed", marginRight: 4 }}
+                    />
+                    {review.reviewer_name ??
+                      `Analyst #${review.reviewer_id ?? "?"}`}
+                  </span>
+                </DetailRow>
+
+                {/* Waktu review */}
+                {review.reviewed_at && (
+                  <DetailRow
+                    label="Reviewed At"
+                    value={formatDate(review.reviewed_at)}
+                  />
+                )}
+
+                {/* Durasi */}
+                {review.duration_minutes != null && (
+                  <DetailRow label="Duration">
+                    <span style={{ fontWeight: 600, color: "#374151" }}>
+                      <i
+                        className="bi bi-stopwatch"
+                        style={{ marginRight: 4, color: "#6366f1" }}
+                      />
+                      {review.duration_minutes} menit
+                    </span>
+                  </DetailRow>
+                )}
+
+                {/* Notes */}
+                {review.review_note && (
+                  <DetailRow label="Notes">
+                    <span
+                      style={{
+                        fontSize: ".85rem",
+                        color: "#374151",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      "{review.review_note}"
+                    </span>
+                  </DetailRow>
+                )}
+              </div>
+
+              {/* Override info */}
+              {review.is_overridden && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: ".5rem .75rem",
+                    background: "#fef3c7",
+                    border: "1px solid #fde68a",
+                    borderRadius: "6px",
+                    fontSize: ".78rem",
+                    color: "#92400e",
+                  }}
+                >
+                  <i
+                    className="bi bi-arrow-repeat"
+                    style={{ marginRight: 6 }}
+                  />
+                  <strong>Overridden</strong> pada{" "}
+                  {formatDate(review.overridden_at)}
+                  {review.override_reason && ` — "${review.override_reason}"`}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Footer ── */}
         {!loading && !error && detail && (

@@ -33,6 +33,15 @@ class InvoiceTransaction(Base):
         nullable=False
     )
 
+    # Nilai yang benar-benar dibayar. Bisa berbeda dari total_tagihan:
+    #   < total_tagihan  → underpayment  (UNDERPAY_FLAG)
+    #   > total_tagihan  → overpayment   (HIGH_SPIKE_FLAG)
+    #   = total_tagihan  → normal (default jika NULL)
+    payment_amount = Column(
+        Numeric(15, 2),
+        nullable=True
+    )
+
     biaya_admin = Column(
         Numeric(15, 2),
         default=0

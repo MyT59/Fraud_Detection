@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from fastapi import Query 
+
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__) 
 from app.infrastructure.database.session import get_db
 from app.application.services.dashboard_service import DashboardService
 
@@ -50,6 +53,7 @@ def get_activity(
     return DashboardService.get_activity_timeline(db, type)
 
 @router.get("/summary")
+@log_performance(label="GET /dashboard/summary")
 def get_dashboard_summary(db: Session = Depends(get_db)):
     return {
         "kpi": DashboardService.get_kpi(db),

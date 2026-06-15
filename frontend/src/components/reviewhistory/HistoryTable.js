@@ -1,263 +1,33 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import useRole from "../../hooks/useRole";
+
+import { fmtTs, timeAgo } from "./historyHelpers";
+import {
+  DecisionBadge,
+  StatusBadge,
+  OverridableIndicator,
+  ReviewerCell,
+} from "./HistoryBadges";
+import {
+  ColDropdown,
+  SkeletonRow,
+  TIMESTAMP_OPTS,
+  DECISION_OPTS,
+} from "./HistoryTableParts";
+import HistoryPagination from "./HistoryPagination";
+
 import "./HistoryTable.css";
 
 /**
  * HistoryTable
+ * Tabel utama Review History — hanya render logic & layout.
+ * Semua sub-komponen, badges, helpers, dan pagination sudah dipisah.
  *
- * Hanya merender field yang tersedia dari BE ReviewHistoryItem schema:
+ * Field yang dirender (sesuai BE ReviewHistoryItem schema):
  *   id, transaction_id, alert_id, decision, review_note,
- *   previous_status, final_status, reviewed_by, created_at
- *
- * Kolom yang DIHAPUS karena tidak ada di BE:
- *   Layanan (service), Amount, Account/Customer, Risk Score,
- *   Reviewer name/role
+ *   previous_status, final_status, reviewed_by, reviewer_name, created_at
  */
-
-const fmtTs = (ds) => {
-  if (!ds) return "—";
-  return new Date(ds).toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const timeAgo = (ds) => {
-  if (!ds) return "";
-  const diff = (Date.now() - new Date(ds).getTime()) / 1000;
-  if (diff < 60) return `${Math.floor(diff)}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-};
-
-// Decision badge — sesuai enum BE: SAFE | FRAUD
-const DECISION_META = {
-  SAFE: { icon: "bi-check-circle-fill", label: "SAFE", cls: "approved" },
-  FRAUD: { icon: "bi-x-circle-fill", label: "FRAUD", cls: "rejected" },
-};
-
-const DecisionBadge = ({ decision }) => {
-  const meta =
-    DECISION_META[(decision || "").toUpperCase()] || DECISION_META.SAFE;
-  return (
-    <span className={`rh-pill ${meta.cls}`}>
-      <i className={`bi ${meta.icon}`} /> {meta.label}
-    </span>
-  );
-};
-
-// Status Badge — untuk previous_status / final_status
-// Indicator bahwa review ini bisa di-override (hanya tampil untuk canManage)
-// Mengarahkan user ke tab Review Management di ManualReview
-const OverridableIndicator = ({ onClick }) => (
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      onClick();
-    }}
-    title="Kelola di Manual Review (Override / Delete)"
-    style={{
-      display: "inline-flex",
-      alignItems: "center",
-      gap: ".3rem",
-      padding: "2px 7px",
-      border: "1px solid #bfdbfe",
-      borderRadius: "10px",
-      background: "#eff6ff",
-      color: "#1d4ed8",
-      fontSize: ".68rem",
-      fontWeight: 700,
-      cursor: "pointer",
-      transition: "all .15s",
-      whiteSpace: "nowrap",
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.background = "#dbeafe";
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.background = "#eff6ff";
-    }}
-  >
-    <i className="bi bi-arrow-repeat" /> Override
-  </button>
-);
-
-const StatusBadge = ({ status }) => {
-  if (!status) return <span className="rh-empty">—</span>;
-  const colorMap = {
-    FRAUD: { bg: "#fee2e2", color: "#b91c1c" },
-    SAFE: { bg: "#dcfce7", color: "#15803d" },
-    UNDER_REVIEW: { bg: "#eff6ff", color: "#1d4ed8" },
-    PENDING: { bg: "#f1f5f9", color: "#475569" },
-    RESOLVED: { bg: "#f0fdf4", color: "#15803d" },
-  };
-  const style = colorMap[status.toUpperCase()] || {
-    bg: "#f1f5f9",
-    color: "#475569",
-  };
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "2px 8px",
-        borderRadius: "10px",
-        fontSize: ".7rem",
-        fontWeight: 700,
-        background: style.bg,
-        color: style.color,
-      }}
-    >
-      {status}
-    </span>
-  );
-};
-
-// Sortable options
-const TIMESTAMP_OPTS = [
-  { value: "createdAt-desc", label: "Terbaru", icon: "bi-sort-down" },
-  { value: "createdAt-asc", label: "Terlama", icon: "bi-sort-up" },
-];
-
-const DECISION_OPTS = [
-  { value: "all", label: "Semua Keputusan", icon: "bi-grid" },
-  { value: "SAFE", label: "SAFE", icon: "bi-check-circle" },
-  { value: "FRAUD", label: "FRAUD", icon: "bi-x-circle" },
-];
-
-const ColDropdown = ({ options, activeValue, onSelect, isActive }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  return (
-    <div className="htcol-dd-wrap" ref={ref}>
-      <button
-        className={`htcol-filter-btn${open ? " open" : ""}${isActive ? " has-filter" : ""}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-      >
-        <i className={`bi ${isActive ? "bi-funnel-fill" : "bi-funnel"}`} />
-      </button>
-      {open && (
-        <div className="htcol-dropdown">
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              className={`htcol-option${activeValue === opt.value ? " active" : ""}`}
-              onClick={() => {
-                onSelect(opt.value);
-                setOpen(false);
-              }}
-            >
-              <i className={`bi ${opt.icon}`} />
-              {opt.label}
-              {activeValue === opt.value && (
-                <i className="bi bi-check2 htcol-check" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const SkeletonRow = () => (
-  <tr className="htable-row htable-row--skeleton">
-    {[...Array(6)].map((_, i) => (
-      <td key={i}>
-        <div className="hcell-skeleton" />
-      </td>
-    ))}
-  </tr>
-);
-
-const Pagination = ({
-  currentPage,
-  totalPages,
-  totalItems,
-  perPage,
-  onPageChange,
-}) => {
-  const start = totalItems === 0 ? 0 : (currentPage - 1) * perPage + 1;
-  const end = Math.min(currentPage * perPage, totalItems);
-  const eff = Math.max(1, totalPages);
-
-  const getPages = () => {
-    if (eff <= 7) return Array.from({ length: eff }, (_, i) => i + 1);
-    const pages = [1];
-    if (currentPage > 3) pages.push("...");
-    for (
-      let i = Math.max(2, currentPage - 1);
-      i <= Math.min(eff - 1, currentPage + 1);
-      i++
-    )
-      pages.push(i);
-    if (currentPage < eff - 2) pages.push("...");
-    pages.push(eff);
-    return pages;
-  };
-
-  return (
-    <div className="htable-pagination">
-      <span className="hpagination-info">
-        Showing{" "}
-        <strong>
-          {start}–{end}
-        </strong>{" "}
-        of <strong>{totalItems}</strong> entries
-      </span>
-      <div className="hpagination-controls">
-        <button
-          className="hpage-btn nav"
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-        >
-          <i className="bi bi-chevron-left" />
-        </button>
-        {getPages().map((p, i) =>
-          p === "..." ? (
-            <span key={`dot${i}`} className="hpage-ellipsis">
-              …
-            </span>
-          ) : (
-            <button
-              key={p}
-              className={`hpage-btn${p === currentPage ? " active" : ""}`}
-              onClick={() => onPageChange(p)}
-            >
-              {p}
-            </button>
-          ),
-        )}
-        <button
-          className="hpage-btn nav"
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === eff || totalItems === 0}
-        >
-          <i className="bi bi-chevron-right" />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ─── Main Table Component ─────────────────────────────────────────
-
 const HistoryTable = ({
   data = [],
   loading,
@@ -272,36 +42,36 @@ const HistoryTable = ({
 }) => {
   const { canManage } = useRole();
   const navigate = useNavigate();
+
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("createdAt-desc");
   const [filterDecision, setFilterDecision] = useState("all");
 
-  // Filter & sort lokal (client-side) di atas data dari server
+  // ─── Filter & Sort (client-side di atas 1 page data) ─────────────
+
   const processed = useMemo(() => {
     let result = [...data];
 
-    // Filter: search (transaction ID atau alert ID)
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       result = result.filter(
         (r) =>
           r.transactionId?.toLowerCase().includes(q) ||
           String(r.alertId ?? "").includes(q) ||
-          String(r.reviewedBy ?? "").includes(q),
+          String(r.reviewedBy ?? "").includes(q) ||
+          (r.reviewerName ?? "").toLowerCase().includes(q),
       );
     }
 
-    // Filter: decision
     if (filterDecision !== "all") {
       result = result.filter((r) => r.decision === filterDecision);
     }
 
-    // Sort
-    result.sort((a, b) => {
-      if (sortKey === "createdAt-asc")
-        return new Date(a.createdAt) - new Date(b.createdAt);
-      return new Date(b.createdAt) - new Date(a.createdAt); // default: desc
-    });
+    result.sort((a, b) =>
+      sortKey === "createdAt-asc"
+        ? new Date(a.createdAt) - new Date(b.createdAt)
+        : new Date(b.createdAt) - new Date(a.createdAt),
+    );
 
     return result;
   }, [data, search, sortKey, filterDecision]);
@@ -309,15 +79,17 @@ const HistoryTable = ({
   const hasActiveFilters =
     search || filterDecision !== "all" || sortKey !== "createdAt-desc";
 
-  const handleGoToManagement = () => {
-    navigate("/manual-review", { state: { activeTab: "management" } });
-  };
-
   const handleReset = () => {
     setSearch("");
     setSortKey("createdAt-desc");
     setFilterDecision("all");
   };
+
+  const handleGoToManagement = () => {
+    navigate("/manual-review", { state: { activeTab: "management" } });
+  };
+
+  // ─── Render ───────────────────────────────────────────────────────
 
   return (
     <div
@@ -328,7 +100,7 @@ const HistoryTable = ({
         overflow: "hidden",
       }}
     >
-      {/* Banner for canManage — shortcut ke Review Management */}
+      {/* Banner canManage */}
       {canManage && (
         <div
           style={{
@@ -380,12 +152,11 @@ const HistoryTable = ({
       <div
         className={`rh-filterbar${canManage ? " rh-filterbar--no-top-radius" : ""}`}
       >
-        {/* Search */}
         <div className="rh-search-wrap">
           <i className="bi bi-search rh-search-icon" />
           <input
             className="rh-search-input"
-            placeholder="Cari Transaction ID, Alert ID, Reviewer ID..."
+            placeholder="Cari Transaction ID, Alert ID, Reviewer..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -396,7 +167,6 @@ const HistoryTable = ({
           )}
         </div>
 
-        {/* Filter Decision */}
         <select
           style={{
             height: 36,
@@ -418,14 +188,12 @@ const HistoryTable = ({
           ))}
         </select>
 
-        {/* Reset */}
         {hasActiveFilters && (
           <button className="rh-clear-all" onClick={handleReset}>
             <i className="bi bi-x-circle" /> Reset Filter
           </button>
         )}
 
-        {/* Refresh */}
         <button
           onClick={onRefresh}
           style={{
@@ -471,7 +239,6 @@ const HistoryTable = ({
           <table className="htable">
             <thead>
               <tr>
-                {/* Timestamp — sortable */}
                 <th>
                   <div className="htable-th-inner">
                     <span>Waktu</span>
@@ -483,19 +250,16 @@ const HistoryTable = ({
                     />
                   </div>
                 </th>
-                {/* Transaction ID */}
                 <th>
                   <div className="htable-th-inner">
                     <span>Transaction ID</span>
                   </div>
                 </th>
-                {/* Alert ID */}
                 <th>
                   <div className="htable-th-inner">
                     <span>Alert ID</span>
                   </div>
                 </th>
-                {/* Decision — filterable */}
                 <th>
                   <div className="htable-th-inner">
                     <span>Decision</span>
@@ -507,19 +271,16 @@ const HistoryTable = ({
                     />
                   </div>
                 </th>
-                {/* Previous → Final Status */}
                 <th className="hide-md">
                   <div className="htable-th-inner">
                     <span>Status</span>
                   </div>
                 </th>
-                {/* Reviewer ID */}
                 <th className="hide-md">
                   <div className="htable-th-inner">
-                    <span>Reviewer ID</span>
+                    <span>Reviewer</span>
                   </div>
                 </th>
-                {/* Notes */}
                 <th>
                   <div className="htable-th-inner">
                     <span>Notes</span>
@@ -538,22 +299,17 @@ const HistoryTable = ({
                       onClick={() => onViewDetail(item)}
                       style={{ cursor: "pointer" }}
                     >
-                      {/* Waktu */}
                       <td>
                         <div className="hcell-ts">{fmtTs(item.createdAt)}</div>
                         <div className="hcell-ts-ago">
                           {timeAgo(item.createdAt)}
                         </div>
                       </td>
-
-                      {/* Transaction ID */}
                       <td>
                         <span className="hcell-txnid">
                           {item.transactionId}
                         </span>
                       </td>
-
-                      {/* Alert ID */}
                       <td>
                         {item.alertId != null ? (
                           <span className="hcell-txnid">#{item.alertId}</span>
@@ -561,8 +317,6 @@ const HistoryTable = ({
                           <span className="hcell-empty">—</span>
                         )}
                       </td>
-
-                      {/* Decision */}
                       <td>
                         <div
                           style={{
@@ -580,8 +334,6 @@ const HistoryTable = ({
                           )}
                         </div>
                       </td>
-
-                      {/* Status: previous → final */}
                       <td className="hide-md">
                         <div
                           style={{
@@ -601,30 +353,12 @@ const HistoryTable = ({
                           <StatusBadge status={item.finalStatus} />
                         </div>
                       </td>
-
-                      {/* Reviewer ID — nama tidak ada di BE */}
                       <td className="hide-md">
-                        {item.reviewedBy != null ? (
-                          <span
-                            style={{
-                              fontFamily: "IBM Plex Mono, monospace",
-                              fontSize: ".78rem",
-                              fontWeight: 600,
-                              color: "#334155",
-                            }}
-                          >
-                            <i
-                              className="bi bi-person-fill"
-                              style={{ marginRight: 4, color: "#7c3aed" }}
-                            />
-                            #{item.reviewedBy}
-                          </span>
-                        ) : (
-                          <span className="hcell-empty">—</span>
-                        )}
+                        <ReviewerCell
+                          reviewerName={item.reviewerName}
+                          reviewedBy={item.reviewedBy}
+                        />
                       </td>
-
-                      {/* Notes */}
                       <td onClick={(e) => e.stopPropagation()}>
                         {item.reviewNote ? (
                           <button
@@ -644,7 +378,7 @@ const HistoryTable = ({
         )}
       </div>
 
-      <Pagination
+      <HistoryPagination
         currentPage={page}
         totalPages={totalPages}
         totalItems={totalItems}

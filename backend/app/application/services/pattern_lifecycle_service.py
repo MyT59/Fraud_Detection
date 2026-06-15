@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 MIN_SAMPLE = 5
 DISABLE_THRESHOLD = 0.4
@@ -13,6 +16,7 @@ DECAY_RATE = 0.98
 COOLDOWN_DAYS = 7
 
 
+@log_performance(label="PatternLifecycle.apply_pattern_lifecycle")
 def apply_pattern_lifecycle(db, pattern):
     tp = pattern.true_positive or 0
     fp = pattern.false_positive or 0
@@ -50,7 +54,11 @@ def apply_pattern_lifecycle(db, pattern):
     # COOLDOWN RE-ACTIVATE
     # =========================
     if not pattern.is_active and pattern.disabled_at:
-        if now - pattern.disabled_at > timedelta(days=COOLDOWN_DAYS):
+        # Normalise ke aware datetime agar perbandingan tidak crash TypeError
+        disabled_at = pattern.disabled_at
+        if disabled_at.tzinfo is None:
+            disabled_at = disabled_at.replace(tzinfo=timezone.utc)
+        if now - disabled_at > timedelta(days=COOLDOWN_DAYS):
             pattern.is_active = True
             pattern.disabled_at = None
             

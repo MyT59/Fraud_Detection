@@ -132,11 +132,33 @@ export const submitReview = async ({
 };
 
 /**
- * Ambil riwayat review (paginated).
+ * Ambil riwayat review milik analis yang sedang login.
+ * Endpoint: GET /reviews/my-history
+ *
+ * @param {object} params - { page?: number, limit?: number }
+ * @returns {Promise<{ total, page, limit, items }>}
+ */
+export const fetchMyReviewHistory = async ({ page = 1, limit = 10 } = {}) => {
+  return api.get(`/reviews/my-history?page=${page}&limit=${limit}`);
+};
+
+/**
+ * Ambil metrics personal milik analis yang sedang login.
+ * Endpoint: GET /reviews/my-metrics
+ * Berbeda dengan fetchReviewMetrics yang global (seluruh tim).
+ *
+ * @returns {Promise<MyReviewMetricsResponse>}
+ */
+export const fetchMyReviewMetrics = async () => {
+  return api.get("/reviews/my-metrics");
+};
+
+/**
+ * Ambil riwayat review (paginated) — global, semua reviewer.
  *
  * Response shape: { total, page, limit, items: ReviewHistoryItem[] }
  * Field per item: id, transaction_id, alert_id, decision, review_note,
- *                 previous_status, final_status, reviewed_by, created_at
+ *                 previous_status, final_status, reviewed_by, reviewer_name, created_at
  *
  * @param {object} params - { page?: number, limit?: number }
  * @returns {Promise<{ total, page, limit, items }>}
@@ -225,14 +247,30 @@ export const reportFalseNegative = async (transactionId, reason) => {
  */
 export const mapHistoryItem = (item) => ({
   id: item.id,
-  transactionId: String(item.transaction_id),
+  transactionId: item.transaction_id
+    ? `TRX-${String(item.transaction_id).padStart(6, "0")}`
+    : `RVW-${String(item.id).padStart(6, "0")}`,
+  transactionIdRaw: item.transaction_id ?? null,
   alertId: item.alert_id ?? null,
-  decision: item.decision, // "SAFE" | "FRAUD" — tampilkan apa adanya
+  decision: item.decision, // "SAFE" | "FRAUD"
+  decisionConfidence: item.decision_confidence ?? null, // "LOW" | "MEDIUM" | "HIGH"
   reviewNote: item.review_note || null,
   previousStatus: item.previous_status || null,
   finalStatus: item.final_status,
   reviewedBy: item.reviewed_by ?? null,
+  reviewerName: item.reviewer_name ?? null, // ✅ Snapshot nama — immutable audit trail
   createdAt: item.created_at,
+  reviewStartedAt: item.review_started_at ?? null,
+  reviewCompletedAt: item.review_completed_at ?? null,
+
+  // Override info
+  isOverridden: item.is_overridden ?? false,
+  overriddenBy: item.overridden_by ?? null,
+  overriddenAt: item.overridden_at ?? null,
+  overrideReason: item.override_reason ?? null,
+
+  // Transaction snapshot — data transaksi immutable saat review dilakukan
+  transactionSnapshot: item.transaction_snapshot ?? null,
 });
 
 /**
@@ -289,6 +327,8 @@ const reviewApiService = {
 
   // Reviews
   submitReview,
+  fetchMyReviewHistory,
+  fetchMyReviewMetrics,
   fetchReviewHistory,
   fetchReviewMetrics,
   fetchAnalystPerformance,

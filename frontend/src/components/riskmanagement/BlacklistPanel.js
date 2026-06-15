@@ -10,6 +10,51 @@ const SOURCE_CONFIG = {
   import: { label: "Bulk Import", cls: "src-import", icon: "bi-upload" },
 };
 
+const TYPE_CONFIG = {
+  USER_ID: { cls: "blp-type--user", label: "USER_ID", icon: "bi-person-fill" },
+  CUSTOMER_ID: {
+    cls: "blp-type--customer",
+    label: "CUSTOMER_ID",
+    icon: "bi-people-fill",
+  },
+  ACCOUNT_NUMBER: {
+    cls: "blp-type--account",
+    label: "ACCOUNT_NUMBER",
+    icon: "bi-credit-card-fill",
+  },
+  IP_ADDRESS: { cls: "blp-type--ip", label: "IP_ADDRESS", icon: "bi-globe" },
+  TERMINAL_ID: {
+    cls: "blp-type--terminal",
+    label: "TERMINAL_ID",
+    icon: "bi-pc-display",
+  },
+  MERCHANT_ID: {
+    cls: "blp-type--merchant",
+    label: "MERCHANT_ID",
+    icon: "bi-shop",
+  },
+  DEVICE_ID: {
+    cls: "blp-type--device",
+    label: "DEVICE_ID",
+    icon: "bi-phone-fill",
+  },
+  CUSTOMER_EMAIL: {
+    cls: "blp-type--email",
+    label: "EMAIL",
+    icon: "bi-envelope-fill",
+  },
+  CUSTOMER_PHONE: {
+    cls: "blp-type--phone",
+    label: "PHONE",
+    icon: "bi-telephone-fill",
+  },
+  INVOICE_NUMBER: {
+    cls: "blp-type--invoice",
+    label: "INVOICE",
+    icon: "bi-receipt",
+  },
+};
+
 const STATUS_CONFIG = {
   active: { label: "Aktif Blokir", cls: "st-active" },
   pending: { label: "Pending", cls: "st-pending" },
@@ -148,7 +193,8 @@ const DeleteConfirmModal = ({ item, onCancel, onConfirm }) => {
         <p className="blp-del-msg">
           Data rekening{" "}
           <strong className="blp-del-acct">{item.accountNumber}</strong> atas
-          nama <strong>{item.accountName || "—"}</strong> akan{" "}
+          dengan identifier{" "}
+          <strong className="blp-mono">{item.accountNumber}</strong> akan{" "}
           <strong>terhapus secara permanen</strong> dan tidak dapat
           dikembalikan.
         </p>
@@ -361,8 +407,8 @@ const BlacklistPanel = ({
           <table className="blp-table">
             <thead>
               <tr>
-                <th>No. Rekening</th>
-                <th>Bank</th>
+                <th>Nilai / Identifier</th>
+                <th>Tipe</th>
                 <th>Alasan</th>
                 <th>
                   <ColumnDropdown
@@ -419,16 +465,31 @@ const BlacklistPanel = ({
                     >
                       <td>
                         <div className="blp-acct">
-                          <span className="blp-acct-num">
+                          <span className="blp-acct-num blp-mono">
                             {item.accountNumber}
                           </span>
-                          <span className="blp-acct-name">
-                            {item.accountName}
-                          </span>
+                          {item.service_scope &&
+                            item.service_scope !== "ALL" && (
+                              <span className="blp-scope-tag">
+                                {item.service_scope}
+                              </span>
+                            )}
                         </div>
                       </td>
                       <td>
-                        <span className="blp-bank">{item.bank}</span>
+                        {(() => {
+                          const tp = TYPE_CONFIG[item.bank] ||
+                            TYPE_CONFIG[item.type] || {
+                              cls: "blp-type--user",
+                              label: item.bank || item.type || "—",
+                              icon: "bi-tag",
+                            };
+                          return (
+                            <span className={`blp-type-badge ${tp.cls}`}>
+                              <i className={`bi ${tp.icon}`} /> {tp.label}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td
                         style={{
@@ -451,9 +512,9 @@ const BlacklistPanel = ({
                       </td>
                       <td>
                         <span
-                          className={`blp-hit ${item.hitCount === 0 ? "zero" : ""}`}
+                          className={`blp-hit ${!item.hitCount ? "zero" : ""}`}
                         >
-                          {item.hitCount === 0 ? "—" : item.hitCount}
+                          {item.hitCount ?? 0}
                         </span>
                       </td>
                       <td
@@ -471,7 +532,7 @@ const BlacklistPanel = ({
                           {item.status === "pending" && (
                             <button
                               className="blp-action-btn approve"
-                              title="Setujui & Aktifkan"
+                              title="Setujui"
                               onClick={() => onApprove(item.id)}
                             >
                               <i className="bi bi-check-lg" />

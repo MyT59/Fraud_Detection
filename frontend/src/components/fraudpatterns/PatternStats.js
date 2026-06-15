@@ -1,7 +1,10 @@
 import React from "react";
 import "./PatternStats.css";
 
-const PatternStats = ({ patterns }) => {
+// [FIX] Menerima prop totalFlagged dari BE (/patterns/stats -> total_flagged_transactions)
+// untuk perhitungan persentase High Risk Events yang lebih akurat,
+// alih-alih membagi dengan total occurrences hasil agregasi lokal.
+const PatternStats = ({ patterns, totalFlagged = 0 }) => {
   const total = patterns.reduce((s, p) => s + p.occurrences, 0);
   const highRisk = patterns
     .filter((p) => p.riskLevel === "high")
@@ -11,6 +14,13 @@ const PatternStats = ({ patterns }) => {
     patterns.reduce((s, p) => s + p.accuracy, 0) / patterns.length
   ).toFixed(1);
 
+  // Gunakan total_flagged_transactions dari BE jika tersedia (lebih akurat
+  // karena merepresentasikan basis transaksi nyata, bukan sekadar
+  // jumlah occurrences pattern yang bisa overlap).
+  const highRiskBase = totalFlagged > 0 ? totalFlagged : total;
+  const highRiskPct =
+    highRiskBase > 0 ? ((highRisk / highRiskBase) * 100).toFixed(1) : "0.0";
+
   const cards = [
     {
       id: 1,
@@ -18,7 +28,10 @@ const PatternStats = ({ patterns }) => {
       value: total.toLocaleString(),
       icon: "bi-shield-exclamation",
       color: "purple",
-      sub: "All-time pattern matches",
+      sub:
+        totalFlagged > 0
+          ? `dari ${totalFlagged.toLocaleString()} transaksi flagged`
+          : "All-time pattern matches",
     },
     {
       id: 2,
@@ -26,7 +39,9 @@ const PatternStats = ({ patterns }) => {
       value: highRisk.toLocaleString(),
       icon: "bi-exclamation-triangle-fill",
       color: "danger",
-      sub: `${((highRisk / total) * 100).toFixed(1)}% of total detections`,
+      sub: `${highRiskPct}% dari ${
+        totalFlagged > 0 ? "transaksi flagged" : "total deteksi"
+      }`,
     },
     {
       id: 3,

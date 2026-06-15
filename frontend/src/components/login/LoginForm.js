@@ -31,14 +31,11 @@ const LoginForm = ({ onLoginSuccess, sessionExpired }) => {
     setLoading(true);
 
     try {
-      const result = await authService.login(formData.email, formData.password);
-
-      if (result.require_password_change) {
-        onLoginSuccess({ requirePasswordChange: true });
-        return;
-      }
-
-      onLoginSuccess({ requirePasswordChange: false });
+      // authService.login() dari apiService.js sudah otomatis
+      // redirect ke /change-password kalau is_password_temporary = true.
+      // Kalau tidak, lanjut ke onLoginSuccess (redirect ke dashboard).
+      await authService.login(formData.email, formData.password);
+      onLoginSuccess();
     } catch (err) {
       if (err.status === 401) {
         setError("Invalid email or password. Please try again.");
@@ -72,8 +69,8 @@ const LoginForm = ({ onLoginSuccess, sessionExpired }) => {
         {sessionExpired && (
           <div className="login-warning">
             <i className="bi bi-clock-history"></i>
-            Sesi Anda telah berakhir karena tidak aktif selama 60 menit. Silakan
-            login kembali.
+            Your session has expired due to 60 minutes of inactivity. Please
+            sign in again.
           </div>
         )}
 

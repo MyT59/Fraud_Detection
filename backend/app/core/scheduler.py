@@ -13,7 +13,7 @@ def start_scheduler():
     if not _scheduler.running:
         global SCHEDULER_STARTED_AT
 
-        # 🔥 FIX: Daftarkan Worker Eskalasi SLA otomatis setiap 1 menit
+        # FIX: Daftarkan Worker Eskalasi SLA otomatis setiap 1 menit
         from app.application.services.scheduler_service import run_sla_escalation_task
         _scheduler.add_job(
             func=run_sla_escalation_task,
@@ -26,9 +26,9 @@ def start_scheduler():
 
         _scheduler.start()
         SCHEDULER_STARTED_AT = datetime.now()
-        print("[System] Background Scheduler Started. 🚀 (SLA Escalation Active)")
+        print("[System] Background Scheduler Started. (SLA Escalation Active)")
 
 def shutdown_scheduler():
     if _scheduler.running:
         _scheduler.shutdown()
-        print("[System] Background Scheduler Shutdown. 🛑")
+        print("[System] Background Scheduler Shutdown.")

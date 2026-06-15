@@ -29,6 +29,14 @@ const DEFAULT_FILTERS = {
   sortBy: "priority_desc",
 };
 
+// Filter default untuk Open Queue
+const DEFAULT_OPEN_FILTERS = {
+  search: "",
+  severity: "all",
+  type: "all",
+  sortBy: "priority_desc",
+};
+
 // Mapping filter FE → enum BE (langsung pakai nilai BE)
 const SEVERITY_MAP = {
   all: null,
@@ -73,6 +81,9 @@ const AlertsLog = () => {
   const [page, setPage] = useState(1);
   const LIMIT = 10;
 
+  // State Filter Open Queue
+  const [openFilters, setOpenFilters] = useState(DEFAULT_OPEN_FILTERS);
+
   // State Data
   const [apiAlerts, setApiAlerts] = useState(null);
   const [apiStats, setApiStats] = useState(null);
@@ -112,8 +123,14 @@ const AlertsLog = () => {
         let feedData;
 
         if (activeTab === "open") {
-          // Open Queue: hanya alert OPEN, untuk aksi Claim
-          feedData = await fetchOpenQueue({ page, limit: LIMIT, signal });
+          // Open Queue: hanya alert OPEN, dengan filter severity & type
+          feedData = await fetchOpenQueue({
+            page,
+            limit: LIMIT,
+            signal,
+            priority:
+              openFilters.severity !== "all" ? openFilters.severity : undefined,
+          });
         } else {
           // All Alerts: semua alert dengan filter
           const queryParams = {
@@ -156,7 +173,14 @@ const AlertsLog = () => {
         setLoading(false);
       }
     },
-    [activeTab, page, filters.severity, filters.status, filters.type],
+    [
+      activeTab,
+      page,
+      filters.severity,
+      filters.status,
+      filters.type,
+      openFilters.severity,
+    ],
   );
 
   useEffect(() => {
@@ -188,6 +212,16 @@ const AlertsLog = () => {
     setFilters(DEFAULT_FILTERS);
     setPage(1);
     setLocalOverride({});
+  }, []);
+
+  const handleOpenFilterChange = useCallback((newFilters) => {
+    setOpenFilters((prev) => ({ ...prev, ...newFilters }));
+    setPage(1);
+  }, []);
+
+  const handleOpenFilterReset = useCallback(() => {
+    setOpenFilters(DEFAULT_OPEN_FILTERS);
+    setPage(1);
   }, []);
 
   // ─── Modal Detail ─────────────────────────────────────────────────
@@ -342,9 +376,33 @@ const AlertsLog = () => {
     return true;
   });
 
+  // Filter & Sort untuk Open Queue (client-side)
+  const filteredOpenAlerts = (activeTab === "open" ? visibleAlerts : []).filter(
+    (a) => {
+      if (openFilters.severity !== "all" && a.severity !== openFilters.severity)
+        return false;
+      if (openFilters.type !== "all" && a.type !== openFilters.type)
+        return false;
+      if (openFilters.search) {
+        const q = openFilters.search.toLowerCase();
+        if (
+          !a.title?.toLowerCase().includes(q) &&
+          !a.message?.toLowerCase().includes(q) &&
+          !String(a.transaction_id || "").includes(q)
+        )
+          return false;
+      }
+      return true;
+    },
+  );
+
   // Sorting
-  const sortedAlerts = [...filteredAlerts].sort((a, b) => {
-    switch (filters.sortBy) {
+  const activeSortBy =
+    activeTab === "open" ? openFilters.sortBy : filters.sortBy;
+  const sortedAlerts = [
+    ...(activeTab === "open" ? filteredOpenAlerts : filteredAlerts),
+  ].sort((a, b) => {
+    switch (activeSortBy) {
       case "oldest":
         return new Date(a.created_at) - new Date(b.created_at);
       case "priority_desc":
@@ -489,7 +547,7 @@ const AlertsLog = () => {
         </button>
       </div>
 
-      {/* Filter — hanya tampil di tab All Alerts */}
+      {/* Filter All Alerts */}
       {activeTab === "all" && (
         <AlertsFilter
           filters={filters}
@@ -497,6 +555,94 @@ const AlertsLog = () => {
           onReset={handleFilterReset}
           totalResults={sortedAlerts.length}
         />
+      )}
+
+      {/* Filter Open Queue */}
+      {activeTab === "open" && (
+        <div className="alerts-filter-card">
+          <div className="alerts-filter-row">
+            {/* Search */}
+            <div className="alerts-search-wrap">
+              <i className="bi bi-search alerts-search-icon" />
+              <input
+                type="text"
+                className="alerts-search-input"
+                placeholder="Cari judul atau pesan alert..."
+                value={openFilters.search}
+                onChange={(e) =>
+                  handleOpenFilterChange({ search: e.target.value })
+                }
+              />
+              {openFilters.search && (
+                <button
+                  className="alerts-search-clear"
+                  onClick={() => handleOpenFilterChange({ search: "" })}
+                >
+                  <i className="bi bi-x-lg" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Severity */}
+            <select
+              className="alerts-select"
+              value={openFilters.severity}
+              onChange={(e) =>
+                handleOpenFilterChange({ severity: e.target.value })
+              }
+            >
+              <option value="all">Semua Level</option>
+              <option value="CRITICAL">Critical</option>
+              <option value="HIGH">High</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+            </select>
+
+            {/* Filter Alert Type */}
+            <select
+              className="alerts-select"
+              value={openFilters.type}
+              onChange={(e) => handleOpenFilterChange({ type: e.target.value })}
+            >
+              <option value="all">Semua Tipe</option>
+              <option value="RULE">Rule Engine</option>
+              <option value="PATTERN">Pattern Detection</option>
+              <option value="COMBINED">Combined</option>
+              <option value="BLACKLIST">Blacklist</option>
+              <option value="ML">ML Anomaly</option>
+              <option value="RULE_ML">Rule + ML</option>
+              <option value="PATTERN_ML">Pattern + ML</option>
+              <option value="COMBINED_ML">Combined + ML</option>
+            </select>
+
+            {/* Sort */}
+            <select
+              className="alerts-select"
+              value={openFilters.sortBy}
+              onChange={(e) =>
+                handleOpenFilterChange({ sortBy: e.target.value })
+              }
+            >
+              <option value="priority_desc">Prioritas Tertinggi</option>
+              <option value="priority_asc">Prioritas Terendah</option>
+              <option value="newest">Terbaru</option>
+              <option value="oldest">Terlama</option>
+            </select>
+
+            {/* Reset */}
+            <button
+              className="alerts-btn-outline"
+              onClick={handleOpenFilterReset}
+            >
+              <i className="bi bi-arrow-counterclockwise" /> Reset
+            </button>
+          </div>
+
+          <div className="alerts-filter-meta">
+            Menampilkan <strong>{sortedAlerts.length}</strong> alert tersedia
+            untuk di-claim
+          </div>
+        </div>
       )}
 
       {/* Feed Data */}

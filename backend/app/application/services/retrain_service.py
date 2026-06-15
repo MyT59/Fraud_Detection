@@ -14,7 +14,16 @@ from fastapi import UploadFile, HTTPException
 
 from app.paths import MODELS_DIR, DATA_DIR
 
+from functools import wraps
+
 logger = logging.getLogger(__name__)
+
+def log_performance(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    return wrapper
+
 from app.infrastructure.ml.domain_detector import detect_domain
 from app.infrastructure.ml.feature_builder import build_features
 from app.infrastructure.ml.training import train_from_dataframe 
@@ -63,7 +72,7 @@ class RetrainService:
         )
         self.db.add(new_log)
 
-    def _register_model(self, domain: str, model_path: str, anomalies_found: int, total_records: int) -> MLModel:
+    def _register_model(self, domain: str, model_path: str, anomalies_found: int, total_records: int, training_meta: dict = None) -> MLModel:
         """Helper to handle model versioning, active switching, and metric tracking."""
         
         self.db.query(MLModel).filter(
@@ -72,7 +81,15 @@ class RetrainService:
         ).update({"is_active": False})
 
         contamination = DOMAIN_ISO_CONFIG.get(domain, {}).get("contamination", 0.05)
+        anomaly_rate = round(anomalies_found / total_records, 4) if total_records > 0 else 0.0
         
+        # Ambil thresholds dari meta training jika tersedia
+        thresholds = {}
+        if training_meta and "thresholds" in training_meta:
+            thresholds = training_meta["thresholds"]
+        elif training_meta and "meta" in training_meta and "thresholds" in training_meta["meta"]:
+            thresholds = training_meta["meta"]["thresholds"]
+
         version_str = f"{domain}_v{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
 
         new_model = MLModel(
@@ -84,7 +101,9 @@ class RetrainService:
                 "algorithm": "IsolationForest",
                 "training_samples": total_records,
                 "anomalies_detected": anomalies_found,
-                "contamination_rate": contamination
+                "anomaly_rate": anomaly_rate,
+                "contamination_rate": contamination,
+                "thresholds": thresholds,
             }
         )
 
@@ -106,9 +125,11 @@ class RetrainService:
     # ==========================================
     # 📅 SCHEDULE CRUD OPERATIONS
     # ==========================================
+    @log_performance
     def get_all_schedules(self) -> List[RetrainSchedule]:
         return self.db.query(RetrainSchedule).order_by(RetrainSchedule.created_at.desc()).all()
     
+    @log_performance
     def get_schedule_by_id(self, schedule_id: uuid.UUID) -> Optional[RetrainSchedule]:
         return (
             self.db.query(RetrainSchedule)
@@ -116,6 +137,7 @@ class RetrainService:
             .first()
         )
 
+    @log_performance
     def create_schedule(self, data: Dict[str, Any], admin_id: int) -> RetrainSchedule:
         new_schedule = RetrainSchedule(
             name=data.get("name"),
@@ -139,6 +161,7 @@ class RetrainService:
         self.db.refresh(new_schedule)
         return new_schedule
 
+    @log_performance
     def update_schedule(self, schedule_id: uuid.UUID, data: Dict[str, Any], admin_id: int) -> Optional[RetrainSchedule]:
         schedule = self.db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
         if not schedule:
@@ -160,6 +183,7 @@ class RetrainService:
         self.db.refresh(schedule)
         return schedule
 
+    @log_performance
     def toggle_schedule_status(self, schedule_id: uuid.UUID, is_active: bool, admin_id: int) -> Optional[RetrainSchedule]:
         schedule = self.db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
         if not schedule:
@@ -179,6 +203,7 @@ class RetrainService:
         self.db.commit()
         return schedule
 
+    @log_performance
     def delete_schedule(self, schedule_id: uuid.UUID, admin_id: int) -> bool:
         schedule = self.db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
         if not schedule:
@@ -271,7 +296,8 @@ class RetrainService:
                 domain=domain,
                 model_path=training_result["model_path"],
                 anomalies_found=training_result["anomalies_found"],
-                total_records=row_count
+                total_records=row_count,
+                training_meta=training_result.get("meta")
             )
 
             # 5. Catat History (Menggunakan model_id dan dataset_id yang baru)
@@ -332,6 +358,7 @@ class RetrainService:
                 self.db.commit()
             raise HTTPException(status_code=500, detail=f"Training gagal: {str(e)}")
 
+    @log_performance
     def execute_retrain(self, domain: str, schedule_id: Optional[int] = None, trigger_source: str = "MANUAL", admin_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Main entry point untuk menjalankan proses retraining dengan data bersih.

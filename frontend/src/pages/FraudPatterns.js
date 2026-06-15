@@ -4,7 +4,7 @@ import PatternFilter from "../components/fraudpatterns/PatternFilter";
 import PatternCard from "../components/fraudpatterns/PatternCard";
 import PatternDetailModal from "../components/fraudpatterns/PatternDetailModal";
 import PatternTrendChart from "../components/fraudpatterns/PatternTrendChart";
-import ExportModal from "../components/fraudpatterns/ExportModal";
+import PatternDiagnostics from "../components/fraudpatterns/PatternDiagnostics";
 import PageLoader from "../components/common/PageLoader";
 import api from "../services/apiService";
 import "./FraudPatterns.css";
@@ -24,8 +24,6 @@ const CATEGORY_MAP = {
   LOCATION: "Location",
   DEVICE: "Device",
 };
-
-const RISK_LEVEL_MAP = {};
 
 function riskScoreToLevel(score) {
   if (score >= 75) return "high";
@@ -60,24 +58,22 @@ function mapBackendPattern(bp, index) {
 
   const riskLevel = riskScoreToLevel(bp.risk_score ?? 50);
 
-  let status = "inactive";
-  if (bp.is_active) {
-    status = "active";
-  }
+  const status = bp.is_active ? "active" : "inactive";
 
+  // [FIX 1] Sebelumnya hanya membaca bp.accuracy yang tidak ada di response BE.
+  // BE /patterns/stats mengembalikan field bernama accuracy_score.
+  // Fallback ke bp.accuracy untuk kompatibilitas jika endpoint lain mengembalikannya.
+  const rawAccuracy = bp.accuracy_score ?? bp.accuracy ?? 0;
   const accuracy =
-    bp.accuracy != null
-      ? bp.accuracy > 1
-        ? parseFloat(bp.accuracy.toFixed(1))
-        : parseFloat((bp.accuracy * 100).toFixed(1))
-      : 0;
+    rawAccuracy > 1
+      ? parseFloat(rawAccuracy.toFixed(1))
+      : parseFloat((rawAccuracy * 100).toFixed(1));
 
+  const rawFpr = bp.false_positive_rate ?? 0;
   const falsePositiveRate =
-    bp.false_positive_rate != null
-      ? bp.false_positive_rate > 1
-        ? parseFloat(bp.false_positive_rate.toFixed(1))
-        : parseFloat((bp.false_positive_rate * 100).toFixed(1))
-      : 0;
+    rawFpr > 1
+      ? parseFloat(rawFpr.toFixed(1))
+      : parseFloat((rawFpr * 100).toFixed(1));
 
   const trend =
     bp.trend != null ? parseFloat(parseFloat(bp.trend).toFixed(1)) : 0;
@@ -96,7 +92,7 @@ function mapBackendPattern(bp, index) {
     falsePositiveRate,
     avgLossIDR: formatAvgLoss(bp.avg_amount),
     trend,
-    lastUpdated: formatLastUpdated(bp.last_updated ?? bp.updated_at),
+    lastUpdated: formatLastUpdated(bp.updated_at ?? bp.last_updated),
 
     indicators: bp.indicators ?? generateIndicators(bp, category),
     recommendedActions: bp.recommended_actions ?? generateActions(bp, category),
@@ -110,37 +106,37 @@ function generateIndicators(bp, category) {
     Transaction: [
       `Occurrences tercatat: ${bp.occurrences ?? bp.hit_count ?? 0} deteksi`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Rata-rata nominal terdampak: ${formatAvgLoss(bp.avg_amount)}`,
     ],
     Credential: [
       `Percobaan autentikasi berulang terdeteksi`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
     Location: [
       `Lokasi transaksi tidak konsisten dengan profil pengguna`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
     Device: [
       `Device fingerprint tidak dikenali`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
     Behavioral: [
       `Pola perilaku menyimpang dari histori pengguna`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
     Network: [
       `Aktivitas jaringan mencurigakan terdeteksi`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
   };
@@ -175,6 +171,7 @@ function generateActions(bp, category) {
 const FraudPatterns = () => {
   const [loading, setLoading] = useState(true);
   const [patterns, setPatterns] = useState([]);
+  const [totalFlagged, setTotalFlagged] = useState(0); // [NEW] dari BE /stats
   const [apiError, setApiError] = useState(null);
   const [riskFilter, setRiskFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -182,7 +179,6 @@ const FraudPatterns = () => {
   const [sortBy, setSortBy] = useState("occurrences_desc");
   const [selectedPattern, setSelectedPattern] = useState(null);
   const [viewMode, setViewMode] = useState("grid");
-  const [showExport, setShowExport] = useState(false);
 
   const fetchPatterns = useCallback(async () => {
     setLoading(true);
@@ -196,6 +192,8 @@ const FraudPatterns = () => {
 
       const mapped = data.patterns.map((bp, i) => mapBackendPattern(bp, i));
       setPatterns(mapped);
+      // [NEW] Simpan total_flagged_transactions dari BE untuk PatternStats
+      setTotalFlagged(data.total_flagged_transactions ?? 0);
     } catch (err) {
       console.error("[FraudPatterns] fetch error:", err);
 
@@ -311,14 +309,19 @@ const FraudPatterns = () => {
             <i className="bi bi-arrow-clockwise"></i>
           </button>
 
-          <button
+          <a
+            href="/reports"
             className="fp-export-btn"
-            onClick={() => setShowExport(true)}
-            disabled={patterns.length === 0}
+            title="Export via Reports"
+            style={{ textDecoration: "none" }}
           >
             <i className="bi bi-download"></i>
             Export Patterns List
-          </button>
+            <i
+              className="bi bi-box-arrow-up-right ms-1"
+              style={{ fontSize: ".7rem" }}
+            ></i>
+          </a>
         </div>
       </div>
 
@@ -367,7 +370,10 @@ const FraudPatterns = () => {
         </div>
       )}
 
-      {patterns.length > 0 && <PatternStats patterns={patterns} />}
+      {/* [FIX 1 applied] totalFlagged sekarang dipass ke PatternStats */}
+      {patterns.length > 0 && (
+        <PatternStats patterns={patterns} totalFlagged={totalFlagged} />
+      )}
 
       {patterns.length === 0 && !loading && (
         <div className="fp-empty-state" style={{ marginTop: "2rem" }}>
@@ -381,6 +387,9 @@ const FraudPatterns = () => {
 
       {patterns.length > 0 && (
         <>
+          {/* [NEW] Diagnostics section — memanggil GET /patterns/diagnostics */}
+          <PatternDiagnostics />
+
           <PatternFilter
             riskFilter={riskFilter}
             setRiskFilter={setRiskFilter}
@@ -428,10 +437,6 @@ const FraudPatterns = () => {
           pattern={selectedPattern}
           onClose={() => setSelectedPattern(null)}
         />
-      )}
-
-      {showExport && (
-        <ExportModal patterns={patterns} onClose={() => setShowExport(false)} />
       )}
     </div>
   );

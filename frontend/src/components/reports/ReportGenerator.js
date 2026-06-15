@@ -1,383 +1,236 @@
 import React, { useState } from "react";
-import * as XLSX from "xlsx";
+import reportService from "../../services/reportService";
+
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 const LAYANAN_OPTIONS = [
-  {
-    value: "agenusa",
-    label: "Agenusa",
-    icon: "shield-check",
-    color: "#dc2626",
-    desc: "Agen & Mitra Network",
-  },
-  {
-    value: "nusabill",
-    label: "Nusabill",
-    icon: "receipt",
-    color: "#2563eb",
-    desc: "Billing & Payment Platform",
-  },
+  { value: "AGENUSA",  label: "Agenusa",  icon: "shield-check", color: "#dc2626", desc: "Agen & Mitra Network" },
+  { value: "NUSABILL", label: "Nusabill", icon: "receipt",       color: "#2563eb", desc: "Billing & Payment Platform" },
 ];
 
 const REPORT_TYPE_OPTIONS = [
-  {
-    value: "fraud",
-    label: "Fraud",
-    icon: "exclamation-octagon-fill",
-    color: "#dc2626",
-    desc: "Transaksi terindikasi fraud",
-  },
-  {
-    value: "legit",
-    label: "Legit",
-    icon: "check-circle-fill",
-    color: "#16a34a",
-    desc: "Transaksi sah & valid",
-  },
-  {
-    value: "fraud_rate",
-    label: "Fraud Rate",
-    icon: "graph-up-arrow",
-    color: "#ea580c",
-    desc: "Persentase & tren fraud",
-  },
-  {
-    value: "legit_rate",
-    label: "Legit Rate",
-    icon: "bar-chart-fill",
-    color: "#0891b2",
-    desc: "Persentase & tren legit",
-  },
-  {
-    value: "transactions",
-    label: "Transactions",
-    icon: "arrow-left-right",
-    color: "#7c3aed",
-    desc: "Seluruh riwayat transaksi",
-  },
+  { value: "TRANSACTION",        label: "All Transactions", icon: "arrow-left-right",        color: "#7c3aed", desc: "Seluruh riwayat transaksi",    finalStatus: null,           group: "transaction" },
+  { value: "TRANSACTION_FRAUD",  label: "Fraud",            icon: "exclamation-octagon-fill", color: "#dc2626", desc: "Transaksi terindikasi fraud",  finalStatus: "FRAUD",        group: "transaction" },
+  { value: "TRANSACTION_SAFE",   label: "Safe",             icon: "check-circle-fill",        color: "#16a34a", desc: "Transaksi aman & valid",       finalStatus: "SAFE",         group: "transaction" },
+  { value: "TRANSACTION_REVIEW", label: "Under Review",     icon: "hourglass-split",          color: "#ea580c", desc: "Transaksi sedang direview",    finalStatus: "UNDER_REVIEW", group: "transaction" },
+  { value: "FRAUD_DETECTION",    label: "Fraud Summary Report", icon: "graph-up-arrow",           color: "#0891b2", desc: "Ringkasan statistik fraud",     finalStatus: null, group: "fraud_summary" },
+  { value: "FRAUD_PATTERN",      label: "Pattern List Report",  icon: "diagram-3",                color: "#7c3aed", desc: "Daftar & analisis pola fraud", finalStatus: null, group: "pattern"       },
+  { value: "BLACKLIST",          label: "Blacklist Report",     icon: "ban",                      color: "#ea580c", desc: "Daftar item blacklist sistem", finalStatus: null, group: "blacklist"     },
+  { value: "ML_PERFORMANCE",     label: "ML Performance",       icon: "cpu",                      color: "#0d9488", desc: "Evaluasi model & retrain history", finalStatus: null, group: "ml"        },
+  { value: "ACTIVITY_LOG",       label: "Activity Log",         icon: "clock-history",            color: "#6366f1", desc: "Log aktivitas admin & sistem", finalStatus: null, group: "activity"      },
 ];
 
 const FORMAT_OPTIONS = [
-  { value: "PDF", icon: "file-pdf-fill", color: "#dc2626", ext: "pdf" },
-  { value: "Excel", icon: "file-excel-fill", color: "#16a34a", ext: "xlsx" },
-  { value: "CSV", icon: "file-text-fill", color: "#2563eb", ext: "csv" },
+  { value: "PDF",  icon: "file-pdf-fill",  color: "#dc2626" },
+  { value: "XLSX", icon: "file-excel-fill", color: "#16a34a" },
+  { value: "CSV",  icon: "file-text-fill",  color: "#2563eb" },
 ];
 
-const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-const randPick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const RISK_LEVEL_OPTIONS  = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const RISK_LEVEL_COLORS   = { LOW: "#16a34a", MEDIUM: "#d97706", HIGH: "#ea580c", CRITICAL: "#dc2626" };
 
-const generateRows = (dateFrom, dateTo, count = 30) => {
-  const from = new Date(dateFrom).getTime();
-  const to = new Date(dateTo).getTime();
-  return Array.from({ length: count }, (_, i) => ({
-    id: `TXN${String(i + 1).padStart(5, "0")}`,
-    date: new Date(from + Math.random() * (to - from))
-      .toISOString()
-      .split("T")[0],
-    amount: rand(50_000, 10_000_000),
-    status: Math.random() > 0.15 ? "Legit" : "Fraud",
-    channel: randPick(["Mobile", "Web", "ATM", "EDC"]),
-    location: randPick(["Jakarta", "Surabaya", "Bandung", "Medan", "Makassar"]),
-    agent: `AGT${String(rand(1, 200)).padStart(4, "0")}`,
-  }));
+// Action groups untuk Activity Log multi-select
+const ACTIVITY_ACTION_GROUPS = [
+  {
+    group: "Fraud & Deteksi",
+    color: "#dc2626",
+    icon: "shield-exclamation",
+    actions: ["ALERT_CREATED", "BLACKLIST_HIT", "PATTERN_TRIGGERED", "RULE_TRIGGERED", "FLAG_TRANSACTION"],
+  },
+  {
+    group: "Reviews",
+    color: "#16a34a",
+    icon: "eye",
+    actions: ["REVIEW_APPROVED", "REVIEW_REJECTED", "REVIEW_OVERRIDDEN", "ALERT_CLAIMED", "ALERT_RELEASED"],
+  },
+  {
+    group: "Rules",
+    color: "#2563eb",
+    icon: "gear",
+    actions: ["RULE_CREATED", "RULE_UPDATED", "RULE_DELETED"],
+  },
+  {
+    group: "Patterns",
+    color: "#7c3aed",
+    icon: "diagram-3",
+    actions: ["PATTERN_CREATED", "PATTERN_AUTO_DISABLE", "PATTERN_AUTO_PROMOTE", "PATTERN_REACTIVATED", "PATTERN_TRIGGERED"],
+  },
+  {
+    group: "Blacklist",
+    color: "#ea580c",
+    icon: "ban",
+    actions: ["BLACKLIST_ADD", "BLACKLIST_REMOVE"],
+  },
+  {
+    group: "Auth & Session",
+    color: "#6b7280",
+    icon: "shield-lock",
+    actions: ["LOGIN", "LOGIN_FAILED", "LOGOUT", "SESSION_REVOKED", "TOKEN_REFRESHED"],
+  },
+  {
+    group: "ML & Retrain",
+    color: "#0d9488",
+    icon: "cpu",
+    actions: ["MANUAL_RUN_RETRAIN"],
+  },
+  {
+    group: "Reports",
+    color: "#2563eb",
+    icon: "file-earmark-text",
+    actions: ["REPORT_GENERATED", "REPORT_DOWNLOADED"],
+  },
+  {
+    group: "System",
+    color: "#9ca3af",
+    icon: "hdd-stack",
+    actions: ["SLA_ESCALATION"],
+  },
+  {
+    group: "User Actions",
+    color: "#0891b2",
+    icon: "person-gear",
+    actions: ["ACCOUNT_CREATED", "ACCOUNT_SUSPENDED", "ACCOUNT_ROLE_CHANGED"],
+  },
+];
+
+// Mapping Module Source (BE EventSourceEnum) → group names di ACTIVITY_ACTION_GROUPS
+const MODULE_TO_GROUPS = {
+  AUTH:            ["Auth & Session"],
+  RULE_ENGINE:     ["Rules", "Fraud & Deteksi"],
+  PATTERN_ENGINE:  ["Patterns", "Fraud & Deteksi"],
+  MANUAL_REVIEW:   ["Reviews"],
+  BLACKLIST:       ["Blacklist", "Fraud & Deteksi"],
+  ML:              ["ML & Retrain"],
+  SYSTEM:          ["System", "User Actions"],
+  REPORTS:         ["Reports"],
 };
 
-const toCSV = (headers, rows) => {
-  const hdr = headers.join(",");
-  const body = rows.map((r) => headers.map((h) => r[h] ?? "").join(","));
-  return [hdr, ...body].join("\n");
-};
+const MODULE_OPTIONS = ["AUTH", "RULE_ENGINE", "PATTERN_ENGINE", "MANUAL_REVIEW", "BLACKLIST", "ML", "SYSTEM", "REPORTS"];
+const SEVERITY_OPTIONS = [
+  { value: "INFO",     color: "#6b7280" },
+  { value: "WARNING",  color: "#d97706" },
+  { value: "HIGH",     color: "#ea580c" },
+  { value: "CRITICAL", color: "#dc2626" },
+];
 
-const formatRp = (n) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(n);
+// ─── Shared styles ────────────────────────────────────────────────────────────
+const labelStyle = { fontSize: ".75rem", letterSpacing: ".06em", color: "#525252", fontWeight: 600 };
+const inputStyle = { fontSize: ".875rem", borderRadius: 8, border: "1.5px solid #e5e5e5", padding: "8px 12px", width: "100%", outline: "none", fontFamily: "inherit" };
 
-const buildDatasets = (layanan, reportTypes, dateFrom, dateTo) => {
-  const label =
-    LAYANAN_OPTIONS.find((l) => l.value === layanan)?.label ?? layanan;
-  const rows = generateRows(dateFrom, dateTo, 40);
-  const fraudRows = rows.filter((r) => r.status === "Fraud");
-  const legitRows = rows.filter((r) => r.status === "Legit");
-
-  const sheets = {};
-
-  if (reportTypes.includes("fraud")) {
-    sheets["Fraud"] = {
-      title: `${label} – Fraud Transactions`,
-      headers: ["id", "date", "amount", "channel", "location", "agent"],
-      rows: fraudRows,
-    };
-  }
-  if (reportTypes.includes("legit")) {
-    sheets["Legit"] = {
-      title: `${label} – Legit Transactions`,
-      headers: ["id", "date", "amount", "channel", "location", "agent"],
-      rows: legitRows,
-    };
-  }
-  if (reportTypes.includes("fraud_rate")) {
-    const byDate = {};
-    rows.forEach((r) => {
-      if (!byDate[r.date]) byDate[r.date] = { total: 0, fraud: 0 };
-      byDate[r.date].total++;
-      if (r.status === "Fraud") byDate[r.date].fraud++;
-    });
-    sheets["Fraud Rate"] = {
-      title: `${label} – Fraud Rate`,
-      headers: ["date", "total", "fraud", "fraud_rate"],
-      rows: Object.entries(byDate).map(([date, v]) => ({
-        date,
-        total: v.total,
-        fraud: v.fraud,
-        fraud_rate: ((v.fraud / v.total) * 100).toFixed(2) + "%",
-      })),
-    };
-  }
-  if (reportTypes.includes("legit_rate")) {
-    const byDate = {};
-    rows.forEach((r) => {
-      if (!byDate[r.date]) byDate[r.date] = { total: 0, legit: 0 };
-      byDate[r.date].total++;
-      if (r.status === "Legit") byDate[r.date].legit++;
-    });
-    sheets["Legit Rate"] = {
-      title: `${label} – Legit Rate`,
-      headers: ["date", "total", "legit", "legit_rate"],
-      rows: Object.entries(byDate).map(([date, v]) => ({
-        date,
-        total: v.total,
-        legit: v.legit,
-        legit_rate: ((v.legit / v.total) * 100).toFixed(2) + "%",
-      })),
-    };
-  }
-  if (reportTypes.includes("transactions")) {
-    sheets["All Transactions"] = {
-      title: `${label} – All Transactions`,
-      headers: [
-        "id",
-        "date",
-        "amount",
-        "status",
-        "channel",
-        "location",
-        "agent",
-      ],
-      rows,
-    };
-  }
-
-  return sheets;
-};
-
-const downloadBlob = (content, filename, mime) => {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement("a"), {
-    href: url,
-    download: filename,
-  });
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
-const exportCSV = (sheets, layanan, dateFrom, dateTo) => {
-  Object.entries(sheets).forEach(([name, sheet]) => {
-    const safe = name.replace(/[^a-z0-9]/gi, "_");
-    const csv = toCSV(sheet.headers, sheet.rows);
-    downloadBlob(
-      csv,
-      `${layanan}_${safe}_${dateFrom}_${dateTo}.csv`,
-      "text/csv",
-    );
-  });
-};
-
-const exportExcel = (sheets, layanan, dateFrom, dateTo) => {
-  const wb = XLSX.utils.book_new();
-
-  const layananLabel =
-    LAYANAN_OPTIONS.find((l) => l.value === layanan)?.label ?? layanan;
-  const metaRows = [
-    ["Laporan Fraud Detection System"],
-    [],
-    ["Layanan", layananLabel],
-    ["Periode", `${dateFrom} s/d ${dateTo}`],
-    ["Dibuat", new Date().toLocaleString("id-ID")],
-    ["Sheet", Object.keys(sheets).join(", ")],
-  ];
-  const wsMeta = XLSX.utils.aoa_to_sheet(metaRows);
-
-  wsMeta["A1"].s = { font: { bold: true, sz: 14 } };
-  wsMeta["!cols"] = [{ wch: 18 }, { wch: 40 }];
-  XLSX.utils.book_append_sheet(wb, wsMeta, "Info");
-
-  Object.entries(sheets).forEach(([name, sheet]) => {
-    const HEADER_MAP = {
-      id: "ID Transaksi",
-      date: "Tanggal",
-      amount: "Jumlah (Rp)",
-      status: "Status",
-      channel: "Channel",
-      location: "Lokasi",
-      agent: "Kode Agen",
-      total: "Total",
-      fraud: "Fraud",
-      legit: "Legit",
-      fraud_rate: "Fraud Rate (%)",
-      legit_rate: "Legit Rate (%)",
-    };
-
-    const headerRow = sheet.headers.map((h) => HEADER_MAP[h] ?? h);
-
-    const dataRows = sheet.rows.map((r) =>
-      sheet.headers.map((h) => {
-        if (h === "amount") return Number(r[h]) || 0;
-        if (h === "fraud_rate" || h === "legit_rate")
-          return parseFloat(r[h]) || 0;
-        return r[h] ?? "";
-      }),
-    );
-
-    const wsData = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
-
-    const colWidths = sheet.headers.map((h) =>
-      ["id", "agent"].includes(h)
-        ? { wch: 14 }
-        : h === "date"
-          ? { wch: 13 }
-          : h === "amount"
-            ? { wch: 20 }
-            : ["fraud_rate", "legit_rate"].includes(h)
-              ? { wch: 16 }
-              : { wch: 14 },
-    );
-    wsData["!cols"] = colWidths;
-
-    const amtColIdx = sheet.headers.indexOf("amount");
-    if (amtColIdx !== -1) {
-      const range = XLSX.utils.decode_range(wsData["!ref"]);
-      for (let R = 1; R <= range.e.r; R++) {
-        const cell = wsData[XLSX.utils.encode_cell({ r: R, c: amtColIdx })];
-        if (cell) cell.z = "#,##0";
-      }
-    }
-
-    ["fraud_rate", "legit_rate"].forEach((key) => {
-      const colIdx = sheet.headers.indexOf(key);
-      if (colIdx === -1) return;
-      const range = XLSX.utils.decode_range(wsData["!ref"]);
-      for (let R = 1; R <= range.e.r; R++) {
-        const cell = wsData[XLSX.utils.encode_cell({ r: R, c: colIdx })];
-        if (cell) cell.z = '0.00"%"';
-      }
-    });
-
-    const sheetName = name.length > 31 ? name.slice(0, 31) : name;
-    XLSX.utils.book_append_sheet(wb, wsData, sheetName);
-  });
-
-  const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  const blob = new Blob([wbOut], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement("a"), {
-    href: url,
-    download: `${layanan}_report_${dateFrom}_${dateTo}.xlsx`,
-  });
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
-const exportPDF = (sheets, layanan, dateFrom, dateTo) => {
-  const layananLabel =
-    LAYANAN_OPTIONS.find((l) => l.value === layanan)?.label ?? layanan;
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>${layananLabel} Report</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-  body { font-family: 'Inter', Arial, sans-serif; color: #1a1a1a; padding: 32px; }
-  h1 { color: #dc2626; font-size: 1.4rem; margin-bottom: 4px; }
-  .meta { color: #666; font-size: .8rem; margin-bottom: 32px; }
-  .section { margin-bottom: 36px; page-break-inside: avoid; }
-  .section-title { font-size: 1rem; font-weight: 700; color: #262626;
-    border-left: 4px solid #dc2626; padding-left: 10px; margin-bottom: 12px; }
-  table { width: 100%; border-collapse: collapse; font-size: .78rem; }
-  th { background: #dc2626; color: #fff; padding: 7px 10px; text-align: left; font-weight: 600; }
-  td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; }
-  tr:nth-child(even) td { background: #fafafa; }
-  .badge-fraud { color: #dc2626; font-weight: 600; }
-  .badge-legit { color: #16a34a; font-weight: 600; }
-</style></head><body>
-<h1>📊 ${layananLabel} — Fraud Detection Report</h1>
-<p class="meta">Periode: ${dateFrom} s/d ${dateTo} &nbsp;|&nbsp;
-  Digenerate: ${new Date().toLocaleString("id-ID")}</p>
-${Object.values(sheets)
-  .map(
-    (s) => `<div class="section">
-  <div class="section-title">${s.title}</div>
-  <table>
-    <thead><tr>${s.headers
-      .map((h) => `<th>${h.replace(/_/g, " ").toUpperCase()}</th>`)
-      .join("")}</tr></thead>
-    <tbody>${s.rows
-      .map(
-        (r) =>
-          `<tr>${s.headers
-            .map((h) => {
-              const val = r[h] ?? "";
-              if (h === "amount") return `<td>${formatRp(val)}</td>`;
-              if (h === "status")
-                return `<td class="badge-${val.toLowerCase()}">${val}</td>`;
-              return `<td>${val}</td>`;
-            })
-            .join("")}</tr>`,
-      )
-      .join("")}
-    </tbody>
-  </table>
-</div>`,
-  )
-  .join("")}
-</body></html>`;
-
-  const blob = new Blob([html], { type: "text/html" });
-  const win = window.open(URL.createObjectURL(blob), "_blank");
-  if (win)
-    win.onload = () => {
-      win.focus();
-      win.print();
-    };
-};
-
+// ─── Component ────────────────────────────────────────────────────────────────
 const ReportGenerator = ({ onGenerate, onCancel }) => {
-  const [layanan, setLayanan] = useState("");
-  const [reportTypes, setReportTypes] = useState([]);
-  const [format, setFormat] = useState("PDF");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [reportType, setReportType] = useState("");
+  const [layanan, setLayanan]       = useState("");
+  const [format, setFormat]         = useState("PDF");
+  const [dateFrom, setDateFrom]     = useState("");
+  const [dateTo, setDateTo]         = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const toggleReportType = (val) => {
-    setReportTypes((prev) =>
-      prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val],
-    );
+  // Transaction advanced filters
+  const [riskLevel, setRiskLevel]         = useState("");
+  const [userAccountId, setUserAccountId] = useState("");
+  const [minAmount, setMinAmount]         = useState("");
+  const [maxAmount, setMaxAmount]         = useState("");
+  const [minRiskScore, setMinRiskScore]   = useState("");
+  const [maxRiskScore, setMaxRiskScore]   = useState("");
+
+  // Fraud Summary filters
+  const [fraudSummaryService, setFraudSummaryService] = useState("");
+
+  // Fraud Pattern filters
+  const [patternRiskLevel,  setPatternRiskLevel]  = useState("");
+  const [patternStatus,     setPatternStatus]     = useState("");
+  const [patternCategory,   setPatternCategory]   = useState("");
+
+  // Blacklist filters
+  const [blType,       setBlType]       = useState("");
+  const [blScope,      setBlScope]      = useState("");
+  const [blIsActive,   setBlIsActive]   = useState("");
+  const [blSource,     setBlSource]     = useState("");
+
+  // Activity Log filters
+  const [selectedActions, setSelectedActions] = useState(new Set());
+  const [moduleSource, setModuleSource]       = useState("");
+  const [severity, setSeverity]               = useState("");
+
+  const [generating, setGenerating] = useState(false);
+  const [errors, setErrors]         = useState({});
+  const [apiError, setApiError]     = useState(null);
+
+  const isActivityLog   = reportType === "ACTIVITY_LOG";
+  const isFraudPattern  = reportType === "FRAUD_PATTERN";
+  const isFraudSummary  = reportType === "FRAUD_DETECTION";
+  const isBlacklist     = reportType === "BLACKLIST";
+  const isMLPerformance = reportType === "ML_PERFORMANCE";
+  const isTransaction   = reportType && !isActivityLog && !isFraudPattern && !isFraudSummary && !isBlacklist && !isMLPerformance;
+  const selectedOpt    = REPORT_TYPE_OPTIONS.find((o) => o.value === reportType);
+
+  // Reset filters saat ganti tipe laporan
+  const handleReportTypeChange = (val) => {
+    setReportType(val);
+    setShowAdvanced(false);
+    // Reset semua filter opsional
+    setRiskLevel(""); setUserAccountId("");
+    setMinAmount(""); setMaxAmount("");
+    setMinRiskScore(""); setMaxRiskScore("");
+    setFraudSummaryService("");
+    setPatternRiskLevel(""); setPatternStatus(""); setPatternCategory("");
+    setBlType(""); setBlScope(""); setBlIsActive(""); setBlSource("");
+    setSelectedActions(new Set());
+    setModuleSource(""); setSeverity("");
   };
+
+  const toggleAction = (action) => {
+    setSelectedActions((prev) => {
+      const next = new Set(prev);
+      next.has(action) ? next.delete(action) : next.add(action);
+      return next;
+    });
+  };
+
+  const toggleGroupActions = (actions) => {
+    const allSelected = actions.every((a) => selectedActions.has(a));
+    setSelectedActions((prev) => {
+      const next = new Set(prev);
+      if (allSelected) actions.forEach((a) => next.delete(a));
+      else actions.forEach((a) => next.add(a));
+      return next;
+    });
+  };
+
+  // Saat ganti Module Source, bersihkan selected actions yang tidak relevan
+  const handleModuleSourceChange = (newModule) => {
+    setModuleSource(newModule);
+    if (!newModule) return; // clear filter — biarkan semua selection
+
+    const allowedGroups = MODULE_TO_GROUPS[newModule] || [];
+    const allowedActions = new Set(
+      ACTIVITY_ACTION_GROUPS
+        .filter(({ group }) => allowedGroups.includes(group))
+        .flatMap(({ actions }) => actions)
+    );
+    setSelectedActions((prev) => {
+      const next = new Set();
+      prev.forEach((a) => { if (allowedActions.has(a)) next.add(a); });
+      return next;
+    });
+  };
+
+  const hasActivityAdvanced = selectedActions.size > 0 || moduleSource || severity;
+  const hasTransactionAdvanced = riskLevel || userAccountId || minAmount || maxAmount || minRiskScore || maxRiskScore;
 
   const validate = () => {
     const errs = {};
-    if (!layanan) errs.layanan = "Pilih layanan terlebih dahulu";
-    if (reportTypes.length === 0)
-      errs.reportTypes = "Pilih minimal 1 tipe laporan";
-    if (!dateFrom) errs.dateFrom = "Tanggal mulai wajib diisi";
-    if (!dateTo) errs.dateTo = "Tanggal selesai wajib diisi";
+    if (!reportType)                errs.reportType = "Pilih tipe laporan";
+    if (isTransaction && !layanan)  errs.layanan    = "Pilih layanan terlebih dahulu";
+    if (!dateFrom)                  errs.dateFrom   = "Tanggal mulai wajib diisi";
+    if (!dateTo)                    errs.dateTo     = "Tanggal selesai wajib diisi";
     if (dateFrom && dateTo && dateFrom > dateTo)
       errs.dateTo = "Tanggal selesai harus setelah tanggal mulai";
+    if (minAmount && maxAmount && Number(minAmount) > Number(maxAmount))
+      errs.maxAmount = "Max amount harus lebih besar dari min";
+    if (minRiskScore && maxRiskScore && Number(minRiskScore) > Number(maxRiskScore))
+      errs.maxRiskScore = "Max risk score harus lebih besar dari min";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -387,20 +240,69 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
     if (!validate()) return;
 
     setGenerating(true);
-    onGenerate({ layanan, reportTypes, format, dateFrom, dateTo });
+    setApiError(null);
 
-    await new Promise((r) => setTimeout(r, 1200));
+    const beReportType = ["TRANSACTION_FRAUD", "TRANSACTION_SAFE", "TRANSACTION_REVIEW"].includes(reportType)
+      ? "TRANSACTION" : reportType;
 
-    const sheets = buildDatasets(layanan, reportTypes, dateFrom, dateTo);
+    const layananLabel = LAYANAN_OPTIONS.find((l) => l.value === layanan)?.label || "";
+    const typeLabel    = selectedOpt?.label || reportType;
+    const reportName   = isActivityLog
+      ? `Activity Log (${dateFrom} s/d ${dateTo})`
+      : `${layananLabel} — ${typeLabel} (${dateFrom} s/d ${dateTo})`;
 
-    if (format === "CSV") exportCSV(sheets, layanan, dateFrom, dateTo);
-    else if (format === "Excel") exportExcel(sheets, layanan, dateFrom, dateTo);
-    else exportPDF(sheets, layanan, dateFrom, dateTo);
+    const payload = {
+      report_name: reportName,
+      report_type: beReportType,
+      format,
+      date_from: `${dateFrom}T00:00:00`,
+      date_to:   `${dateTo}T23:59:59`,
+    };
 
-    setGenerating(false);
+    if (isTransaction) {
+      payload.service_source = layanan;
+      if (selectedOpt?.finalStatus) payload.final_status = selectedOpt.finalStatus;
+      if (riskLevel)      payload.risk_level      = riskLevel;
+      if (userAccountId)  payload.user_account_id = userAccountId.trim();
+      if (minAmount)      payload.min_amount       = Number(minAmount);
+      if (maxAmount)      payload.max_amount       = Number(maxAmount);
+      if (minRiskScore)   payload.min_risk_score   = Number(minRiskScore);
+      if (maxRiskScore)   payload.max_risk_score   = Number(maxRiskScore);
+    }
+
+    if (isFraudSummary) {
+      if (fraudSummaryService) payload.service_source = fraudSummaryService;
+    }
+
+    if (isBlacklist) {
+      if (blType)     payload.blacklist_type = blType;
+      if (blScope)    payload.service_scope  = blScope;
+      if (blSource)   payload.source         = blSource;
+      if (blIsActive !== "") payload.is_active = blIsActive === "true";
+    }
+
+    if (isFraudPattern) {
+      if (patternStatus)    payload.status       = patternStatus;
+      if (patternCategory)  payload.category     = patternCategory;
+    }
+
+    if (isActivityLog) {
+      // BE expect single action_type per request — kirim sebagai filter_criteria
+      // Kalau ada multiple selections, kirim yang pertama saja (BE belum support array untuk activity log filter)
+      if (selectedActions.size === 1) payload.action_type = [...selectedActions][0];
+      if (moduleSource) payload.module_source = moduleSource;
+      if (severity)     payload.severity      = severity;
+    }
+
+    try {
+      const report = await reportService.generateReport(payload);
+      onGenerate(report);
+    } catch (err) {
+      setApiError(err.message || "Gagal generate report. Coba lagi.");
+    } finally {
+      setGenerating(false);
+    }
   };
-
-  const selectedLayananInfo = LAYANAN_OPTIONS.find((l) => l.value === layanan);
 
   return (
     <div className="card report-generator-card">
@@ -411,460 +313,520 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
       </div>
 
       <div className="card-body">
+        {apiError && (
+          <div className="alert alert-danger d-flex align-items-center gap-2 mb-3" style={{ fontSize: ".85rem" }}>
+            <i className="bi bi-exclamation-triangle-fill"></i>{apiError}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
+          {/* TIPE LAPORAN */}
           <div className="mb-4">
-            <label
-              className="form-label fw-semibold"
-              style={{
-                fontSize: ".75rem",
-                letterSpacing: ".06em",
-                color: "#525252",
-              }}
-            >
-              <i className="bi bi-grid-1x2 me-1 text-danger"></i>LAYANAN
+            <label className="form-label" style={labelStyle}>
+              <i className="bi bi-file-earmark-bar-graph me-1 text-danger"></i>TIPE LAPORAN
             </label>
-            <div className="d-flex gap-3 flex-wrap">
-              {LAYANAN_OPTIONS.map((opt) => {
-                const active = layanan === opt.value;
+            <div className="d-flex gap-2 flex-wrap">
+              {REPORT_TYPE_OPTIONS.map((opt) => {
+                const active = reportType === opt.value;
                 return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setLayanan(opt.value)}
-                    style={{
-                      flex: "1 1 200px",
-                      padding: "1rem 1.25rem",
-                      border: active
-                        ? `2px solid ${opt.color}`
-                        : "2px solid #e5e5e5",
-                      borderRadius: "10px",
-                      background: active ? `${opt.color}08` : "white",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.875rem",
-                      transition: "all .2s",
-                      textAlign: "left",
-                    }}
+                  <button key={opt.value} type="button" onClick={() => handleReportTypeChange(opt.value)}
+                    style={{ padding: "0.5rem 1rem", border: active ? `2px solid ${opt.color}` : "2px solid #e5e5e5", borderRadius: 8, background: active ? `${opt.color}10` : "white", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: active ? 700 : 500, fontSize: ".875rem", color: active ? opt.color : "#525252", transition: "all .18s" }}
                   >
-                    <span
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 8,
-                        background: active ? opt.color : "#f5f5f5",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                        transition: "all .2s",
-                      }}
-                    >
-                      <i
-                        className={`bi bi-${opt.icon}`}
-                        style={{
-                          fontSize: "1.25rem",
-                          color: active ? "white" : "#737373",
-                        }}
-                      ></i>
-                    </span>
-                    <div>
-                      <div
-                        style={{
-                          fontWeight: 700,
-                          fontSize: ".95rem",
-                          color: active ? opt.color : "#262626",
-                        }}
-                      >
-                        {opt.label}
-                      </div>
-                      <div style={{ fontSize: ".75rem", color: "#737373" }}>
-                        {opt.desc}
-                      </div>
-                    </div>
-                    {active && (
-                      <i
-                        className="bi bi-check-circle-fill ms-auto"
-                        style={{ color: opt.color, fontSize: "1.1rem" }}
-                      ></i>
-                    )}
+                    <i className={`bi bi-${opt.icon}`} style={{ fontSize: "1rem" }}></i>
+                    {opt.label}
+                    {active && <i className="bi bi-check-circle-fill ms-1" style={{ fontSize: ".8rem" }}></i>}
                   </button>
                 );
               })}
             </div>
-            {errors.layanan && (
-              <div className="text-danger mt-1" style={{ fontSize: ".8rem" }}>
-                <i className="bi bi-exclamation-circle me-1"></i>
-                {errors.layanan}
-              </div>
-            )}
+            {errors.reportType && <div className="text-danger mt-1" style={{ fontSize: ".8rem" }}><i className="bi bi-exclamation-circle me-1"></i>{errors.reportType}</div>}
           </div>
 
-          <div className="mb-4">
-            <div className="d-flex align-items-center justify-content-between mb-2">
-              <label
-                className="form-label mb-0 fw-semibold"
-                style={{
-                  fontSize: ".75rem",
-                  letterSpacing: ".06em",
-                  color: "#525252",
-                }}
-              >
-                <i className="bi bi-list-check me-1 text-danger"></i>TIPE
-                LAPORAN
-                {reportTypes.length > 0 && (
-                  <span
-                    style={{
-                      marginLeft: 8,
-                      background: "#dc2626",
-                      color: "white",
-                      borderRadius: 99,
-                      fontSize: ".65rem",
-                      padding: "1px 7px",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {reportTypes.length} dipilih
-                  </span>
-                )}
+          {/* LAYANAN — hanya tampil untuk Transaction types */}
+          {isTransaction && (
+            <div className="mb-4">
+              <label className="form-label" style={labelStyle}>
+                <i className="bi bi-grid-1x2 me-1 text-danger"></i>LAYANAN
               </label>
-              {reportTypes.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setReportTypes([])}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#737373",
-                    fontSize: ".78rem",
-                    cursor: "pointer",
-                    padding: 0,
-                  }}
-                >
-                  <i className="bi bi-x-circle me-1"></i>Reset
-                </button>
-              )}
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
-                gap: "0.625rem",
-              }}
-            >
-              {REPORT_TYPE_OPTIONS.map((opt) => {
-                const checked = reportTypes.includes(opt.value);
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => toggleReportType(opt.value)}
-                    style={{
-                      padding: "0.75rem 1rem",
-                      border: checked
-                        ? `2px solid ${opt.color}`
-                        : "2px solid #e5e5e5",
-                      borderRadius: "8px",
-                      background: checked ? `${opt.color}0d` : "white",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      transition: "all .18s",
-                      textAlign: "left",
-                      position: "relative",
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 7,
-                        background: checked ? opt.color : "#f5f5f5",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                        transition: "all .18s",
-                      }}
-                    >
-                      <i
-                        className={`bi bi-${opt.icon}`}
-                        style={{
-                          fontSize: "1rem",
-                          color: checked ? "white" : "#a3a3a3",
-                        }}
-                      ></i>
-                    </span>
-                    <div>
-                      <div
-                        style={{
-                          fontWeight: 700,
-                          fontSize: ".85rem",
-                          color: checked ? opt.color : "#262626",
-                        }}
-                      >
-                        {opt.label}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: ".7rem",
-                          color: "#a3a3a3",
-                          lineHeight: 1.3,
-                        }}
-                      >
-                        {opt.desc}
-                      </div>
-                    </div>
-
-                    <span
-                      style={{
-                        position: "absolute",
-                        top: 8,
-                        right: 8,
-                        width: 18,
-                        height: 18,
-                        borderRadius: 4,
-                        border: checked
-                          ? `2px solid ${opt.color}`
-                          : "2px solid #d4d4d4",
-                        background: checked ? opt.color : "white",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        transition: "all .18s",
-                      }}
-                    >
-                      {checked && (
-                        <i
-                          className="bi bi-check"
-                          style={{
-                            fontSize: ".65rem",
-                            color: "white",
-                            fontWeight: 900,
-                          }}
-                        ></i>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {errors.reportTypes && (
-              <div className="text-danger mt-1" style={{ fontSize: ".8rem" }}>
-                <i className="bi bi-exclamation-circle me-1"></i>
-                {errors.reportTypes}
-              </div>
-            )}
-
-            {reportTypes.length > 0 && (
-              <div className="d-flex flex-wrap gap-1 mt-2">
-                {reportTypes.map((v) => {
-                  const opt = REPORT_TYPE_OPTIONS.find((o) => o.value === v);
+              <div className="d-flex gap-3 flex-wrap">
+                {LAYANAN_OPTIONS.map((opt) => {
+                  const active = layanan === opt.value;
                   return (
-                    <span
-                      key={v}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 4,
-                        padding: "2px 10px 2px 6px",
-                        background: `${opt.color}15`,
-                        border: `1px solid ${opt.color}40`,
-                        borderRadius: 99,
-                        fontSize: ".72rem",
-                        color: opt.color,
-                        fontWeight: 600,
-                      }}
+                    <button key={opt.value} type="button" onClick={() => setLayanan(opt.value)}
+                      style={{ flex: "1 1 200px", padding: "1rem 1.25rem", border: active ? `2px solid ${opt.color}` : "2px solid #e5e5e5", borderRadius: 10, background: active ? `${opt.color}08` : "white", cursor: "pointer", display: "flex", alignItems: "center", gap: ".875rem", transition: "all .2s", textAlign: "left" }}
                     >
-                      <i
-                        className={`bi bi-${opt.icon}`}
-                        style={{ fontSize: ".65rem" }}
-                      ></i>
-                      {opt.label}
-                    </span>
+                      <span style={{ width: 40, height: 40, borderRadius: 9, background: active ? `${opt.color}15` : "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className={`bi bi-${opt.icon}`} style={{ fontSize: "1.15rem", color: active ? opt.color : "#737373" }}></i>
+                      </span>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: ".9rem", color: active ? opt.color : "#262626" }}>{opt.label}</div>
+                        <div style={{ fontSize: ".75rem", color: "#737373", marginTop: 2 }}>{opt.desc}</div>
+                      </div>
+                    </button>
                   );
                 })}
               </div>
-            )}
-          </div>
+              {errors.layanan && <div className="text-danger mt-1" style={{ fontSize: ".8rem" }}><i className="bi bi-exclamation-circle me-1"></i>{errors.layanan}</div>}
+            </div>
+          )}
 
-          <div className="row g-3 mb-4">
+          {/* TANGGAL */}
+          <div className="row g-3 mb-2">
             <div className="col-md-6">
-              <label
-                className="form-label fw-semibold"
-                style={{
-                  fontSize: ".75rem",
-                  letterSpacing: ".06em",
-                  color: "#525252",
-                }}
-              >
-                <i className="bi bi-calendar-range me-1 text-danger"></i>TANGGAL
-                MULAI
+              <label className="form-label" style={labelStyle}>
+                <i className="bi bi-calendar-range me-1 text-danger"></i>TANGGAL MULAI
               </label>
-              <input
-                type="date"
-                className="form-control"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-              />
-              {errors.dateFrom && (
-                <div className="text-danger mt-1" style={{ fontSize: ".8rem" }}>
-                  <i className="bi bi-exclamation-circle me-1"></i>
-                  {errors.dateFrom}
-                </div>
-              )}
+              <input type="date" className="form-control" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              {errors.dateFrom && <div className="text-danger mt-1" style={{ fontSize: ".8rem" }}><i className="bi bi-exclamation-circle me-1"></i>{errors.dateFrom}</div>}
             </div>
             <div className="col-md-6">
-              <label
-                className="form-label fw-semibold"
-                style={{
-                  fontSize: ".75rem",
-                  letterSpacing: ".06em",
-                  color: "#525252",
-                }}
-              >
-                <i className="bi bi-calendar-check me-1 text-danger"></i>TANGGAL
-                SELESAI
+              <label className="form-label" style={labelStyle}>
+                <i className="bi bi-calendar-check me-1 text-danger"></i>TANGGAL SELESAI
               </label>
-              <input
-                type="date"
-                className="form-control"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-              />
-              {errors.dateTo && (
-                <div className="text-danger mt-1" style={{ fontSize: ".8rem" }}>
-                  <i className="bi bi-exclamation-circle me-1"></i>
-                  {errors.dateTo}
-                </div>
-              )}
+              <input type="date" className="form-control" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
+              {errors.dateTo && <div className="text-danger mt-1" style={{ fontSize: ".8rem" }}><i className="bi bi-exclamation-circle me-1"></i>{errors.dateTo}</div>}
             </div>
           </div>
+          {isMLPerformance ? (
+            <div style={{ fontSize: ".75rem", color: "#6b7280", marginBottom: "1rem", display: "flex", alignItems: "center", gap: ".35rem" }}>
+              <i className="bi bi-info-circle"></i>
+              Tanggal hanya memfilter <strong>Retrain History</strong>. Info model & fitur selalu menampilkan data terkini.
+            </div>
+          ) : (
+            <div className="mb-2"></div>
+          )}
 
+          {/* FORMAT */}
           <div className="mb-4">
-            <label
-              className="form-label fw-semibold"
-              style={{
-                fontSize: ".75rem",
-                letterSpacing: ".06em",
-                color: "#525252",
-              }}
-            >
-              <i className="bi bi-filetype-pdf me-1 text-danger"></i>FORMAT
-              EXPORT
+            <label className="form-label" style={labelStyle}>
+              <i className="bi bi-filetype-pdf me-1 text-danger"></i>FORMAT EXPORT
             </label>
             <div className="d-flex gap-2 flex-wrap">
               {FORMAT_OPTIONS.map((opt) => {
                 const active = format === opt.value;
                 return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setFormat(opt.value)}
-                    style={{
-                      padding: "0.6rem 1.25rem",
-                      border: active
-                        ? `2px solid ${opt.color}`
-                        : "2px solid #e5e5e5",
-                      borderRadius: "8px",
-                      background: active ? `${opt.color}10` : "white",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem",
-                      fontWeight: active ? 700 : 500,
-                      fontSize: ".875rem",
-                      color: active ? opt.color : "#525252",
-                      transition: "all .18s",
-                    }}
+                  <button key={opt.value} type="button" onClick={() => setFormat(opt.value)}
+                    style={{ padding: "0.6rem 1.25rem", border: active ? `2px solid ${opt.color}` : "2px solid #e5e5e5", borderRadius: 8, background: active ? `${opt.color}10` : "white", cursor: "pointer", display: "flex", alignItems: "center", gap: ".5rem", fontWeight: active ? 700 : 500, fontSize: ".875rem", color: active ? opt.color : "#525252", transition: "all .18s" }}
                   >
-                    <i
-                      className={`bi bi-${opt.icon}`}
-                      style={{ fontSize: "1rem" }}
-                    ></i>
+                    <i className={`bi bi-${opt.icon}`} style={{ fontSize: "1rem" }}></i>
                     {opt.value}
-                    {active && (
-                      <i
-                        className="bi bi-check-circle-fill ms-1"
-                        style={{ fontSize: ".8rem" }}
-                      ></i>
-                    )}
+                    {active && <i className="bi bi-check-circle-fill ms-1" style={{ fontSize: ".8rem" }}></i>}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {layanan && reportTypes.length > 0 && dateFrom && dateTo && (
-            <div
-              style={{
-                padding: "0.875rem 1rem",
-                background: "#fef2f2",
-                border: "1px solid #fecaca",
-                borderRadius: "8px",
-                marginBottom: "1.25rem",
-                fontSize: ".82rem",
-                color: "#991b1b",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.625rem",
-              }}
-            >
-              <i
-                className="bi bi-info-circle-fill"
-                style={{ fontSize: "1rem", flexShrink: 0 }}
-              ></i>
+          {/* ── ADVANCED FILTERS: TRANSACTION ── */}
+          {isTransaction && (
+            <div className="mb-4">
+              <button type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                style={{ display: "flex", alignItems: "center", gap: ".5rem", background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: ".85rem", fontWeight: 600, color: hasTransactionAdvanced ? "#dc2626" : "#737373" }}
+              >
+                <i className={`bi bi-${showAdvanced ? "chevron-up" : "sliders"}`}></i>
+                Advanced Filters
+                {hasTransactionAdvanced && (
+                  <span style={{ background: "#dc2626", color: "#fff", borderRadius: 20, padding: "1px 8px", fontSize: ".7rem" }}>Aktif</span>
+                )}
+              </button>
+
+              {showAdvanced && (
+                <div style={{ marginTop: "1rem", padding: "1rem", background: "#fafafa", borderRadius: 10, border: "1px solid #e5e5e5" }}>
+                  <div className="row g-3">
+                    {/* Risk Level */}
+                    <div className="col-md-6">
+                      <label className="form-label" style={labelStyle}>RISK LEVEL</label>
+                      <div className="d-flex gap-2 flex-wrap">
+                        {RISK_LEVEL_OPTIONS.map((lvl) => {
+                          const active = riskLevel === lvl;
+                          return (
+                            <button key={lvl} type="button"
+                              onClick={() => setRiskLevel(active ? "" : lvl)}
+                              style={{ padding: "4px 12px", border: active ? `2px solid ${RISK_LEVEL_COLORS[lvl]}` : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? `${RISK_LEVEL_COLORS[lvl]}15` : "white", cursor: "pointer", fontSize: ".78rem", fontWeight: active ? 700 : 500, color: active ? RISK_LEVEL_COLORS[lvl] : "#525252" }}
+                            >{lvl}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* User Account ID */}
+                    <div className="col-md-6">
+                      <label className="form-label" style={labelStyle}>USER ACCOUNT ID</label>
+                      <input type="text" placeholder="Contoh: user999" style={inputStyle} value={userAccountId} onChange={(e) => setUserAccountId(e.target.value)} />
+                    </div>
+
+                    {/* Amount Range */}
+                    <div className="col-md-3">
+                      <label className="form-label" style={labelStyle}>MIN AMOUNT (Rp)</label>
+                      <input type="number" placeholder="50000" style={inputStyle} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} min={0} />
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label" style={labelStyle}>MAX AMOUNT (Rp)</label>
+                      <input type="number" placeholder="10000000" style={inputStyle} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} min={0} />
+                      {errors.maxAmount && <div className="text-danger mt-1" style={{ fontSize: ".75rem" }}>{errors.maxAmount}</div>}
+                    </div>
+
+                    {/* Risk Score Range */}
+                    <div className="col-md-3">
+                      <label className="form-label" style={labelStyle}>MIN RISK SCORE</label>
+                      <input type="number" placeholder="0" style={inputStyle} value={minRiskScore} onChange={(e) => setMinRiskScore(e.target.value)} min={0} max={100} />
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label" style={labelStyle}>MAX RISK SCORE</label>
+                      <input type="number" placeholder="100" style={inputStyle} value={maxRiskScore} onChange={(e) => setMaxRiskScore(e.target.value)} min={0} max={100} />
+                      {errors.maxRiskScore && <div className="text-danger mt-1" style={{ fontSize: ".75rem" }}>{errors.maxRiskScore}</div>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── FILTERS: BLACKLIST ── */}
+          {isBlacklist && (
+            <div className="mb-4">
+              <label className="form-label" style={labelStyle}>
+                <i className="bi bi-funnel me-1 text-danger"></i>FILTER BLACKLIST
+              </label>
+              <div style={{ padding: "1rem", background: "#fafafa", borderRadius: 10, border: "1px solid #e5e5e5" }}>
+                <div className="row g-3">
+                  {/* Type */}
+                  <div className="col-12">
+                    <label className="form-label" style={{ ...labelStyle, fontSize: ".7rem" }}>TYPE</label>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {["", "USER_ID", "CUSTOMER_ID", "ACCOUNT_NUMBER", "IP_ADDRESS", "TERMINAL_ID", "MERCHANT_ID", "DEVICE_ID"].map((t) => {
+                        const active = blType === t;
+                        return (
+                          <button key={t} type="button" onClick={() => setBlType(t)}
+                            style={{ padding: "3px 12px", border: active ? "1.5px solid #ea580c" : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? "#fff7ed" : "white", cursor: "pointer", fontSize: ".72rem", fontWeight: active ? 700 : 400, color: active ? "#ea580c" : "#525252" }}
+                          >{t || "Semua"}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Service Scope */}
+                  <div className="col-md-4">
+                    <label className="form-label" style={{ ...labelStyle, fontSize: ".7rem" }}>SERVICE SCOPE</label>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {[
+                        { value: "",         label: "Semua",    color: "#6b7280" },
+                        { value: "ALL",      label: "ALL",      color: "#6b7280" },
+                        { value: "AGENUSA",  label: "AGENUSA",  color: "#dc2626" },
+                        { value: "NUSABILL", label: "NUSABILL", color: "#2563eb" },
+                      ].map((opt) => {
+                        const active = blScope === opt.value;
+                        return (
+                          <button key={opt.value} type="button" onClick={() => setBlScope(opt.value)}
+                            style={{ padding: "3px 12px", border: active ? `1.5px solid ${opt.color}` : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? `${opt.color}12` : "white", cursor: "pointer", fontSize: ".75rem", fontWeight: active ? 700 : 400, color: active ? opt.color : "#525252" }}
+                          >{opt.label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Status Active */}
+                  <div className="col-md-4">
+                    <label className="form-label" style={{ ...labelStyle, fontSize: ".7rem" }}>STATUS</label>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {[
+                        { value: "",       label: "Semua",    color: "#6b7280" },
+                        { value: "true",   label: "Active",   color: "#16a34a" },
+                        { value: "false",  label: "Inactive", color: "#9ca3af" },
+                      ].map((opt) => {
+                        const active = blIsActive === opt.value;
+                        return (
+                          <button key={opt.value} type="button" onClick={() => setBlIsActive(opt.value)}
+                            style={{ padding: "3px 12px", border: active ? `1.5px solid ${opt.color}` : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? `${opt.color}12` : "white", cursor: "pointer", fontSize: ".75rem", fontWeight: active ? 700 : 400, color: active ? opt.color : "#525252" }}
+                          >{opt.label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Source */}
+                  <div className="col-md-4">
+                    <label className="form-label" style={{ ...labelStyle, fontSize: ".7rem" }}>SOURCE</label>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {[
+                        { value: "",        label: "Semua",  color: "#6b7280" },
+                        { value: "MANUAL",  label: "Manual", color: "#7c3aed" },
+                        { value: "AUTO",    label: "Auto",   color: "#0891b2" },
+                      ].map((opt) => {
+                        const active = blSource === opt.value;
+                        return (
+                          <button key={opt.value} type="button" onClick={() => setBlSource(opt.value)}
+                            style={{ padding: "3px 12px", border: active ? `1.5px solid ${opt.color}` : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? `${opt.color}12` : "white", cursor: "pointer", fontSize: ".75rem", fontWeight: active ? 700 : 400, color: active ? opt.color : "#525252" }}
+                          >{opt.label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── FILTERS: FRAUD SUMMARY ── */}
+          {isFraudSummary && (
+            <div className="mb-4">
+              <label className="form-label" style={labelStyle}>
+                <i className="bi bi-grid-1x2 me-1 text-danger"></i>
+                FILTER LAYANAN
+                <span style={{ fontWeight: 400, color: "#9ca3af", textTransform: "none", letterSpacing: 0, marginLeft: 6 }}>— opsional, kosongkan untuk semua layanan</span>
+              </label>
+              <div className="d-flex gap-2 flex-wrap">
+                {[
+                  { value: "",         label: "Semua Layanan", color: "#6b7280" },
+                  { value: "AGENUSA",  label: "Agenusa",       color: "#dc2626" },
+                  { value: "NUSABILL", label: "Nusabill",      color: "#2563eb" },
+                ].map((opt) => {
+                  const active = fraudSummaryService === opt.value;
+                  return (
+                    <button key={opt.value} type="button" onClick={() => setFraudSummaryService(opt.value)}
+                      style={{ padding: "6px 16px", border: active ? `2px solid ${opt.color}` : "2px solid #e5e5e5", borderRadius: 20, background: active ? `${opt.color}10` : "white", cursor: "pointer", fontSize: ".85rem", fontWeight: active ? 700 : 500, color: active ? opt.color : "#525252" }}
+                    >
+                      {active && <i className="bi bi-check-circle-fill me-1" style={{ fontSize: ".75rem" }}></i>}
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── FILTERS: FRAUD PATTERN ── */}
+          {isFraudPattern && (
+            <div className="mb-4">
+              <label className="form-label" style={labelStyle}>
+                <i className="bi bi-funnel me-1 text-danger"></i>FILTER PATTERN
+              </label>
+              <div style={{ padding: "1rem", background: "#fafafa", borderRadius: 10, border: "1px solid #e5e5e5" }}>
+                <div className="row g-3">
+                  {/* Risk Level */}
+                  <div className="col-md-4">
+                    <label className="form-label" style={{ ...labelStyle, fontSize: ".7rem" }}>RISK LEVEL</label>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {[
+                        { value: "",       label: "Semua",  color: "#6b7280" },
+                        { value: "high",   label: "High",   color: "#dc2626" },
+                        { value: "medium", label: "Medium", color: "#d97706" },
+                        { value: "low",    label: "Low",    color: "#2563eb" },
+                      ].map((opt) => {
+                        const active = patternRiskLevel === opt.value;
+                        return (
+                          <button key={opt.value} type="button" onClick={() => setPatternRiskLevel(opt.value)}
+                            style={{ padding: "3px 12px", border: active ? `1.5px solid ${opt.color}` : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? `${opt.color}12` : "white", cursor: "pointer", fontSize: ".75rem", fontWeight: active ? 700 : 400, color: active ? opt.color : "#525252" }}
+                          >{opt.label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div className="col-md-4">
+                    <label className="form-label" style={{ ...labelStyle, fontSize: ".7rem" }}>STATUS</label>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {[
+                        { value: "",         label: "Semua",    color: "#6b7280" },
+                        { value: "active",   label: "Active",   color: "#16a34a" },
+                        { value: "inactive", label: "Inactive", color: "#9ca3af" },
+                      ].map((opt) => {
+                        const active = patternStatus === opt.value;
+                        return (
+                          <button key={opt.value} type="button" onClick={() => setPatternStatus(opt.value)}
+                            style={{ padding: "3px 12px", border: active ? `1.5px solid ${opt.color}` : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? `${opt.color}12` : "white", cursor: "pointer", fontSize: ".75rem", fontWeight: active ? 700 : 400, color: active ? opt.color : "#525252" }}
+                          >{opt.label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Category */}
+                  <div className="col-md-4">
+                    <label className="form-label" style={{ ...labelStyle, fontSize: ".7rem" }}>CATEGORY</label>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {["", "TRANSACTION", "CREDENTIAL", "BEHAVIORAL", "LOCATION", "NETWORK", "CHAIN"].map((cat) => {
+                        const active = patternCategory === cat;
+                        return (
+                          <button key={cat} type="button" onClick={() => setPatternCategory(cat)}
+                            style={{ padding: "3px 12px", border: active ? "1.5px solid #7c3aed" : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? "#f5f3ff" : "white", cursor: "pointer", fontSize: ".72rem", fontWeight: active ? 700 : 400, color: active ? "#7c3aed" : "#525252" }}
+                          >{cat || "Semua"}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── ADVANCED FILTERS: ACTIVITY LOG ── */}
+          {isActivityLog && (
+            <div className="mb-4">
+              <button type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                style={{ display: "flex", alignItems: "center", gap: ".5rem", background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: ".85rem", fontWeight: 600, color: hasActivityAdvanced ? "#6366f1" : "#737373" }}
+              >
+                <i className={`bi bi-${showAdvanced ? "chevron-up" : "sliders"}`}></i>
+                Filter Activity Log
+                {hasActivityAdvanced && (
+                  <span style={{ background: "#6366f1", color: "#fff", borderRadius: 20, padding: "1px 8px", fontSize: ".7rem" }}>
+                    {selectedActions.size + (moduleSource ? 1 : 0) + (severity ? 1 : 0)} aktif
+                  </span>
+                )}
+              </button>
+
+              {showAdvanced && (
+                <div style={{ marginTop: "1rem", padding: "1rem", background: "#fafafa", borderRadius: 10, border: "1px solid #e5e5e5" }}>
+
+                  <div className="row g-3 mb-3">
+                    {/* Module Source */}
+                    <div className="col-md-6">
+                      <label className="form-label" style={labelStyle}>MODULE SOURCE</label>
+                      <div className="d-flex gap-2 flex-wrap">
+                        {MODULE_OPTIONS.map((m) => {
+                          const active = moduleSource === m;
+                          return (
+                            <button key={m} type="button" onClick={() => handleModuleSourceChange(active ? "" : m)}
+                              style={{ padding: "4px 12px", border: active ? "1.5px solid #6366f1" : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? "#eef2ff" : "white", cursor: "pointer", fontSize: ".75rem", fontWeight: active ? 700 : 400, color: active ? "#6366f1" : "#525252" }}
+                            >{m}</button>
+                          );
+                        })}
+                      </div>
+                      {moduleSource && (
+                        <div style={{ fontSize: ".72rem", color: "#6366f1", marginTop: 4 }}>
+                          <i className="bi bi-funnel me-1"></i>
+                          Action Type di bawah otomatis difilter sesuai modul ini
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Severity */}
+                    <div className="col-md-6">
+                      <label className="form-label" style={labelStyle}>
+                        SEVERITY MINIMUM
+                        <span style={{ fontWeight: 400, color: "#9ca3af", textTransform: "none", letterSpacing: 0, marginLeft: 4 }}>— ke atas</span>
+                      </label>
+                      <div className="d-flex gap-2 flex-wrap">
+                        {SEVERITY_OPTIONS.map(({ value, color }) => {
+                          const active = severity === value;
+                          return (
+                            <button key={value} type="button" onClick={() => setSeverity(active ? "" : value)}
+                              style={{ padding: "4px 12px", border: active ? `1.5px solid ${color}` : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? `${color}12` : "white", cursor: "pointer", fontSize: ".75rem", fontWeight: active ? 700 : 400, color: active ? color : "#525252" }}
+                              title={`Tampilkan ${value} ke atas`}
+                            >
+                              {value}
+                              {active && <span style={{ marginLeft: 4, fontSize: ".65rem" }}>+</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {severity && (
+                        <div style={{ fontSize: ".72rem", color: "#6b7280", marginTop: 4 }}>
+                          <i className="bi bi-info-circle me-1"></i>
+                          Menampilkan: {SEVERITY_OPTIONS.slice(SEVERITY_OPTIONS.findIndex(s => s.value === severity)).map(s => s.value).join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action Type Multi-select per group */}
+                  <div className="mb-3">
+                    <label className="form-label d-flex align-items-center justify-content-between" style={labelStyle}>
+                      <span>
+                        ACTION TYPE <span style={{ fontWeight: 400, color: "#9ca3af", textTransform: "none", letterSpacing: 0 }}>— pilih satu atau lebih</span>
+                        {moduleSource && (
+                          <span style={{ marginLeft: 6, fontWeight: 400, color: "#6366f1", textTransform: "none", letterSpacing: 0, fontSize: ".72rem" }}>
+                            (difilter: {moduleSource})
+                          </span>
+                        )}
+                      </span>
+                      {selectedActions.size > 0 && (
+                        <button type="button" onClick={() => setSelectedActions(new Set())}
+                          style={{ background: "none", border: "none", cursor: "pointer", fontSize: ".75rem", color: "#dc2626", padding: 0 }}
+                        >
+                          <i className="bi bi-x-circle me-1"></i>Reset ({selectedActions.size})
+                        </button>
+                      )}
+                    </label>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: ".75rem" }}>
+                      {ACTIVITY_ACTION_GROUPS
+                        .filter(({ group }) => !moduleSource || (MODULE_TO_GROUPS[moduleSource] || []).includes(group))
+                        .map(({ group, color, icon, actions }) => {
+                        const allSelected  = actions.every((a) => selectedActions.has(a));
+                        const someSelected = actions.some((a) => selectedActions.has(a));
+                        return (
+                          <div key={group}>
+                            {/* Group header */}
+                            <div style={{ display: "flex", alignItems: "center", gap: ".5rem", marginBottom: ".35rem" }}>
+                              <button type="button"
+                                onClick={() => toggleGroupActions(actions)}
+                                style={{ display: "flex", alignItems: "center", gap: ".35rem", background: allSelected ? `${color}10` : someSelected ? `${color}06` : "#f5f5f5", border: `1.5px solid ${allSelected || someSelected ? color : "#e5e5e5"}`, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: ".75rem", fontWeight: 700, color: allSelected || someSelected ? color : "#737373" }}
+                              >
+                                <i className={`bi bi-${icon}`}></i>
+                                {group}
+                                {someSelected && !allSelected && <span style={{ fontSize: ".65rem" }}>({actions.filter((a) => selectedActions.has(a)).length}/{actions.length})</span>}
+                                {allSelected && <i className="bi bi-check-circle-fill ms-1" style={{ fontSize: ".7rem" }}></i>}
+                              </button>
+                            </div>
+
+                            {/* Action chips */}
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: ".35rem", paddingLeft: ".5rem" }}>
+                              {actions.map((action) => {
+                                const active = selectedActions.has(action);
+                                return (
+                                  <button key={action} type="button" onClick={() => toggleAction(action)}
+                                    style={{ padding: "3px 10px", border: active ? `1.5px solid ${color}` : "1.5px solid #e5e5e5", borderRadius: 20, background: active ? `${color}12` : "white", cursor: "pointer", fontSize: ".72rem", fontWeight: active ? 700 : 400, color: active ? color : "#525252", transition: "all .15s" }}
+                                  >
+                                    {action.replace(/_/g, " ")}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Summary preview */}
+          {reportType && dateFrom && dateTo && (isActivityLog || isFraudPattern || isFraudSummary || isBlacklist || isMLPerformance || layanan) && (
+            <div style={{ padding: ".875rem 1rem", background: isActivityLog ? "#eef2ff" : isFraudPattern ? "#f5f3ff" : isFraudSummary ? "#f0f9ff" : isBlacklist ? "#fff7ed" : isMLPerformance ? "#f0fdfa" : "#fef2f2", border: `1px solid ${isActivityLog ? "#c7d2fe" : isFraudPattern ? "#ddd6fe" : isFraudSummary ? "#bae6fd" : isBlacklist ? "#fed7aa" : isMLPerformance ? "#99f6e4" : "#fecaca"}`, borderRadius: 8, marginBottom: "1.25rem", fontSize: ".82rem", color: isActivityLog ? "#4338ca" : isFraudPattern ? "#6d28d9" : isFraudSummary ? "#0369a1" : isBlacklist ? "#c2410c" : isMLPerformance ? "#0f766e" : "#991b1b", display: "flex", alignItems: "center", gap: ".625rem" }}>
+              <i className="bi bi-info-circle-fill" style={{ fontSize: "1rem", flexShrink: 0 }}></i>
               <span>
-                Akan generate <strong>{reportTypes.length} dataset</strong> dari{" "}
-                <strong>
-                  {LAYANAN_OPTIONS.find((l) => l.value === layanan)?.label}
-                </strong>{" "}
-                (
-                {reportTypes
-                  .map(
-                    (v) =>
-                      REPORT_TYPE_OPTIONS.find((o) => o.value === v)?.label,
-                  )
-                  .join(", ")}
-                ) dalam format <strong>{format}</strong> — periode{" "}
-                <strong>
-                  {dateFrom} s/d {dateTo}
-                </strong>
+                {isActivityLog ? (
+                  <>Akan generate <strong>Activity Log</strong> format <strong>{format}</strong> — periode <strong>{dateFrom} s/d {dateTo}</strong>{selectedActions.size > 0 && <> · <strong>{selectedActions.size}</strong> action type dipilih</>}</>
+                ) : isFraudPattern ? (
+                  <>Akan generate <strong>Pattern List Report</strong> format <strong>{format}</strong>{patternRiskLevel && <> · Risk: <strong>{patternRiskLevel}</strong></>}{patternStatus && <> · Status: <strong>{patternStatus}</strong></>}</>
+                ) : isFraudSummary ? (
+                  <>Akan generate <strong>Fraud Summary Report</strong> format <strong>{format}</strong> — periode <strong>{dateFrom} s/d {dateTo}</strong> · Layanan: <strong>{fraudSummaryService || "Semua"}</strong></>
+                ) : isBlacklist ? (
+                  <>Akan generate <strong>Blacklist Report</strong> format <strong>{format}</strong>{blType && <> · Type: <strong>{blType}</strong></>}{blScope && <> · Scope: <strong>{blScope}</strong></>}{blIsActive !== "" && <> · Status: <strong>{blIsActive === "true" ? "Active" : "Inactive"}</strong></>}</>
+                ) : isMLPerformance ? (
+                  <>Akan generate <strong>ML Performance Report</strong> format <strong>{format}</strong> — info model & fitur (snapshot terkini) + retrain history periode <strong>{dateFrom} s/d {dateTo}</strong></>
+                ) : (
+                  <>Akan generate laporan <strong>{selectedOpt?.label}</strong> dari <strong>{LAYANAN_OPTIONS.find((l) => l.value === layanan)?.label}</strong> format <strong>{format}</strong> — periode <strong>{dateFrom} s/d {dateTo}</strong></>
+                )}
               </span>
             </div>
           )}
 
           <div className="d-flex gap-2 justify-content-end">
-            <button
-              type="button"
-              className="btn btn-outline-secondary"
-              onClick={onCancel}
-              disabled={generating}
-            >
+            <button type="button" className="btn btn-outline-secondary" onClick={onCancel} disabled={generating}>
               <i className="bi bi-x-circle me-1"></i>Cancel
             </button>
-            <button
-              type="submit"
-              className="btn btn-danger"
-              disabled={generating}
-            >
-              {generating ? (
-                <>
-                  <span
-                    className="spinner-border spinner-border-sm me-1"
-                    role="status"
-                  ></span>
-                  Generating…
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-file-earmark-arrow-down me-1"></i>
-                  Generate Report
-                </>
-              )}
+            <button type="submit" className="btn btn-danger" disabled={generating}>
+              {generating
+                ? <><span className="spinner-border spinner-border-sm me-1" role="status"></span>Generating…</>
+                : <><i className="bi bi-file-earmark-arrow-down me-1"></i>Generate Report</>
+              }
             </button>
           </div>
         </form>

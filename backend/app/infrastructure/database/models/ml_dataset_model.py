@@ -1,6 +1,6 @@
 # app/infrastructure/database/models/ml_dataset_model.py
 
-from sqlalchemy import Column, Integer, String, BigInteger, Boolean, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Text, BigInteger, Boolean, DateTime, ForeignKey, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.infrastructure.database.base import Base
@@ -11,7 +11,7 @@ class MLDataset(Base):
     id = Column(Integer, primary_key=True)
     domain = Column(String(50), nullable=False)            
     file_name = Column(String(255), nullable=False)        
-    file_path = Column(String(255), nullable=False)        
+    file_path = Column(Text, nullable=False)        
     
     checksum_sha256 = Column(String(64), unique=True, nullable=False)
     

@@ -13,6 +13,9 @@ from app.application.services.transaction_feature_snapshot_service import (
 from app.infrastructure.ml.scoring import score_transaction_snapshot
 from app.application.services.alert_service import create_alert
 from app.infrastructure.database.session import SessionLocal
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 # =====================================================================
 # CONCURRENCY LIMITER
@@ -73,6 +76,7 @@ class MLRealtimeService:
     # Fungsi ini BLOCKING karena scikit-learn Isolation Forest tidak support async.
     # JANGAN panggil langsung dari async context! Gunakan asyncio.to_thread().
 
+    @log_performance(label="MLRealtime.run_ml_scoring_sync")
     def _run_ml_scoring_sync(
         self,
         transaction_id: int,
@@ -99,6 +103,7 @@ class MLRealtimeService:
         transaction = self.transaction_repository.get_by_id(transaction_id)
 
         if not transaction:
+            logger.warning(f"[ML_REALTIME] tx_id={transaction_id} tidak ditemukan — skip scoring")
             return None
 
         # ===== BUILD SNAPSHOT =====
@@ -106,6 +111,7 @@ class MLRealtimeService:
         snapshot = build_transaction_snapshot(self.db, transaction_id)
 
         if not snapshot:
+            logger.warning(f"[ML_REALTIME] tx_id={transaction_id} gagal build snapshot — skip scoring")
             return None
 
         # ===== RUN ML SCORING (BLOCKING) =====
@@ -147,7 +153,7 @@ class MLRealtimeService:
             return scoring_result
 
         except Exception as e:
-            print(f"❌ ML scoring error untuk tx {transaction_id}: {str(e)}")
+            logger.error(f"[ML_REALTIME] tx_id={transaction_id} ML scoring error — {type(e).__name__}: {e}")
             return None
 
     def process_transaction_ml(self, transaction_id: int):
@@ -160,9 +166,9 @@ class MLRealtimeService:
         Untuk production real-time, gunakan:
             await ml_service.process_transaction_ml_async(transaction_id)
         """
-        print(
-            f"⚠️  WARNING: process_transaction_ml() is blocking and deprecated. "
-            f"Use process_transaction_ml_async() instead."
+        logger.warning(
+            f"[ML_REALTIME] process_transaction_ml() is blocking and deprecated. "
+            f"Use process_transaction_ml_async() instead. tx_id={transaction_id}"
         )
 
         # Run async function dalam synchronous context
@@ -176,6 +182,7 @@ class MLRealtimeService:
             # fallback ke sync version
             self._process_transaction_ml_sync(transaction_id)
 
+    @log_performance(label="MLRealtime.process_transaction_ml_async")
     async def process_transaction_ml_async(self, transaction_id: int) -> dict[str, Any]:
         """
         Async ML processing orchestration (RECOMMENDED).
@@ -195,20 +202,20 @@ class MLRealtimeService:
         transaction = self.transaction_repository.get_by_id(transaction_id)
 
         if not transaction:
+            logger.warning(f"[ML_REALTIME] tx_id={transaction_id} tidak ditemukan — status=not_found")
             return {
                 "transaction_id": transaction_id,
                 "status": "not_found",
             }
 
         # ===== RUN ML SCORING (ASYNC, NON-BLOCKING) =====
-        print(f"🔄 Starting async ML scoring untuk tx {transaction_id}...")
+        logger.info(f"[ML_REALTIME] tx_id={transaction_id} mulai async ML scoring")
 
         scoring_result = await self._run_ml_scoring(transaction_id)
-        print("=== ML SCORING RESULT ===")
-        print(scoring_result)
-        print("========================")
+        logger.debug(f"[ML_REALTIME] tx_id={transaction_id} scoring_result={scoring_result}")
 
         if not scoring_result:
+            logger.error(f"[ML_REALTIME] tx_id={transaction_id} ML scoring gagal — status=ml_error")
             return {
                 "transaction_id": transaction_id,
                 "status": "ml_error",
@@ -251,7 +258,7 @@ class MLRealtimeService:
 
         if is_anomaly:
             try:
-# 🔍 Cek apakah alert untuk transaksi ini sudah dibuat oleh engine lain
+                # 🔍 Cek apakah alert untuk transaksi ini sudah dibuat oleh engine lain
                 existing_alert = (
                     self.db.query(FraudAlert)
                     .filter(FraudAlert.transaction_id == transaction.id)
@@ -262,7 +269,7 @@ class MLRealtimeService:
                     # Jika sudah ada (misal dari Rule/Pattern), naikkan level menjadi COMBINED_ML
                     existing_alert.alert_type = "COMBINED_ML"
                     existing_alert.title = "Fraud & ML Anomaly Detected"
-                    print(f"🔄 Alert updated to COMBINED_ML untuk tx {transaction_id}")
+                    logger.info(f"[ML_REALTIME] tx_id={transaction_id} alert di-upgrade ke COMBINED_ML")
                 else:
                     # Jika belum ada alert sama sekali, buat alert baru khusus ML
                     create_alert(
@@ -270,7 +277,7 @@ class MLRealtimeService:
                         trx=transaction,
                         background_tasks=None
                     )
-                    print(f"🚨 New ML Alert escalated untuk tx {transaction_id}")
+                    logger.info(f"[ML_REALTIME] tx_id={transaction_id} alert ML baru di-escalate")
 
                 existing_breakdown.update(
                     {
@@ -281,28 +288,29 @@ class MLRealtimeService:
                     }
                 )
 
-                print(f"🚨 Alert escalated untuk tx {transaction_id}")
-
             except Exception as e:
                 existing_breakdown.update(
                     {
                         "alert_escalation_error": str(e),
                     }
                 )
-                print(f"❌ Alert escalation error: {str(e)}")
+                logger.error(f"[ML_REALTIME] tx_id={transaction_id} alert escalation error — {type(e).__name__}: {e}")
 
-        print("=== BREAKDOWN BEFORE COMMIT ===")
-        print(existing_breakdown)
-        print("==============================")
-        print("=== BEFORE COMMIT ===")
-        print("anomaly_score:", transaction.anomaly_score)
-        print("is_flagged_ml:", transaction.is_flagged_ml)
-        print("score_breakdown:", transaction.score_breakdown)
-        print("=====================")
+        transaction.score_breakdown = existing_breakdown
+
+        logger.debug(
+            f"[ML_REALTIME] tx_id={transaction_id} before commit — "
+            f"anomaly_score={transaction.anomaly_score} is_flagged_ml={transaction.is_flagged_ml} "
+            f"score_breakdown={existing_breakdown}"
+        )
+
         self.db.commit()
         self.db.refresh(transaction)
 
-        print(f"✅ ML processing completed untuk tx {transaction_id}: score={ml_score:.4f}, anomaly={is_anomaly}")
+        logger.info(
+            f"[ML_REALTIME] tx_id={transaction_id} processing completed — "
+            f"score={ml_score:.4f} is_anomaly={is_anomaly} risk_level={risk_level}"
+        )
 
         return {
             "transaction_id": transaction.id,
@@ -317,6 +325,7 @@ class MLRealtimeService:
     # PRIVATE: SYNC FALLBACK (backward compatibility)
     # =====================================================================
 
+    @log_performance(label="MLRealtime.process_transaction_ml_sync")
     def _process_transaction_ml_sync(self, transaction_id: int) -> dict[str, Any]:
         """
         Fallback synchronous version jika asyncio.run() tidak bisa dipakai.
@@ -327,20 +336,21 @@ class MLRealtimeService:
         transaction = self.transaction_repository.get_by_id(transaction_id)
 
         if not transaction:
+            logger.warning(f"[ML_REALTIME][SYNC] tx_id={transaction_id} tidak ditemukan — status=not_found")
             return {
                 "transaction_id": transaction_id,
                 "status": "not_found",
             }
 
         # ===== RUN ML SCORING SYNCHRONOUSLY (BLOCKING!) =====
-        print(
-            f"⚠️  WARNING: Running sync ML scoring untuk tx {transaction_id}. "
-            f"This will BLOCK the event loop!"
+        logger.warning(
+            f"[ML_REALTIME][SYNC] tx_id={transaction_id} running sync ML scoring — will BLOCK event loop"
         )
 
         scoring_result = self._run_ml_scoring_sync(transaction_id)
 
         if not scoring_result:
+            logger.error(f"[ML_REALTIME][SYNC] tx_id={transaction_id} ML scoring gagal — status=ml_error")
             return {
                 "transaction_id": transaction_id,
                 "status": "ml_error",
@@ -383,7 +393,7 @@ class MLRealtimeService:
 
         if is_anomaly:
             try:
-# 🔍 Cek apakah alert untuk transaksi ini sudah dibuat oleh engine lain (Sync)
+                # 🔍 Cek apakah alert untuk transaksi ini sudah dibuat oleh engine lain (Sync)
                 existing_alert = (
                     self.db.query(FraudAlert)
                     .filter(FraudAlert.transaction_id == transaction.id)
@@ -393,14 +403,14 @@ class MLRealtimeService:
                 if existing_alert:
                     existing_alert.alert_type = "COMBINED_ML"
                     existing_alert.title = "Fraud & ML Anomaly Detected"
-                    print(f"🔄 [Sync] Alert updated to COMBINED_ML untuk tx {transaction.id}")
+                    logger.info(f"[ML_REALTIME][SYNC] tx_id={transaction.id} alert di-upgrade ke COMBINED_ML")
                 else:
                     create_alert(
                         db=self.db,
                         trx=transaction,
                         background_tasks=None
                     )
-                    print(f"🚨 [Sync] New ML Alert escalated untuk tx {transaction.id}")
+                    logger.info(f"[ML_REALTIME][SYNC] tx_id={transaction.id} alert ML baru di-escalate")
 
                 existing_breakdown.update(
                     {
@@ -417,13 +427,23 @@ class MLRealtimeService:
                         "alert_escalation_error": str(e),
                     }
                 )
-        print("=== BEFORE COMMIT ===")
-        print("anomaly_score:", transaction.anomaly_score)
-        print("is_flagged_ml:", transaction.is_flagged_ml)
-        print("score_breakdown:", transaction.score_breakdown)
-        print("=====================")
+                logger.error(f"[ML_REALTIME][SYNC] tx_id={transaction.id} alert escalation error — {type(e).__name__}: {e}")
+
+        transaction.score_breakdown = existing_breakdown
+
+        logger.debug(
+            f"[ML_REALTIME][SYNC] tx_id={transaction_id} before commit — "
+            f"anomaly_score={transaction.anomaly_score} is_flagged_ml={transaction.is_flagged_ml} "
+            f"score_breakdown={existing_breakdown}"
+        )
+
         self.db.commit()
         self.db.refresh(transaction)
+
+        logger.info(
+            f"[ML_REALTIME][SYNC] tx_id={transaction_id} processing completed — "
+            f"score={ml_score:.4f} is_anomaly={is_anomaly} risk_level={risk_level}"
+        )
 
         return {
             "transaction_id": transaction.id,
@@ -620,12 +640,15 @@ Return result
 
 █ ===== MONITORING & LOGGING =====
 
-Setiap step sudah ada logging:
+Setiap step sudah tercatat lewat logger terpusat (app.core.logging.get_logger),
+dengan tag berikut di logger "fds" / module path masing-masing:
 
-🔄 Starting async ML scoring untuk tx 123...
-✅ ML processing completed untuk tx 123: score=0.4567, anomaly=False
-🚨 Alert escalated untuk tx 123
-✅ Alert escalated untuk tx 123
+[ML_REALTIME] tx_id=123 mulai async ML scoring
+[ML_REALTIME] tx_id=123 processing completed — score=0.4567 is_anomaly=False risk_level=low
+[ML_REALTIME] tx_id=123 alert ML baru di-escalate
+
+Plus [PERF] log otomatis dari @log_performance untuk durasi tiap tahap
+(run_ml_scoring_sync, process_transaction_ml_async, dll).
 
 Untuk debugging:
 - Check ml_score di transaction.score_breakdown

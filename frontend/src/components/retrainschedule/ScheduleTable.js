@@ -90,6 +90,7 @@ const ScheduleTable = ({
   setFilterFreq,
   filterStatus,
   setFilterStatus,
+  isSuperAdmin = false,
 }) => {
   if (schedules.length === 0) {
     return (
@@ -232,47 +233,51 @@ const ScheduleTable = ({
                       <i className="bi bi-eye" />
                     </button>
 
-                    <button
-                      className="rs-action-btn rs-action-btn--run"
-                      onClick={() => onManualRun(s)}
-                      title="Jalankan manual"
-                    >
-                      <i className="bi bi-play-fill" />
-                    </button>
+                    {isSuperAdmin && (
+                      <>
+                        <button
+                          className="rs-action-btn rs-action-btn--run"
+                          onClick={() => onManualRun(s)}
+                          title="Jalankan manual"
+                        >
+                          <i className="bi bi-play-fill" />
+                        </button>
 
-                    <button
-                      className="rs-action-btn rs-action-btn--edit"
-                      onClick={() => onEdit(s)}
-                      title="Edit"
-                    >
-                      <i className="bi bi-pencil" />
-                    </button>
+                        <button
+                          className="rs-action-btn rs-action-btn--edit"
+                          onClick={() => onEdit(s)}
+                          title="Edit"
+                        >
+                          <i className="bi bi-pencil" />
+                        </button>
 
-                    <button
-                      className={`rs-action-btn ${
-                        s.status === "active"
-                          ? "rs-action-btn--pause"
-                          : "rs-action-btn--resume"
-                      }`}
-                      onClick={() => onToggleStatus(s)}
-                      title={s.status === "active" ? "Pause" : "Aktifkan"}
-                    >
-                      <i
-                        className={`bi ${
-                          s.status === "active"
-                            ? "bi-pause-fill"
-                            : "bi-play-fill"
-                        }`}
-                      />
-                    </button>
+                        <button
+                          className={`rs-action-btn ${
+                            s.status === "active"
+                              ? "rs-action-btn--pause"
+                              : "rs-action-btn--resume"
+                          }`}
+                          onClick={() => onToggleStatus(s)}
+                          title={s.status === "active" ? "Pause" : "Aktifkan"}
+                        >
+                          <i
+                            className={`bi ${
+                              s.status === "active"
+                                ? "bi-pause-fill"
+                                : "bi-play-fill"
+                            }`}
+                          />
+                        </button>
 
-                    <button
-                      className="rs-action-btn rs-action-btn--delete"
-                      onClick={() => onDelete(s)}
-                      title="Hapus"
-                    >
-                      <i className="bi bi-trash" />
-                    </button>
+                        <button
+                          className="rs-action-btn rs-action-btn--delete"
+                          onClick={() => onDelete(s)}
+                          title="Hapus"
+                        >
+                          <i className="bi bi-trash" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -14,10 +14,20 @@ from app.application.services.pattern_analytics_service import (
     get_pattern_effectiveness_service,
     get_pattern_statistics
 )
-# Assuming this is your import path for log_activity
 from app.application.services.activity_log_service import log_activity 
 from app.core.rbac import is_risk_manager, require_roles
-from app.presentation.schemas.pattern_schema import PatternEffectivenessResponse, PatternDiagnosticsResponse
+from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
+from app.domain.entities.target_type import TargetType
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
+from app.presentation.schemas.pattern_schema import (
+    PatternEffectivenessResponse,
+    PatternDiagnosticsResponse,
+    PatternCreateRequest,
+    PatternUpdateRequest,
+    PatternResponse,
+)
 
 router = APIRouter(prefix="/patterns", tags=["Pattern Management"])
 
@@ -26,6 +36,7 @@ router = APIRouter(prefix="/patterns", tags=["Pattern Management"])
 # GENERATE PATTERN (AUTO LEARNING)
 # =========================
 @router.post("/generate")
+@log_performance(label="PatternRoutes.generate_patterns")
 def generate_patterns(
     db: Session = Depends(get_db), 
     current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
@@ -34,12 +45,14 @@ def generate_patterns(
     count = save_generated_patterns(db, patterns)
 
     log_activity(
-        db,
-        current_admin,
-        "GENERATE_PATTERN",
-        "PATTERN",
-        None,
-        f"{count} patterns generated"
+        db=db,
+        admin=current_admin,
+        action_type=ActivityActionEnum.PATTERN_GENERATED,
+        module_source=EventSourceEnum.PATTERN_ENGINE,
+        severity=SeverityLevelEnum.INFO,
+        target_type=TargetType.PATTERN,
+        target_id=None,
+        details={"generated_count": count, "reason": "Auto pattern generation from manual reviews"}
     )
 
     return {
@@ -51,7 +64,8 @@ def generate_patterns(
 # =========================
 # GET ACTIVE PATTERNS
 # =========================
-@router.get("/", dependencies=[Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))])
+@router.get("/", dependencies=[Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST"))])
+@log_performance(label="PatternRoutes.get_active_patterns")
 def get_active_patterns(db: Session = Depends(get_db)):
     patterns = db.query(FraudPattern).filter(
         FraudPattern.is_active == True
@@ -62,10 +76,23 @@ def get_active_patterns(db: Session = Depends(get_db)):
             "id": p.id,
             "pattern_name": p.pattern_name,
             "category": p.pattern_category,
+            "pattern_category": p.pattern_category,
             "risk_score": p.risk_score,
             "accuracy": p.accuracy_score,
+            "accuracy_score": p.accuracy_score,
+            "false_positive_rate": p.false_positive_rate,
+            "true_positive": p.true_positive,
+            "false_positive": p.false_positive,
+            "hit_count": p.hit_count,
             "action": p.action,
-            "service": p.service_source
+            "service": p.service_source,
+            "service_source": p.service_source,
+            "priority": p.priority,
+            "pattern_rules": p.pattern_rules,
+            "is_active": p.is_active,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+            "disabled_at": p.disabled_at.isoformat() if p.disabled_at else None,
         }
         for p in patterns
     ]
@@ -85,10 +112,23 @@ def get_candidates(db: Session = Depends(get_db)):
             "id": p.id,
             "pattern_name": p.pattern_name,
             "category": p.pattern_category,
+            "pattern_category": p.pattern_category,
             "risk_score": p.risk_score,
             "accuracy": p.accuracy_score,
+            "accuracy_score": p.accuracy_score,
+            "false_positive_rate": p.false_positive_rate,
+            "true_positive": p.true_positive,
+            "false_positive": p.false_positive,
+            "hit_count": p.hit_count,
             "action": p.action,
-            "service": p.service_source
+            "service": p.service_source,
+            "service_source": p.service_source,
+            "priority": p.priority,
+            "pattern_rules": p.pattern_rules,
+            "is_active": p.is_active,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+            "disabled_at": p.disabled_at.isoformat() if p.disabled_at else None,
         }
         for p in patterns
     ]
@@ -96,14 +136,14 @@ def get_candidates(db: Session = Depends(get_db)):
 @router.get("/diagnostics", response_model=PatternDiagnosticsResponse)
 def get_pattern_diagnostics(
     db: Session = Depends(get_db),
-    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))  
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST"))  
 ):
     return get_pattern_diagnostics_service(db)
 
 @router.get("/effectiveness", response_model=List[PatternEffectivenessResponse])
 def get_patterns_effectiveness(
     db: Session = Depends(get_db),
-    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")) 
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST")) 
 ):
     return get_pattern_effectiveness_service(db)
 
@@ -128,12 +168,14 @@ def activate_pattern(
     db.commit()
 
     log_activity(
-        db,
-        current_admin,
-        "ACTIVATE_PATTERN",
-        "PATTERN",
-        pattern.id,
-        pattern.pattern_name
+        db=db,
+        admin=current_admin,
+        action_type=ActivityActionEnum.PATTERN_ACTIVATED,
+        module_source=EventSourceEnum.PATTERN_ENGINE,
+        severity=SeverityLevelEnum.INFO,
+        target_type=TargetType.PATTERN,
+        target_id=pattern.id,
+        details={"pattern_name": pattern.pattern_name, "reason": "Manual activation by admin"}
     )
 
     return {"message": "Pattern activated"}
@@ -141,37 +183,48 @@ def activate_pattern(
 # =========================
 # CREATE PATTERN MANUAL
 # =========================
-@router.post("/manual")
+@router.post("/manual", response_model=PatternResponse)
 def create_pattern_manual(
-    payload: dict = Body(...),
+    payload: PatternCreateRequest,
     db: Session = Depends(get_db),
     current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     try:
         new_pattern = FraudPattern(
-            pattern_name=payload.get("pattern_name"),
-            pattern_category=payload.get("pattern_category"),
-            pattern_rules=payload.get("pattern_rules"),
-            risk_score=payload.get("risk_score", 40),
-            action=payload.get("action", "REVIEW"),
-            service_source=payload.get("service_source", "ALL"),
-            is_active=payload.get("is_active", True)
+            pattern_name=payload.pattern_name,
+            pattern_category=payload.pattern_category,
+            pattern_rules=payload.pattern_rules.model_dump(exclude_none=True),
+            risk_score=payload.risk_score,
+            action=payload.action,
+            service_source=payload.service_source,
+            is_active=payload.is_active,
+            priority=payload.priority
         )
 
         db.add(new_pattern)
         db.commit()
-        db.refresh(new_pattern) # Refresh to get the generated ID
+        db.refresh(new_pattern)
 
         log_activity(
-            db,
-            current_admin,
-            "CREATE_PATTERN",
-            "PATTERN",
-            new_pattern.id,
-            new_pattern.pattern_name
+            db=db,
+            admin=current_admin,
+            action_type=ActivityActionEnum.PATTERN_CREATED,
+            module_source=EventSourceEnum.PATTERN_ENGINE,
+            severity=SeverityLevelEnum.INFO,
+            target_type=TargetType.PATTERN,
+            target_id=new_pattern.id,
+            details={"before": {}, "after": {
+                "pattern_name": new_pattern.pattern_name,
+                "pattern_category": new_pattern.pattern_category,
+                "pattern_rules": new_pattern.pattern_rules,
+                "risk_score": new_pattern.risk_score,
+                "action": new_pattern.action,
+                "service_source": new_pattern.service_source,
+                "is_active": new_pattern.is_active
+            }, "reason": "Manual pattern creation via dashboard"}
         )
 
-        return {"message": "Pattern created manually"}
+        return new_pattern
 
     except Exception as e:
         db.rollback()
@@ -180,10 +233,10 @@ def create_pattern_manual(
 # =========================
 # UPDATE PATTERN
 # =========================
-@router.put("/{pattern_id}")
+@router.put("/{pattern_id}", response_model=PatternResponse)
 def update_pattern(
     pattern_id: int,
-    payload: dict = Body(...),
+    payload: PatternUpdateRequest,
     db: Session = Depends(get_db),
     current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
@@ -194,26 +247,50 @@ def update_pattern(
     if not pattern:
         raise HTTPException(status_code=404, detail="Pattern not found")
 
-    pattern.pattern_name = payload.get("pattern_name", pattern.pattern_name)
-    pattern.pattern_category = payload.get("pattern_category", pattern.pattern_category)
-    pattern.pattern_rules = payload.get("pattern_rules", pattern.pattern_rules)
-    pattern.risk_score = payload.get("risk_score", pattern.risk_score)
-    pattern.action = payload.get("action", pattern.action)
-    pattern.service_source = payload.get("service_source", pattern.service_source)
-    pattern.is_active = payload.get("is_active", pattern.is_active)
+    snapshot_before = {
+        "pattern_name": pattern.pattern_name,
+        "pattern_category": pattern.pattern_category,
+        "pattern_rules": pattern.pattern_rules,
+        "risk_score": pattern.risk_score,
+        "action": pattern.action,
+        "service_source": pattern.service_source,
+        "is_active": pattern.is_active,
+        "priority": pattern.priority,
+    }
+
+    update_data = payload.model_dump(exclude_unset=True)
+    if "pattern_rules" in update_data and update_data["pattern_rules"]:
+        update_data["pattern_rules"] = payload.pattern_rules.model_dump(exclude_none=True)
+
+    for key, value in update_data.items():
+        setattr(pattern, key, value)
 
     db.commit()
+    db.refresh(pattern)
+
+    snapshot_after = {
+        "pattern_name": pattern.pattern_name,
+        "pattern_category": pattern.pattern_category,
+        "pattern_rules": pattern.pattern_rules,
+        "risk_score": pattern.risk_score,
+        "action": pattern.action,
+        "service_source": pattern.service_source,
+        "is_active": pattern.is_active,
+        "priority": pattern.priority,
+    }
 
     log_activity(
-        db,
-        current_admin,
-        "UPDATE_PATTERN",
-        "PATTERN",
-        pattern.id,
-        f"Updated {pattern.pattern_name}"
+        db=db,
+        admin=current_admin,
+        action_type=ActivityActionEnum.PATTERN_UPDATED,
+        module_source=EventSourceEnum.PATTERN_ENGINE,
+        severity=SeverityLevelEnum.WARNING,
+        target_type=TargetType.PATTERN,
+        target_id=pattern.id,
+        details={"before": snapshot_before, "after": snapshot_after, "reason": "Manual pattern update via dashboard"}
     )
 
-    return {"message": "Pattern updated"}
+    return pattern
 
 # =========================
 # PATTERN STATS
@@ -221,7 +298,7 @@ def update_pattern(
 @router.get("/stats")
 def pattern_stats(
     db: Session = Depends(get_db),
-    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
+    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST"))
 ):
     return get_pattern_statistics(db)
 
@@ -244,14 +321,16 @@ def delete_pattern(
     pattern.is_active = False
     db.commit()
 
-    # Opted to use DEACTIVATE_PATTERN log here as requested for deactivation
+    # Opted to use PATTERN_DEACTIVATED log here as requested for deactivation
     log_activity(
-        db,
-        current_admin,
-        "DEACTIVATE_PATTERN",
-        "PATTERN",
-        pattern.id,
-        pattern.pattern_name
+        db=db,
+        admin=current_admin,
+        action_type=ActivityActionEnum.PATTERN_DEACTIVATED,
+        module_source=EventSourceEnum.PATTERN_ENGINE,
+        severity=SeverityLevelEnum.HIGH,
+        target_type=TargetType.PATTERN,
+        target_id=pattern.id,
+        details={"pattern_name": pattern.pattern_name, "reason": "Soft delete via dashboard"}
     )
 
     return {"message": "Pattern deactivated (soft delete)"}
@@ -276,12 +355,14 @@ def deactivate_pattern(
     db.commit()
 
     log_activity(
-        db,
-        current_admin,
-        "DEACTIVATE_PATTERN",
-        "PATTERN",
-        pattern.id,
-        pattern.pattern_name
+        db=db,
+        admin=current_admin,
+        action_type=ActivityActionEnum.PATTERN_DEACTIVATED,
+        module_source=EventSourceEnum.PATTERN_ENGINE,
+        severity=SeverityLevelEnum.HIGH,
+        target_type=TargetType.PATTERN,
+        target_id=pattern.id,
+        details={"pattern_name": pattern.pattern_name, "reason": "Manual deactivation via dashboard"}
     )
 
     return {"message": "Pattern deactivated"}

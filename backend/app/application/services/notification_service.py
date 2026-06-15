@@ -1,6 +1,9 @@
 from app.infrastructure.database.models.notification_preference_model import NotificationPreference
 from app.infrastructure.repositories.notification_repository import NotificationRepository
 
+from app.core.logging import log_performance
+
+@log_performance
 def get_preferences(db, current_admin):
     repo = NotificationRepository(db)
     pref = repo.get_by_admin(current_admin.id)
@@ -15,6 +18,7 @@ def get_preferences(db, current_admin):
         "push_notifications_enabled": pref.push_notifications_enabled
     }
 
+@log_performance
 def update_preferences(db, current_admin, fraud_alerts=None, push_notifications=None):
     repo = NotificationRepository(db)
     pref = repo.get_by_admin(current_admin.id)
@@ -22,6 +26,7 @@ def update_preferences(db, current_admin, fraud_alerts=None, push_notifications=
     if not pref:
         pref = NotificationPreference(admin_id=current_admin.id)
         repo.create(pref)
+        db.refresh(pref)  # ensure ID is assigned before setting fields
 
     if fraud_alerts is not None:
         pref.fraud_alerts_enabled = fraud_alerts
@@ -37,6 +42,7 @@ def update_preferences(db, current_admin, fraud_alerts=None, push_notifications=
         "push_notifications_enabled": pref.push_notifications_enabled
     }
 
+@log_performance
 def should_send_fraud_alert(db, admin_id):
     repo = NotificationRepository(db)
     pref = repo.get_by_admin(admin_id)

@@ -598,3 +598,13 @@
     flex-direction: column;
   }
 }
+
+/* ─── Additional pills for modal ────────────────────────────────────────────── */
+.bdm-pill-blue {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.bdm-pill-green {
+  background: #f0fdf4;
+  color: #15803d;
+}

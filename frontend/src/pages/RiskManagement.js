@@ -2,9 +2,11 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import BlacklistPanel from "../components/riskmanagement/BlacklistPanel";
 import BlacklistFormModal from "../components/riskmanagement/BlacklistFormModal";
 import RuleEngine from "../components/riskmanagement/RuleEngine";
-import RuleModal from "../components/riskmanagement/RuleModal";
+import RuleBuilderModal from "../components/riskmanagement/RuleBuilderModal";
 import RuleDetailModal from "../components/riskmanagement/RuleDetailModal";
 import RiskStats from "../components/riskmanagement/RiskStats";
+import PatternPanel from "../components/riskmanagement/PatternPanel";
+import PatternFormModal from "../components/riskmanagement/PatternFormModal";
 import PageLoader from "../components/common/PageLoader";
 import { api } from "../services/apiService";
 import "./RiskManagement.css";
@@ -13,7 +15,7 @@ const ruleFromApi = (r) => ({
   id: r.id,
   name: r.rule_name || "Rule Tanpa Nama",
   description: r.description || "",
-  priority: r.priority ?? 5,
+  priority: r.priority ?? 0,
   action: (r.action || "FLAG").toLowerCase(),
   enabled: r.is_active ?? true,
   condition: buildConditionText(r),
@@ -24,24 +26,72 @@ const ruleFromApi = (r) => ({
   service_scope: r.service_scope || "ALL",
   severity: r.severity || "MEDIUM",
   rule_group: r.rule_group || null,
-  hitCount: 0,
+  hitCount: r.hit_count ?? 0,
   hitToday: 0,
   hitWeek: 0,
   hitMonth: 0,
-  createdAt: "—",
+  createdBy: r.created_by_name || null,
+  createdByRole: r.created_by_role || null,
+  createdById: r.created_by || null,
+  createdAt: r.created_at
+    ? new Date(r.created_at).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "—",
 });
 
 function buildConditionText(r) {
-  if (!r.condition_field && !r.threshold_value) return "—";
-  const field = r.condition_field || "";
-  const op = r.operator || ">";
-  const val = r.threshold_value || "";
-  return `${field} ${op} ${val}`.trim() || "—";
+  // Simple rule — punya condition_field
+  if (r.condition_field) {
+    const field = r.condition_field;
+    const op = r.operator || ">";
+    const val = r.threshold_value || "";
+    return `${field} ${op} ${val}`.trim();
+  }
+
+  // Builder rule — punya rule_config (JSONB)
+  if (r.rule_config) {
+    const cfg = r.rule_config;
+    const logic = cfg.AND ? "AND" : cfg.OR ? "OR" : null;
+
+    // Single leaf condition
+    if (cfg.field) {
+      return `${cfg.field} ${cfg.operator} ${cfg.value}`;
+    }
+
+    // Group condition — ringkas: tampilkan jumlah kondisi dan logic
+    if (logic) {
+      const items = cfg[logic] || [];
+      const count = items.length;
+      if (count === 1 && items[0].field) {
+        return `${items[0].field} ${items[0].operator} ${items[0].value}`;
+      }
+      return `${count} kondisi (${logic})`;
+    }
+  }
+
+  return "—";
 }
 
-const ruleToApiPayload = (form) => ({
+const ruleToCreatePayload = (form) => ({
   rule_name: form.name,
-  rule_key: form.rule_key || `RULE_${Date.now()}`,
+  rule_key: form.rule_key,
+  service_scope: form.service_scope || "ALL",
+  condition_field: form.condField || null,
+  operator: form.condOp || null,
+  threshold_value: form.condValue || null,
+  action: (form.action || "flag").toUpperCase(),
+  severity: form.severity || "MEDIUM",
+  priority: form.priority || 5,
+  rule_group: form.rule_group || null,
+  description: form.description || null,
+});
+
+const ruleToUpdatePayload = (form) => ({
+  // rule_key sengaja tidak disertakan — BE tidak izinkan update unique key
+  rule_name: form.name,
   service_scope: form.service_scope || "ALL",
   condition_field: form.condField || null,
   operator: form.condOp || null,
@@ -63,12 +113,18 @@ const blFromApi = (item) => ({
   id: item.id,
   accountNumber: item.value,
   accountName: "",
-  bank: item.type,
+  type: item.type,
+  bank: item.type, // kolom "Tipe" di tabel — diisi dari BlacklistTypeEnum
   reason: item.reason,
   reasonDetail: item.review_note || "",
+  review_note: item.review_note || "",
   source: (item.source || "MANUAL").toLowerCase(),
   status: resolveBlStatus(item),
   hitCount: item.hit_count || 0,
+  service_scope: item.service_scope || "ALL",
+  addedBy: item.added_by_name || null,
+  addedByRole: item.added_by_role || null,
+  addedById: item.added_by || null,
   addedAt: item.created_at
     ? new Date(item.created_at).toLocaleDateString("id-ID", {
         day: "2-digit",
@@ -82,9 +138,11 @@ const blFromApi = (item) => ({
 });
 
 const blToApiPayload = (form) => ({
-  value: form.accountNumber,
-  type: "ACCOUNT_NUMBER",
-  service_scope: "ALL",
+  // AddForm kirim { value, type, service_scope, reason }
+  // EditForm kirim { accountNumber, reason, ... } — map ke field BE
+  value: form.value ?? form.accountNumber,
+  type: form.type ?? "ACCOUNT_NUMBER",
+  service_scope: (form.service_scope ?? "ALL").toUpperCase(),
   reason: form.reason || "Penipuan Online",
 });
 
@@ -141,7 +199,19 @@ const RiskManagement = () => {
     mode: "single",
     editData: null,
   });
-  const [ruleModal, setRuleModal] = useState({ open: false, editData: null });
+  const [builderModal, setBuilderModal] = useState({
+    open: false,
+    editData: null,
+  });
+  const [activeTab, setActiveTab] = useState("blacklist"); // "blacklist" | "rules" | "patterns"
+  const [patterns, setPatterns] = useState([]);
+  const [effectiveness, setEffectiveness] = useState([]);
+  const [patternsLoading, setPatternsLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [patternModal, setPatternModal] = useState({
+    open: false,
+    editData: null,
+  });
   const [ruleDetailModal, setRuleDetailModal] = useState({
     open: false,
     rule: null,
@@ -149,11 +219,19 @@ const RiskManagement = () => {
 
   const { toasts, push, dismiss } = useToast();
 
-  const fetchRules = useCallback(async () => {
+  const fetchRules = useCallback(async (filters = {}) => {
     setRulesLoading(true);
     setRulesError(null);
     try {
-      const data = await api.get("/rules/");
+      const params = new URLSearchParams();
+      if (filters.service_scope)
+        params.append("service_scope", filters.service_scope);
+      if (filters.is_active !== undefined && filters.is_active !== null)
+        params.append("is_active", filters.is_active);
+      if (filters.rule_group) params.append("rule_group", filters.rule_group);
+      if (filters.severity) params.append("severity", filters.severity);
+      const qs = params.toString();
+      const data = await api.get(`/rules/${qs ? `?${qs}` : ""}`);
       setRules((data || []).map(ruleFromApi));
     } catch (err) {
       console.warn("[RiskManagement] Gagal memuat rules:", err.message);
@@ -161,6 +239,28 @@ const RiskManagement = () => {
       setRules([]);
     } finally {
       setRulesLoading(false);
+    }
+  }, []);
+
+  const fetchPatterns = useCallback(async () => {
+    setPatternsLoading(true);
+    try {
+      const [active, candidates, eff] = await Promise.all([
+        api.get("/patterns/"),
+        api.get("/patterns/candidates"),
+        api.get("/patterns/effectiveness"),
+      ]);
+      const all = [
+        ...(active || []).map((p) => ({ ...p, is_active: true })),
+        ...(candidates || []).map((p) => ({ ...p, is_active: false })),
+      ];
+      setPatterns(all);
+      setEffectiveness(eff || []);
+    } catch (err) {
+      console.warn("[RiskManagement] Gagal memuat patterns:", err.message);
+      setPatterns([]);
+    } finally {
+      setPatternsLoading(false);
     }
   }, []);
 
@@ -182,17 +282,19 @@ const RiskManagement = () => {
 
   useEffect(() => {
     const init = async () => {
-      await Promise.all([fetchRules(), fetchBlacklist()]);
+      await Promise.all([fetchRules(), fetchBlacklist(), fetchPatterns()]);
       setPageLoading(false);
     };
     init();
-  }, [fetchRules, fetchBlacklist]);
+  }, [fetchRules, fetchBlacklist, fetchPatterns]);
 
   const handleRuleSubmit = async (formData) => {
     const isEdit = Boolean(
       formData.id && rules.find((r) => r.id === formData.id),
     );
-    const payload = ruleToApiPayload(formData);
+    const payload = isEdit
+      ? ruleToUpdatePayload(formData)
+      : ruleToCreatePayload(formData);
     try {
       if (isEdit) {
         const updated = await api.put(`/rules/${formData.id}`, payload);
@@ -246,6 +348,65 @@ const RiskManagement = () => {
   };
 
   const handleRuleDetail = (rule) => setRuleDetailModal({ open: true, rule });
+
+  // ── Pattern handlers ──────────────────────────────────────────────────────
+  const handlePatternActivate = async (id) => {
+    setPatterns((p) =>
+      p.map((x) => (x.id === id ? { ...x, is_active: true } : x)),
+    );
+    try {
+      await api.patch(`/patterns/${id}/activate`);
+      push("Pattern berhasil diaktifkan.", "success");
+    } catch (err) {
+      setPatterns((p) =>
+        p.map((x) => (x.id === id ? { ...x, is_active: false } : x)),
+      );
+      push(`Gagal mengaktifkan pattern: ${err.message}`, "error");
+    }
+  };
+
+  const handlePatternDeactivate = async (id) => {
+    setPatterns((p) =>
+      p.map((x) => (x.id === id ? { ...x, is_active: false } : x)),
+    );
+    try {
+      await api.patch(`/patterns/${id}/deactivate`);
+      push("Pattern dinonaktifkan.", "warn");
+    } catch (err) {
+      setPatterns((p) =>
+        p.map((x) => (x.id === id ? { ...x, is_active: true } : x)),
+      );
+      push(`Gagal menonaktifkan: ${err.message}`, "error");
+    }
+  };
+
+  const handlePatternDelete = async (id) => {
+    const prev = patterns;
+    setPatterns((p) => p.filter((x) => x.id !== id));
+    try {
+      await api.del(`/patterns/${id}`);
+      push("Pattern dihapus.", "warn");
+    } catch (err) {
+      setPatterns(prev);
+      push(`Gagal menghapus: ${err.message}`, "error");
+    }
+  };
+
+  const handlePatternGenerate = async () => {
+    setGenerating(true);
+    try {
+      const res = await api.post("/patterns/generate");
+      push(
+        `${res.generated_count ?? 0} pattern kandidat berhasil di-generate.`,
+        "success",
+      );
+      await fetchPatterns();
+    } catch (err) {
+      push(`Gagal generate pattern: ${err.message}`, "error");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const handleBlSubmit = async (mode, items) => {
     if (mode === "edit") {
@@ -354,6 +515,36 @@ const RiskManagement = () => {
     }
   };
 
+  const handleBlReject = async (id, reviewNote) => {
+    const item = blacklist.find((b) => b.id === id);
+
+    setBlacklist((p) =>
+      p.map((b) =>
+        b.id === id
+          ? {
+              ...b,
+              status: "inactive",
+              _apiStatus: "REJECTED",
+              _isActive: false,
+            }
+          : b,
+      ),
+    );
+    try {
+      await api.patch(`/blacklist/${id}/reject`, {
+        review_note: reviewNote || "Ditolak melalui dashboard",
+      });
+      push(`Rekening ${item?.accountNumber} ditolak.`, "warn");
+    } catch (err) {
+      setBlacklist((p) =>
+        p.map((b) =>
+          b.id === id ? { ...b, status: item?.status ?? "pending" } : b,
+        ),
+      );
+      push(`Gagal menolak: ${err.message}`, "error");
+    }
+  };
+
   const handleBlEdit = (item) => {
     setBlModal({ open: true, mode: "single", editData: item });
   };
@@ -420,16 +611,27 @@ const RiskManagement = () => {
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
-          <RefreshBtn
-            onClick={fetchBlacklist}
-            loading={blLoading}
-            label="Refresh Blacklist"
-          />
-          <RefreshBtn
-            onClick={fetchRules}
-            loading={rulesLoading}
-            label="Refresh Rules"
-          />
+          {activeTab === "blacklist" && (
+            <RefreshBtn
+              onClick={fetchBlacklist}
+              loading={blLoading}
+              label="Refresh Blacklist"
+            />
+          )}
+          {activeTab === "rules" && (
+            <RefreshBtn
+              onClick={fetchRules}
+              loading={rulesLoading}
+              label="Refresh Rules"
+            />
+          )}
+          {activeTab === "patterns" && (
+            <RefreshBtn
+              onClick={fetchPatterns}
+              loading={patternsLoading}
+              label="Refresh Patterns"
+            />
+          )}
         </div>
       </div>
 
@@ -446,55 +648,137 @@ const RiskManagement = () => {
         />
       )}
 
-      <RiskStats blacklist={blacklist} rules={rules} />
-
-      <BlacklistPanel
-        data={blacklist}
-        onAdd={() => setBlModal({ open: true, mode: "single", editData: null })}
-        onBulkImport={() =>
-          setBlModal({ open: true, mode: "bulk", editData: null })
-        }
-        onDelete={handleBlDelete}
-        onApprove={handleBlApprove}
-        onEdit={handleBlEdit}
-        onToggleStatus={handleBlToggleStatus}
+      <RiskStats
+        blacklist={blacklist}
+        rules={rules}
+        patterns={patterns}
+        activeTab={activeTab}
       />
 
-      {rulesLoading && rules.length === 0 ? (
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #e5e7eb",
-            borderRadius: 10,
-            marginTop: 24,
-            padding: "48px 20px",
-            textAlign: "center",
-            color: "#9ca3af",
-          }}
+      {/* Tab switcher */}
+      <div className="rm-tabs">
+        <button
+          className={`rm-tab ${activeTab === "blacklist" ? "rm-tab--active" : ""}`}
+          onClick={() => setActiveTab("blacklist")}
         >
-          <i
-            className="bi bi-gear"
-            style={{
-              fontSize: "2rem",
-              display: "block",
-              marginBottom: 8,
-              opacity: 0.4,
-            }}
-          />
-          <p style={{ margin: 0, fontSize: "0.875rem" }}>
-            Memuat rules dari server...
-          </p>
-        </div>
-      ) : (
-        <RuleEngine
-          rules={rules}
-          onAdd={() => setRuleModal({ open: true, editData: null })}
-          onEdit={(rule) => setRuleModal({ open: true, editData: rule })}
-          onDelete={handleRuleDelete}
-          onToggle={handleRuleToggle}
-          onDetail={handleRuleDetail}
+          <i className="bi bi-ban" />
+          Blacklist Management
+          {blacklist.filter((b) => b.status === "pending").length > 0 && (
+            <span className="rm-tab-badge">
+              {blacklist.filter((b) => b.status === "pending").length}
+            </span>
+          )}
+        </button>
+        <button
+          className={`rm-tab ${activeTab === "rules" ? "rm-tab--active" : ""}`}
+          onClick={() => setActiveTab("rules")}
+        >
+          <i className="bi bi-gear-fill" />
+          Rule Engine
+          <span className="rm-tab-count">
+            {rules.filter((r) => r.enabled).length} aktif
+          </span>
+        </button>
+        <button
+          className={`rm-tab ${activeTab === "patterns" ? "rm-tab--active" : ""}`}
+          onClick={() => setActiveTab("patterns")}
+        >
+          <i className="bi bi-shield-shaded" />
+          Pattern Management
+          {patterns.filter((p) => !p.is_active).length > 0 && (
+            <span className="rm-tab-badge rm-tab-badge--pink">
+              {patterns.filter((p) => !p.is_active).length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "blacklist" && (
+        <BlacklistPanel
+          data={blacklist}
+          onAdd={() =>
+            setBlModal({ open: true, mode: "single", editData: null })
+          }
+          onBulkImport={() =>
+            setBlModal({ open: true, mode: "bulk", editData: null })
+          }
+          onDelete={handleBlDelete}
+          onApprove={handleBlApprove}
+          onReject={handleBlReject}
+          onEdit={handleBlEdit}
+          onToggleStatus={handleBlToggleStatus}
         />
       )}
+
+      {activeTab === "rules" &&
+        (rulesLoading && rules.length === 0 ? (
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e5e7eb",
+              borderRadius: 10,
+              padding: "48px 20px",
+              textAlign: "center",
+              color: "#9ca3af",
+            }}
+          >
+            <i
+              className="bi bi-gear"
+              style={{
+                fontSize: "2rem",
+                display: "block",
+                marginBottom: 8,
+                opacity: 0.4,
+              }}
+            />
+            <p style={{ margin: 0, fontSize: "0.875rem" }}>
+              Memuat rules dari server...
+            </p>
+          </div>
+        ) : (
+          <RuleEngine
+            rules={rules}
+            onAdd={() => setBuilderModal({ open: true, editData: null })}
+            onEdit={(rule) => setBuilderModal({ open: true, editData: rule })}
+            onDelete={handleRuleDelete}
+            onToggle={handleRuleToggle}
+            onDetail={handleRuleDetail}
+          />
+        ))}
+
+      {activeTab === "patterns" && (
+        <PatternPanel
+          data={patterns}
+          effectiveness={effectiveness}
+          onAdd={() => setPatternModal({ open: true, editData: null })}
+          onEdit={(p) => setPatternModal({ open: true, editData: p })}
+          onActivate={handlePatternActivate}
+          onDeactivate={handlePatternDeactivate}
+          onDelete={handlePatternDelete}
+          onGenerate={handlePatternGenerate}
+          generating={generating}
+        />
+      )}
+
+      <PatternFormModal
+        isOpen={patternModal.open}
+        editData={patternModal.editData}
+        onClose={() => setPatternModal({ open: false, editData: null })}
+        onSuccess={(pattern) => {
+          setPatterns((p) => [pattern, ...p]);
+          push(`Pattern "${pattern.pattern_name}" berhasil dibuat.`, "success");
+        }}
+        onUpdate={(pattern) => {
+          setPatterns((p) =>
+            p.map((x) => (x.id === pattern.id ? { ...x, ...pattern } : x)),
+          );
+          push(
+            `Pattern "${pattern.pattern_name}" berhasil diperbarui.`,
+            "info",
+          );
+        }}
+      />
 
       <BlacklistFormModal
         isOpen={blModal.open}
@@ -506,11 +790,20 @@ const RiskManagement = () => {
         onSubmit={handleBlSubmit}
       />
 
-      <RuleModal
-        isOpen={ruleModal.open}
-        editData={ruleModal.editData}
-        onClose={() => setRuleModal({ open: false, editData: null })}
-        onSubmit={handleRuleSubmit}
+      <RuleBuilderModal
+        isOpen={builderModal.open}
+        editData={builderModal.editData}
+        onClose={() => setBuilderModal({ open: false, editData: null })}
+        onSuccess={(rule) => {
+          setRules((p) => [ruleFromApi(rule), ...p]);
+          push(`Rule "${rule.rule_name}" berhasil dibuat.`, "success");
+        }}
+        onUpdate={(rule) => {
+          setRules((p) =>
+            p.map((r) => (r.id === rule.id ? ruleFromApi(rule) : r)),
+          );
+          push(`Rule "${rule.rule_name}" berhasil diperbarui.`, "info");
+        }}
       />
 
       <RuleDetailModal
@@ -519,7 +812,7 @@ const RiskManagement = () => {
         onClose={() => setRuleDetailModal({ open: false, rule: null })}
         onEdit={(rule) => {
           setRuleDetailModal({ open: false, rule: null });
-          setRuleModal({ open: true, editData: rule });
+          setBuilderModal({ open: true, editData: rule });
         }}
         onDelete={handleRuleDelete}
         onToggle={handleRuleToggle}

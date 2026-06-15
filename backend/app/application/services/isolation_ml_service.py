@@ -5,6 +5,9 @@ from typing import Any
 from app.domain.entities.ml_domain import DOMAIN_DEFAULT_THRESHOLDS, ML_DOMAIN_CATALOG
 from app.infrastructure.ml.scoring import score_history_isolation
 from app.application.use_cases.isolation_decision import classify_score, build_summary
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 
 def get_available_domains() -> list[str]:
@@ -14,6 +17,7 @@ def get_available_domains() -> list[str]:
 def get_domain_catalog() -> list[dict[str, Any]]:
     return [item.to_dict() for item in ML_DOMAIN_CATALOG]
 
+@log_performance(label="ML.process_history_isolation")
 def process_history_isolation(domain: str, records: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Clean ML processing (tanpa ganggu flow lama)
@@ -48,16 +52,22 @@ def process_history_isolation(domain: str, records: list[dict[str, Any]]) -> dic
             "manual_action": manual_action,
         })
 
+    summary = {
+        "high_risk": high,
+        "review": review,
+        "normal": len(results) - high - review,
+        "review_score_threshold": thresholds["review_score_threshold"],
+        "high_risk_score_threshold": thresholds["high_risk_score_threshold"],
+    }
+
+    logger.info(
+        f"[ML_HISTORY] domain={domain} total={len(results)} "
+        f"high_risk={high} review={review} normal={summary['normal']}"
+    )
+
     return {
         "domain": domain,
         "total_records": len(results),
-        "summary": {
-            "high_risk": high,
-            "review": review,
-            "normal": len(results) - high - review,
-            "review_score_threshold": thresholds["review_score_threshold"],
-            "high_risk_score_threshold": thresholds["high_risk_score_threshold"],
-        },
+        "summary": summary,
         "results": results,
     }
-

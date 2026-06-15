@@ -8,7 +8,7 @@ import {
   formatScheduleTime,
 } from "./scheduleConstants";
 
-const DetailModal = ({ schedule, onClose, onEdit }) => {
+const DetailModal = ({ schedule, onClose, onEdit, isSuperAdmin = false }) => {
   if (!schedule) return null;
 
   const Row = ({ icon, label, value, children }) => (
@@ -155,15 +155,17 @@ const DetailModal = ({ schedule, onClose, onEdit }) => {
           <button className="rs-btn rs-btn--ghost" onClick={onClose}>
             Tutup
           </button>
-          <button
-            className="rs-btn rs-btn--primary"
-            onClick={() => {
-              onClose();
-              onEdit(schedule);
-            }}
-          >
-            <i className="bi bi-pencil" /> Edit Schedule
-          </button>
+          {isSuperAdmin && (
+            <button
+              className="rs-btn rs-btn--primary"
+              onClick={() => {
+                onClose();
+                onEdit(schedule);
+              }}
+            >
+              <i className="bi bi-pencil" /> Edit Schedule
+            </button>
+          )}
         </div>
       </div>
     </div>

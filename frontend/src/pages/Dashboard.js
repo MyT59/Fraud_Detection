@@ -83,10 +83,10 @@ const normalizeFraudRate = (raw) => {
   return parseFloat(rate.toFixed(2));
 };
 
-const normalizeAccuracy = (raw) => {
-  if (!raw && raw !== 0) return 0;
-  const acc = raw < 1 ? raw * 100 : raw;
-  return parseFloat(acc.toFixed(1));
+const normalizeAnomalyRate = (raw) => {
+  if (raw === null || raw === undefined) return null;
+  const rate = raw < 1 ? raw * 100 : raw;
+  return parseFloat(rate.toFixed(2));
 };
 
 const normalizeApiResponse = (data) => {
@@ -153,7 +153,7 @@ const normalizeApiResponse = (data) => {
       total_fraud: fraudAgenusa + fraudNusabill,
 
       fraud_rate: normalizeFraudRate(kpi.fraud_rate),
-      model_accuracy: normalizeAccuracy(kpi.model_accuracy),
+      anomaly_rate: normalizeAnomalyRate(kpi.anomaly_rate),
     },
     transactions_daily: trend,
     fraud_distribution: data.fraud_distribution || null,
@@ -171,7 +171,7 @@ const FALLBACK = normalizeApiResponse({
     fraud_agenusa: 31,
     fraud_nusabill: 25,
     fraud_rate: 4.34,
-    model_accuracy: 98.7,
+    anomaly_rate: null,
   },
   transaction_trend: Array.from({ length: 24 }, (_, h) => ({
     hour: h,
@@ -384,11 +384,15 @@ const Dashboard = () => {
           change={-2.1}
         />
         <StatCard
-          title="Model Accuracy"
-          value={`${stats.model_accuracy}%`}
-          icon="bi bi-graph-up"
+          title="Anomaly Rate"
+          value={
+            stats.anomaly_rate !== null && stats.anomaly_rate !== undefined
+              ? `${stats.anomaly_rate}%`
+              : "—"
+          }
+          icon="bi bi-activity"
           type="secondary"
-          change={1.2}
+          change={null}
         />
       </div>
 

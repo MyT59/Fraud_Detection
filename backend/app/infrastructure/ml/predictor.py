@@ -1,5 +1,3 @@
-from pyexpat import model
-
 import pandas as pd
 from typing import Any, Optional
 from .feature_builder import (
@@ -8,6 +6,9 @@ from .feature_builder import (
     get_matched_patterns,
 )
 from .model_loader import load_isolation_model, DOMAIN_ISO_CONFIG
+from ...core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 
 class IsolationPredictor:
@@ -22,6 +23,7 @@ class IsolationPredictor:
     # NEW API: SNAPSHOT-BASED (Real-time inference)
     # =====================================================================
 
+    @log_performance(label="ML.predict_score_from_snapshot")
     def predict_score_from_snapshot(
         self,
         snapshot: dict[str, Any],
@@ -51,12 +53,17 @@ class IsolationPredictor:
         """
         # Validasi
         if not snapshot:
+            logger.error("[PREDICT] Snapshot kosong — request ditolak")
             raise ValueError("Snapshot kosong")
 
         transaction = snapshot.get("transaction", {})
         domain = transaction.get("domain")
 
         if not domain or domain not in DOMAIN_ISO_CONFIG:
+            logger.error(
+                f"[PREDICT] Domain tidak dikenal atau tidak ada — "
+                f"tx_id={transaction.get('id')} domain={domain}"
+            )
             raise ValueError(f"Domain tidak dikenal atau tidak ada: {domain}")
 
         # ===== BUILD FEATURES DARI SNAPSHOT =====
@@ -79,28 +86,23 @@ class IsolationPredictor:
         required_features = config.get("feature_names", x.columns.tolist())
         x = x[required_features]
 
-        print("\n========== ML FEATURE DEBUG ==========")
-
         if hasattr(model, "feature_names_in_"):
-            print("TRAINED FEATURES:")
-            print(list(model.feature_names_in_))
+            trained_features = set(model.feature_names_in_)
+            runtime_features = set(x.columns)
+            missing = trained_features - runtime_features
+            extra = runtime_features - trained_features
 
-            print("\nRUNTIME FEATURES:")
-            print(list(x.columns))
-
-            print("\nMISSING FROM RUNTIME:")
-            if hasattr(model, "feature_names_in_"):
-                print(
-                    set(model.feature_names_in_) - set(x.columns)
+            if missing or extra:
+                logger.warning(
+                    f"[ML_FEATURE_MISMATCH] domain={domain} "
+                    f"tx_id={transaction.get('id')} missing={missing} extra={extra}"
                 )
 
-            print("\nEXTRA IN RUNTIME:")
-            if hasattr(model, "feature_names_in_"):
-                print(
-                    set(x.columns) - set(model.feature_names_in_)
-                )
-
-            print("=====================================\n")
+            logger.debug(
+                f"[ML_FEATURE_DEBUG] domain={domain} "
+                f"trained_features={sorted(trained_features)} "
+                f"runtime_features={sorted(runtime_features)}"
+            )
 
         # Get predictions
         score = float(model.decision_function(x)[0])
@@ -115,12 +117,19 @@ class IsolationPredictor:
             "account_number": transaction.get("account_number"),
         }
 
+        logger.info(
+            f"[PREDICT] tx_id={result['transaction_id']} domain={domain} "
+            f"score={result['score']} is_anomaly={result['is_anomaly']} "
+            f"patterns={result['patterns']}"
+        )
+
         return result
 
     # =====================================================================
     # LEGACY API: BATCH-BASED (Deprecated)
     # =====================================================================
 
+    @log_performance(label="ML.predict_scores_batch")
     def predict_scores(
         self,
         domain: str,
@@ -167,5 +176,11 @@ class IsolationPredictor:
                     "patterns": get_matched_patterns(domain, row),
                 }
             )
+
+        anomaly_count = sum(1 for r in results if r["is_anomaly"])
+        logger.info(
+            f"[PREDICT_BATCH] domain={domain} total={len(results)} "
+            f"anomalies={anomaly_count}"
+        )
 
         return results

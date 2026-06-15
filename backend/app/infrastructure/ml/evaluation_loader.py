@@ -1,10 +1,10 @@
 from pathlib import Path
 import json
 
-from app.paths import BASE_DIR
+from app.paths import PROJECT_ROOT
 
 
-MODELS_DIR = BASE_DIR / "Playground" / "models"
+MODELS_DIR = PROJECT_ROOT / "Playground" / "models"
 
 ISOLATION_EVALUATION_PATH = (
     MODELS_DIR / "isolation_evaluation_report.json"

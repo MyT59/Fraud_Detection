@@ -1,4 +1,3 @@
-import logging
 from datetime import datetime, timezone, timedelta
 import logging
 from typing import Dict, Any, List
@@ -12,8 +11,11 @@ from app.application.services.activity_log_service import log_activity
 from app.domain.entities.target_type import TargetType
 from app.infrastructure.database.models.retrain_schedule_model import RetrainSchedule
 
-logger = logging.getLogger(__name__)
+from app.core.logging import get_logger, log_performance
 
+logger = get_logger(__name__)
+
+@log_performance
 def run_sla_escalation_task():
     # Background worker yang berjalan periodik untuk mencari alert HIGH/CRITICAL 
     # yang terlantar di antrean OPEN > 10 menit, lalu mendongkrak prioritasnya.
@@ -58,6 +60,7 @@ def run_sla_escalation_task():
     finally:
         db.close()
 
+@log_performance
 def scheduled_retrain_task(schedule_dict: Dict[str, Any]):
     db = SessionLocal()
     schedule_id = str(schedule_dict.get('id')) 
@@ -87,10 +90,35 @@ def scheduled_retrain_task(schedule_dict: Dict[str, Any]):
     finally:
         db.close()
 
+
+@log_performance
+def run_dataset_retention_task():
+    """Background job untuk cleanup dataset lama setiap minggu."""
+    db = SessionLocal()
+    try:
+        from app.application.services.dataset_retention_service import DatasetRetentionService
+        service = DatasetRetentionService(db)
+        summary = service.cleanup_old_datasets(
+            keep_latest=3,
+            older_than_days=30,
+            remove_files=False,  # set True kalau mau hapus file fisik
+        )
+        logger.info(
+            f"[Dataset Retention] Selesai — "
+            f"domain: {summary['domains_processed']}, "
+            f"diarsipkan: {summary['datasets_archived']}, "
+            f"diskip: {summary['datasets_skipped']}"
+        )
+    except Exception as e:
+        logger.error(f"[Dataset Retention] Error: {e}")
+    finally:
+        db.close()
+
 class SchedulerService:
     def __init__(self, scheduler: BackgroundScheduler):
         self.scheduler = scheduler
 
+    @log_performance
     def register_job(self, schedule_dict: Dict[str, Any]) -> None:
         schedule_id = str(schedule_dict.get("id"))
         cron_expr = schedule_dict.get("cron_expr")
@@ -122,6 +150,7 @@ class SchedulerService:
             logger.error(f"❌ Gagal mendaftarkan job {schedule_id}: {e}")
             raise ValueError(f"Gagal setup cron trigger: {str(e)}")
 
+    @log_performance
     def unregister_job(self, schedule_id: str) -> None:
         schedule_id = str(schedule_id)
         try:

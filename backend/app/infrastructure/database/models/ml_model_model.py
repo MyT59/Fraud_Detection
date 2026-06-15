@@ -1,6 +1,6 @@
 # app/infrastructure/database/models/ml_model_model.py
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, text
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, text
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -14,7 +14,7 @@ class MLModel(Base):
     version_name = Column(String(100), nullable=False)
     target_service = Column(String(100), nullable=False)
 
-    file_path = Column(String(255), nullable=False)
+    file_path = Column(Text, nullable=False)
 
     metrics = Column(JSONB, server_default='{}')
 

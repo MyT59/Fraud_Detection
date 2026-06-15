@@ -5,6 +5,9 @@ from app.infrastructure.repositories.transaction_repository import (
     TransactionRepository,
 )
 from app.infrastructure.ml.domain_detector import detect_domain
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 
 class TransactionFeatureSnapshotService:
@@ -31,6 +34,7 @@ class TransactionFeatureSnapshotService:
         self.db = db
         self.transaction_repository = TransactionRepository(db)
 
+    @log_performance(label="TransactionFeatureSnapshotService.build_transaction_snapshot")
     def build_transaction_snapshot(self, transaction_id: int):
         """
         Build normalized realtime transaction snapshot.

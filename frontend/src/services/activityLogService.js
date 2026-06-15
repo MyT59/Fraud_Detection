@@ -39,6 +39,7 @@ export const ACTION_GROUPS = {
     "ACCOUNT_SUSPENDED",
     "ACCOUNT_ROLE_CHANGED",
   ],
+  reports: ["REPORT_GENERATED", "REPORT_DOWNLOADED"],
 };
 
 export const AUDIT_LOG_ACTIONS = ACTION_GROUPS.user_actions;

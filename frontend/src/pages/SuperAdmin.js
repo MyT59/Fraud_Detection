@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import UserStats from "../components/superadmin/UserStats";
 import UserTable from "../components/superadmin/UserTable";
 import AddUserModal from "../components/superadmin/AddUserModal";
@@ -40,12 +41,12 @@ const mapUser = (u) => ({
 let _toastId = 0;
 const useToast = () => {
   const [toasts, setToasts] = useState([]);
-  const push = useCallback((message, type = "success") => {
+  const push = useCallback((message, type = "success", duration = 3000) => {
     const id = ++_toastId;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(
       () => setToasts((prev) => prev.filter((t) => t.id !== id)),
-      3000,
+      duration,
     );
   }, []);
   return { toasts, push };
@@ -56,11 +57,84 @@ const checkIsSuperAdmin = (user) => {
   return user.role === "SUPER_ADMIN" || user.role === "superadmin";
 };
 
+// ── Reset Password Modal ──────────────────────────────────────────
+const ResetPasswordModal = ({ data, onClose }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(data.password);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (!data) return null;
+
+  return createPortal(
+    <div className="rp-overlay" onClick={onClose}>
+      <div className="rp-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="rp-header">
+          <div className="rp-header-left">
+            <div className="rp-icon">
+              <i className="bi bi-key-fill"></i>
+            </div>
+            <div>
+              <p className="rp-title">Password Sementara</p>
+              <p className="rp-subtitle">
+                {data.name} · {data.email}
+              </p>
+            </div>
+          </div>
+          <button className="rp-close" onClick={onClose}>
+            <i className="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div className="rp-body">
+          <p className="rp-info">
+            <i className="bi bi-info-circle-fill"></i>
+            Bagikan password ini kepada pengguna. Mereka akan diminta membuat
+            password baru saat login.
+          </p>
+
+          <div className="rp-pw-wrap">
+            <span className="rp-pw-label">Password Sementara</span>
+            <div className="rp-pw-box">
+              <code className="rp-pw-value">{data.password}</code>
+              <button
+                className={`rp-copy-btn ${copied ? "copied" : ""}`}
+                onClick={handleCopy}
+              >
+                <i className={`bi bi-${copied ? "check-lg" : "clipboard"}`}></i>
+                {copied ? "Tersalin!" : "Salin"}
+              </button>
+            </div>
+          </div>
+
+          <p className="rp-warning">
+            <i className="bi bi-exclamation-triangle-fill"></i>
+            Password ini hanya ditampilkan sekali. Pastikan sudah disalin
+            sebelum menutup.
+          </p>
+        </div>
+
+        <div className="rp-footer">
+          <button className="rp-btn-close" onClick={onClose}>
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+};
+
+// ── Main Component ────────────────────────────────────────────────
 const SuperAdmin = () => {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editData, setEditData] = useState(null);
+  const [resetModal, setResetModal] = useState(null); // { name, email, password }
   const { toasts, push: pushToast } = useToast();
 
   const [currentUser, setCurrentUser] = useState(() => storage.getUser());
@@ -73,7 +147,6 @@ const SuperAdmin = () => {
       const data = await api.get("/accounts/");
       setUsers(data.map(mapUser));
     } catch (err) {
-      console.error("Gagal memuat akun:", err);
       pushToast(err.message || "Gagal memuat data pengguna.", "error");
     }
   }, [pushToast]);
@@ -118,11 +191,12 @@ const SuperAdmin = () => {
   const handleResetPassword = async (id) => {
     const user = users.find((u) => u.id === id);
     try {
-      await api.post(`/accounts/${id}/reset-password`);
-      pushToast(
-        `Password ${user?.name} berhasil direset. Email konfirmasi dikirim.`,
-        "info",
-      );
+      const res = await api.post(`/accounts/${id}/reset-password`);
+      setResetModal({
+        name: user?.name,
+        email: user?.email,
+        password: res.temporary_password,
+      });
     } catch (err) {
       pushToast(err.message || "Gagal mereset password.", "error");
     }
@@ -164,73 +238,83 @@ const SuperAdmin = () => {
   if (loading) return <PageLoader message="Memuat Super Admin Panel..." />;
 
   return (
-    <div className="superadmin-page">
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-header-icon">
-            <i className="bi bi-shield-lock-fill"></i>
+    <>
+      <div className="superadmin-page">
+        <div className="page-header">
+          <div className="page-header-left">
+            <div className="page-header-icon">
+              <i className="bi bi-shield-lock-fill"></i>
+            </div>
+            <div>
+              <h1 className="page-title">Super Admin Panel</h1>
+              <p className="page-subtitle">
+                Kelola pengguna dan hak akses sistem fraud detection
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="page-title">Super Admin Panel</h1>
-            <p className="page-subtitle">
-              Kelola pengguna dan hak akses sistem fraud detection
-            </p>
-          </div>
+          {isSuperAdmin && (
+            <button
+              className="btn-add-user"
+              onClick={() => {
+                setEditData(null);
+                setModalOpen(true);
+              }}
+            >
+              <i className="bi bi-plus-lg"></i>
+              Tambah Pengguna
+            </button>
+          )}
         </div>
-        {isSuperAdmin && (
-          <button
-            className="btn-add-user"
-            onClick={() => {
-              setEditData(null);
-              setModalOpen(true);
-            }}
-          >
-            <i className="bi bi-plus-lg"></i>
-            Tambah Pengguna
-          </button>
-        )}
+
+        <UserStats users={users} />
+
+        <UserTable
+          users={users}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onResetPassword={handleResetPassword}
+          onToggleStatus={handleToggleStatus}
+          currentUser={currentUser}
+        />
+
+        <AddUserModal
+          isOpen={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setEditData(null);
+          }}
+          onSubmit={handleSubmit}
+          editData={editData}
+          currentUser={currentUser}
+          superadminCount={superadminCount}
+        />
       </div>
 
-      <UserStats users={users} />
-
-      <UserTable
-        users={users}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onResetPassword={handleResetPassword}
-        onToggleStatus={handleToggleStatus}
-        currentUser={currentUser}
+      <ResetPasswordModal
+        data={resetModal}
+        onClose={() => setResetModal(null)}
       />
 
-      <AddUserModal
-        isOpen={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setEditData(null);
-        }}
-        onSubmit={handleSubmit}
-        editData={editData}
-        currentUser={currentUser}
-        superadminCount={superadminCount}
-      />
-
-      <div className="toast-container">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast toast-${t.type}`}>
-            <i
-              className={`bi ${
-                t.type === "success"
-                  ? "bi-check-circle-fill"
-                  : t.type === "error"
-                    ? "bi-trash-fill"
-                    : "bi-info-circle-fill"
-              }`}
-            ></i>
-            {t.message}
-          </div>
-        ))}
-      </div>
-    </div>
+      {createPortal(
+        <div className="sa-toast-container">
+          {toasts.map((t) => (
+            <div key={t.id} className={`sa-toast sa-toast-${t.type}`}>
+              <i
+                className={`bi ${
+                  t.type === "success"
+                    ? "bi-check-circle-fill"
+                    : t.type === "error"
+                      ? "bi-trash-fill"
+                      : "bi-info-circle-fill"
+                }`}
+              ></i>
+              {t.message}
+            </div>
+          ))}
+        </div>,
+        document.body,
+      )}
+    </>
   );
 };
 

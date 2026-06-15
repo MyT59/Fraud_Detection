@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 
 from app.application.services.activity_log_service import log_activity
+from app.infrastructure.database.enums import ActivityActionEnum
 from app.domain.entities.target_type import TargetType
 from app.core.rbac import require_roles
 from app.infrastructure.database.session import get_db
@@ -12,7 +13,9 @@ from app.presentation.schemas.blacklist_schema import (
     BlacklistResponse,
     BlacklistListResponse,
     BlacklistReviewSchema,
-    BlacklistTypeEnum
+    BlacklistTypeEnum,
+    BlacklistBulkRequest,
+    BlacklistBulkResponse,
 )
 
 router = APIRouter(prefix="/blacklist", tags=["Blacklist"])
@@ -35,7 +38,8 @@ def add_blacklist(
         reason=data.reason,
         source="MANUAL",
         status="PENDING",
-        is_active=False
+        is_active=False,
+        added_by=current_admin.id
     )
 
     db.add(item)
@@ -56,7 +60,7 @@ def add_blacklist(
     log_activity(
         db,
         current_admin,
-        action_type="CREATE_BLACKLIST",
+        action_type=ActivityActionEnum.BLACKLIST_CREATED,
         target_type=TargetType.BLACKLIST,
         target_id=item.id,
         details=f"Added {item.type}={item.value}"
@@ -86,12 +90,13 @@ def approve_blacklist(
     log_activity(
         db,
         current_admin,
-        action_type="APPROVE_BLACKLIST",
+        action_type=ActivityActionEnum.BLACKLIST_APPROVED,
         target_type=TargetType.BLACKLIST,
         target_id=item.id,
         details=f"Approved blacklist: {payload.review_note}"
     )
 
+    db.commit()
     return {"message": "Blacklist approved"}
 
 @router.patch("/{item_id}/reject")
@@ -116,12 +121,13 @@ def reject_blacklist(
     log_activity(
         db,
         current_admin,
-        action_type="REJECT_BLACKLIST",
+        action_type=ActivityActionEnum.BLACKLIST_REJECTED,
         target_type=TargetType.BLACKLIST,
         target_id=item.id,
         details=f"Rejected blacklist: {payload.review_note}"
     )
 
+    db.commit()
     return {"message": "Blacklist rejected"}
 
 # =========================
@@ -172,7 +178,7 @@ def update_blacklist(
     log_activity(
         db=db,
         admin=current_admin,
-        action_type="UPDATE_BLACKLIST",
+        action_type=ActivityActionEnum.BLACKLIST_UPDATED,
         target_type=TargetType.BLACKLIST,
         target_id=item.id,
         details={
@@ -187,6 +193,85 @@ def update_blacklist(
     )
 
     return item
+
+# =========================
+# BULK IMPORT BLACKLIST
+# =========================
+@router.post("/bulk", response_model=BlacklistBulkResponse)
+def bulk_import_blacklist(
+    data: BlacklistBulkRequest,
+    db: Session = Depends(get_db),
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
+):
+    success      = 0
+    skipped      = 0
+    failed       = 0
+    skipped_vals = []
+    failed_vals  = []
+
+    for item in data.items:
+        try:
+            normalized_value = item.value.strip().lower()
+
+            exists = db.query(BlacklistItem).filter(
+                BlacklistItem.type          == item.type,
+                BlacklistItem.value         == normalized_value,
+                BlacklistItem.service_scope == item.service_scope.upper(),
+            ).first()
+
+            if exists:
+                skipped += 1
+                skipped_vals.append(item.value)
+                continue
+
+            new_item = BlacklistItem(
+                value         = normalized_value,
+                type          = item.type,
+                service_scope = item.service_scope.upper(),
+                reason        = item.reason,
+                source        = "IMPORT",
+                status        = "PENDING",
+                is_active     = False,
+                added_by      = current_admin.id,
+            )
+            db.add(new_item)
+            db.flush()
+            success += 1
+
+        except Exception:
+            db.rollback()
+            failed += 1
+            failed_vals.append(item.value)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Gagal menyimpan bulk import")
+
+    log_activity(
+        db,
+        current_admin,
+        action_type=ActivityActionEnum.BLACKLIST_BULK_IMPORT,
+        target_type=TargetType.BLACKLIST,
+        target_id=None,
+        details={
+            "total"  : len(data.items),
+            "success": success,
+            "skipped": skipped,
+            "failed" : failed,
+        }
+    )
+
+    return {
+        "total"         : len(data.items),
+        "success"       : success,
+        "skipped"       : skipped,
+        "failed"        : failed,
+        "skipped_values": skipped_vals,
+        "failed_values" : failed_vals,
+    }
+
 
 # =========================
 # GET BLACKLIST (WITH FILTERS)
@@ -252,13 +337,50 @@ def get_blacklist(
     # =========================
     # PAGINATION
     # =========================
-    items = query.offset(skip).limit(limit).all()
+    from sqlalchemy.orm import selectinload
+    from app.infrastructure.database.models.admin_model import Admin
+    from app.infrastructure.database.models.role_model import Role
+
+    items = query.options(
+        selectinload(BlacklistItem.admin).selectinload(Admin.role)
+    ).offset(skip).limit(limit).all()
+
+    # Inject added_by info dari relationship admin
+    def serialize(item):
+        admin_name = None
+        admin_role = None
+        admin_id   = item.added_by
+
+        if item.admin:
+            admin_name = item.admin.full_name
+            # Role bisa berupa object dengan field name/role_name
+            role_obj = getattr(item.admin, "role", None)
+            if role_obj:
+                admin_role = getattr(role_obj, "role_name", None) \
+                    or getattr(role_obj, "name", None)
+
+        return {
+            "id": item.id,
+            "value": item.value,
+            "type": item.type,
+            "service_scope": item.service_scope,
+            "reason": item.reason,
+            "review_note": item.review_note,
+            "is_active": item.is_active,
+            "source": item.source,
+            "status": item.status,
+            "hit_count": item.hit_count,
+            "created_at": item.created_at,
+            "added_by": admin_id,
+            "added_by_name": admin_name,
+            "added_by_role": admin_role,
+        }
 
     return {
         "total": total,
         "skip": skip,
         "limit": limit,
-        "data": items
+        "data": [serialize(i) for i in items]
     }
 
 # =========================
@@ -274,16 +396,16 @@ def deactivate_blacklist(item_id: int, db: Session = Depends(get_db), current_ad
 
     item.is_active = False
     
-    # Log Activity
     log_activity(
         db,
         current_admin,
-        action_type="DEACTIVATE_BLACKLIST",
+        action_type=ActivityActionEnum.BLACKLIST_DEACTIVATED,
         target_type=TargetType.BLACKLIST,
         target_id=item.id,
         details="Deactivated blacklist"
     )
 
+    db.commit()
     return {"message": "Blacklist deactivated"}
 
 # =========================
@@ -299,16 +421,16 @@ def activate_blacklist(item_id: int, db: Session = Depends(get_db), current_admi
     item.is_active = True
     item.status = "APPROVED"
 
-    # Log Activity
     log_activity(
         db,
         current_admin,
-        action_type="ACTIVATE_BLACKLIST",
+        action_type=ActivityActionEnum.BLACKLIST_ACTIVATED,
         target_type=TargetType.BLACKLIST,
         target_id=item.id,
         details="Activated blacklist"
     )
 
+    db.commit()
     return {"message": "Blacklist activated"}
 
 # =========================
@@ -325,15 +447,16 @@ def delete_blacklist(item_id: int, db: Session = Depends(get_db), current_admin=
     target_id = item.id
     
     db.delete(item)
-    
+
     # Log Activity
     log_activity(
         db,
         current_admin,
-        action_type="DELETE_BLACKLIST",
+        action_type=ActivityActionEnum.BLACKLIST_DELETED,
         target_type=TargetType.BLACKLIST,
         target_id=target_id,
         details="Deleted blacklist"
     )
 
+    db.commit()
     return {"message": "Blacklist deleted"}

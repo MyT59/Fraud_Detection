@@ -1298,3 +1298,67 @@
 .rs-reset-btn i {
   font-size: 11px;
 }
+
+/* ─── Tab Navigation ──────────────────────────────────────────────── */
+.rs-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-bottom: 2px solid #f1f5f9;
+  margin-bottom: 20px;
+}
+
+.rs-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 18px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #94a3b8;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+  white-space: nowrap;
+}
+
+.rs-tab:hover {
+  color: #475569;
+}
+
+.rs-tab--active {
+  color: #dc2626;
+  border-bottom-color: #dc2626;
+}
+
+.rs-tab i {
+  font-size: 14px;
+}
+
+@keyframes rs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.rs-spin {
+  animation: rs-spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+/* ─── Health pulse animation ─────────────────────────────────────── */
+@keyframes rs-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 5px rgba(22, 163, 74, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+  }
+}

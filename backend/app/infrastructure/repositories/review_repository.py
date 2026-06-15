@@ -176,3 +176,49 @@ class ReviewRepository:
             })
 
         return results
+    def get_history_by_reviewer(self, reviewer_id: int, page: int = 1, limit: int = 10):
+        """
+        Ambil riwayat review milik analis tertentu saja.
+        Digunakan untuk FRAUD_ANALYST agar hanya lihat history milik sendiri.
+        """
+        query = self.db.query(ManualReview).filter(
+            ManualReview.reviewer_id == reviewer_id,
+            ManualReview.is_deleted == False
+        )
+        total = query.count()
+        reviews = query.order_by(ManualReview.created_at.desc())             .offset((page - 1) * limit)             .limit(limit)             .all()
+        return total, reviews
+
+    def get_decision_counts_by_reviewer(self, reviewer_id: int):
+        """
+        Agregat keputusan review milik analis tertentu.
+        Untuk menghitung personal metrics: total, fraud, safe, rate.
+        """
+        data = self.db.query(
+            func.count(ManualReview.id).label("total"),
+            func.sum(case((ManualReview.decision == "FRAUD", 1), else_=0)).label("fraud"),
+            func.sum(case((ManualReview.decision == "SAFE", 1), else_=0)).label("safe")
+        ).filter(
+            ManualReview.reviewer_id == reviewer_id,
+            ManualReview.is_deleted == False
+        ).first()
+
+        return {
+            "total": data.total or 0,
+            "fraud": int(data.fraud or 0),
+            "safe": int(data.safe or 0)
+        }
+
+    def get_avg_duration_by_reviewer(self, reviewer_id: int):
+        """
+        Rata-rata durasi review milik analis tertentu dalam detik.
+        """
+        return self.db.query(
+            func.avg(
+                func.extract('epoch', ManualReview.review_completed_at - ManualReview.review_started_at)
+            )
+        ).filter(
+            ManualReview.reviewer_id == reviewer_id,
+            ManualReview.review_completed_at.isnot(None),
+            ManualReview.review_started_at.isnot(None)
+        ).scalar() or 0.0

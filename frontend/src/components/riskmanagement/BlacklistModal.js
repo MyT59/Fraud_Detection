@@ -35,6 +35,7 @@ const BlacklistDetailModal = ({
   onEdit,
   onDelete,
   onApprove,
+  onReject,
   onToggleStatus,
 }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -117,6 +118,55 @@ const BlacklistDetailModal = ({
             </div>
             <div className="bdm-stat-divider" />
             <div className="bdm-stat">
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
+                <span
+                  className="bdm-stat-val"
+                  style={{
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    color: "#111827",
+                    textAlign: "center",
+                  }}
+                >
+                  {item.addedBy || "—"}
+                </span>
+                {item.addedByRole && (
+                  <span
+                    style={{
+                      fontSize: "0.65rem",
+                      fontWeight: 600,
+                      padding: "1px 6px",
+                      borderRadius: 4,
+                      background: "#eff6ff",
+                      color: "#1d4ed8",
+                    }}
+                  >
+                    {item.addedByRole}
+                  </span>
+                )}
+                {item.addedById && (
+                  <span
+                    style={{
+                      fontSize: "0.62rem",
+                      color: "#9ca3af",
+                      fontFamily: "Courier New, monospace",
+                    }}
+                  >
+                    #{item.addedById}
+                  </span>
+                )}
+              </div>
+              <span className="bdm-stat-lbl">Ditambah oleh</span>
+            </div>
+            <div className="bdm-stat-divider" />
+            <div className="bdm-stat">
               <span className={`bdm-stat-val bdm-stat-src ${src.cls}`}>
                 <i className={`bi ${src.icon}`} />
                 {src.label}
@@ -130,21 +180,42 @@ const BlacklistDetailModal = ({
             Informasi Rekening
           </div>
           <div className="bdm-info-grid">
-            <div className="bdm-info-item">
-              <span className="bdm-info-label">Nomor Rekening</span>
-              <span className="bdm-info-val bdm-mono">
+            <div className="bdm-info-item bdm-info-item--full">
+              <span className="bdm-info-label">Nilai / Identifier</span>
+              <span
+                className="bdm-info-val bdm-mono"
+                style={{ fontSize: "1rem", letterSpacing: "0.04em" }}
+              >
                 {item.accountNumber}
               </span>
             </div>
             <div className="bdm-info-item">
-              <span className="bdm-info-label">Nama Pemilik</span>
-              <span className="bdm-info-val">{item.accountName || "—"}</span>
+              <span className="bdm-info-label">Tipe Identifier</span>
+              <span className="bdm-info-val">
+                <span
+                  className="bdm-pill bdm-pill-gray"
+                  style={{
+                    fontFamily: "Courier New, monospace",
+                    fontSize: "0.75rem",
+                  }}
+                >
+                  {item.bank || item.type || "—"}
+                </span>
+              </span>
             </div>
             <div className="bdm-info-item">
-              <span className="bdm-info-label">Bank</span>
+              <span className="bdm-info-label">Service Scope</span>
               <span className="bdm-info-val">
-                <span className="bdm-pill bdm-pill-gray">
-                  {item.bank || "—"}
+                <span
+                  className={`bdm-pill ${
+                    item.service_scope === "AGENUSA"
+                      ? "bdm-pill-blue"
+                      : item.service_scope === "NUSABILL"
+                        ? "bdm-pill-green"
+                        : "bdm-pill-gray"
+                  }`}
+                >
+                  {item.service_scope || "ALL"}
                 </span>
               </span>
             </div>
@@ -166,9 +237,9 @@ const BlacklistDetailModal = ({
             </div>
             {item.reasonDetail && (
               <div className="bdm-info-item bdm-info-item--full">
-                <span className="bdm-info-label">Keterangan Tambahan</span>
+                <span className="bdm-info-label">Review Note</span>
                 <span className="bdm-info-val bdm-reason-detail">
-                  {item.reasonDetail}
+                  {item.reasonDetail || item.review_note || "—"}
                 </span>
               </div>
             )}
@@ -196,7 +267,7 @@ const BlacklistDetailModal = ({
                 }}
               >
                 <i className="bi bi-check-circle" />
-                Setujui & Aktifkan
+                Setujui
               </button>
             )}
             {item.status === "active" && (

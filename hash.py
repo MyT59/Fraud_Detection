@@ -11,4 +11,4 @@ def get_new_hash(password_baru: str):
     final_hash = pwd_context.hash(sha256_hash)
     return final_hash
 
-print(get_new_hash("Fraudanalyst@123"))
+print(get_new_hash("@Superadmin123"))

@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.infrastructure.database.session import get_db
 from app.application.services.review_service import (
     get_review_history,
+    get_my_review_history,
+    get_my_review_metrics_service,
     log_false_negative_service,
     override_review_decision_service,
     review_transaction,
@@ -14,7 +16,7 @@ from app.application.services.review_service import (
     soft_delete_review_service
 )
 
-from app.presentation.schemas.review_schema import ReviewRequest, ReviewMetricsResponse, AnalystPerformanceResponse, ReviewTimelineAnalyticsResponse, ReviewOverrideRequest, FalseNegativeReportRequest, ReviewHistoryPaginatedResponse
+from app.presentation.schemas.review_schema import ReviewRequest, ReviewMetricsResponse, MyReviewMetricsResponse, AnalystPerformanceResponse, ReviewTimelineAnalyticsResponse, ReviewOverrideRequest, FalseNegativeReportRequest, ReviewHistoryPaginatedResponse
 
 from app.core.rbac import require_roles
 
@@ -66,6 +68,32 @@ def get_review_history_route(
     current_admin = Depends(require_roles("FRAUD_ANALYST", "RISK_MANAGER", "SUPER_ADMIN"))
 ):
     return get_review_history(db, page, limit)
+
+
+@router.get("/my-history", response_model=ReviewHistoryPaginatedResponse)
+def get_my_review_history_route(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1),
+    db: Session = Depends(get_db),
+    current_admin = Depends(require_roles("FRAUD_ANALYST", "RISK_MANAGER", "SUPER_ADMIN"))
+):
+    """
+    Riwayat review milik analis yang sedang login.
+    FRAUD_ANALYST hanya lihat history miliknya sendiri.
+    """
+    return get_my_review_history(db, current_admin.id, page, limit)
+
+
+@router.get("/my-metrics", response_model=MyReviewMetricsResponse)
+def get_my_review_metrics(
+    db: Session = Depends(get_db),
+    current_admin = Depends(require_roles("FRAUD_ANALYST", "RISK_MANAGER", "SUPER_ADMIN"))
+):
+    """
+    Metrics personal milik analis yang sedang login.
+    Semua role bisa akses — masing-masing lihat stats miliknya sendiri.
+    """
+    return get_my_review_metrics_service(db, current_admin.id)
 
 @router.get("/timeline-analytics", response_model=ReviewTimelineAnalyticsResponse)
 def get_review_timeline_analytics(

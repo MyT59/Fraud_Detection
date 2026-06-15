@@ -5,8 +5,12 @@ from app.infrastructure.database.models.transaction_model import Transaction
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
 from app.infrastructure.repositories.pattern_repository import PatternRepository
 from app.core.config import settings
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 
+@log_performance(label="PatternAnalytics.get_pattern_statistics")
 def get_pattern_statistics(db: Session):
     patterns = db.query(FraudPattern).all()
 
@@ -16,18 +20,41 @@ def get_pattern_statistics(db: Session):
         Transaction.is_flagged_ml == True
     ).scalar() or 0
 
+    # Pre-aggregate tx_count dan avg_amount per pattern_id dalam satu query
+    # menghindari N+1 query (2 query per pattern × jumlah pattern)
+    from sqlalchemy import cast
+    from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
+
+    agg_rows = db.query(
+        func.jsonb_array_elements_text(Transaction.violation_pattern_ids).label("pid"),
+        func.count(Transaction.id).label("tx_count"),
+        func.avg(Transaction.amount).label("avg_amount")
+    ).filter(
+        Transaction.violation_pattern_ids.isnot(None)
+    ).group_by("pid").all()
+
+    agg_map = {int(r.pid): {"tx_count": r.tx_count, "avg_amount": float(r.avg_amount or 0)} for r in agg_rows}
+
+    # [FIX] Basis perhitungan trend per pattern.
+    # Sebelumnya trend = tx_count / total_flagged (is_flagged_ml), padahal
+    # tx_count berasal dari domain violation_pattern_ids (pattern engine).
+    # Dua domain berbeda (ML async vs pattern engine sync) menyebabkan trend
+    # bisa >100% atau tidak masuk akal jika kedua flag tidak overlap konsisten.
+    #
+    # total_pattern_flagged dihitung dari domain yang sama dengan tx_count:
+    # jumlah baris transaksi yang punya minimal satu violation_pattern_ids
+    # (yaitu jumlah seluruh "kemunculan" pattern di semua transaksi).
+    # Dihitung dari agg_map agar tidak perlu query tambahan ke DB.
+    total_pattern_flagged = sum(a["tx_count"] for a in agg_map.values())
+
     for pattern in patterns:
+        agg = agg_map.get(pattern.id, {"tx_count": 0, "avg_amount": 0.0})
+        tx_count = agg["tx_count"]
 
-        tx_count = db.query(func.count(Transaction.id)).filter(
-            Transaction.violation_pattern_ids.contains([pattern.id])
-        ).scalar() or 0
-
-        avg_amount = db.query(func.avg(Transaction.amount)).filter(
-            Transaction.violation_pattern_ids.contains([pattern.id])
-        ).scalar()
-
+        # [FIX] trend = share pattern ini terhadap total kemunculan pattern
+        # violation di seluruh transaksi (domain sama dengan tx_count).
         trend = round(
-            (tx_count / max(total_flagged, 1)) * 100,
+            (tx_count / max(total_pattern_flagged, 1)) * 100,
             1
         )
 
@@ -41,7 +68,7 @@ def get_pattern_statistics(db: Session):
             "is_active": pattern.is_active,
 
             "occurrences": tx_count,
-            "avg_amount": float(avg_amount or 0),
+            "avg_amount": agg["avg_amount"],
 
             "accuracy": pattern.accuracy_score,
             "false_positive_rate": pattern.false_positive_rate,
@@ -61,6 +88,7 @@ def get_pattern_statistics(db: Session):
         "total_flagged_transactions": total_flagged,
     }
 
+@log_performance(label="PatternAnalytics.get_pattern_effectiveness_service")
 def get_pattern_effectiveness_service(db):
     pattern_repo = PatternRepository(db)
     patterns = pattern_repo.get_all_patterns()
@@ -75,6 +103,7 @@ def get_pattern_effectiveness_service(db):
         for p in patterns
     ]
 
+@log_performance(label="PatternAnalytics.get_pattern_diagnostics_service")
 def get_pattern_diagnostics_service(db):
     # Mengagregasi performa diagnostik ruleset untuk menemukan anomali false positive 
     # dan memberikan rekomendasi aktivasi otomatis terhadap kluster pattern kandidat.

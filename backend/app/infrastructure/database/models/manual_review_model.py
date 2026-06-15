@@ -13,6 +13,7 @@ class ManualReview(Base):
 
     transaction_id = Column(BigInteger, ForeignKey("transactions_feed.id", ondelete="CASCADE"), nullable=False)
     reviewer_id = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True)
+    reviewer_name = Column(String(150), nullable=True)
     alert_id = Column(BigInteger, ForeignKey("fraud_alerts.id", ondelete="CASCADE"), unique=True)
 
     decision = Column(Enum(ReviewDecisionEnum, name="review_decision_enum"), nullable=False)

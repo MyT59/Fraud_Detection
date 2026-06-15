@@ -49,9 +49,18 @@ class RuleUpdate(BaseModel):
     description: Optional[str] = None
     is_active: Optional[bool] = None
 
+from datetime import datetime
+from typing import Optional
+
 class RuleResponse(RuleBase):
     id: int
     is_active: bool
+    hit_count: int = 0
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    created_by: Optional[int] = None
+    created_by_name: Optional[str] = None
+    created_by_role: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -79,7 +88,9 @@ class RuleBuilderRequest(BaseModel):
     rule_key: str
     service_scope: ServiceScopeEnum = ServiceScopeEnum.ALL
 
-    rule_config: ConditionGroup  # 🔥 JSON logic
+    # Menerima single condition (Condition) maupun nested group (ConditionGroup)
+    # Pydantic akan mencoba Condition dulu; jika gagal (tidak ada field/operator/value), fallback ke ConditionGroup
+    rule_config: Union[Condition, ConditionGroup]
 
     action: RuleActionEnum
     severity: RuleSeverityEnum = RuleSeverityEnum.MEDIUM

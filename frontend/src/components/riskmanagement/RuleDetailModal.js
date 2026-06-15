@@ -25,11 +25,12 @@ const ACTION_CONFIG = {
   },
 };
 
-const getPriorityCls = (p) => (p <= 3 ? "p-high" : p <= 6 ? "p-med" : "p-low");
+const getPriorityCls = (p) =>
+  p >= 75 ? "p-high" : p >= 30 ? "p-med" : "p-low";
 const getPriorityLabel = (p) =>
-  p <= 3
+  p >= 75
     ? "Prioritas Tinggi"
-    : p <= 6
+    : p >= 30
       ? "Prioritas Sedang"
       : "Prioritas Rendah";
 
@@ -121,18 +122,71 @@ const RuleDetailModal = ({
             </div>
             <div className="rdm-stat-divider" />
             <div className="rdm-stat">
-              <span className="rdm-stat-val">{rule.hitToday ?? 0}</span>
-              <span className="rdm-stat-lbl">Hari Ini</span>
+              <span className="rdm-stat-val">{rule.priority ?? "—"}</span>
+              <span className="rdm-stat-lbl">Prioritas</span>
             </div>
             <div className="rdm-stat-divider" />
             <div className="rdm-stat">
-              <span className="rdm-stat-val">{rule.hitWeek ?? 0}</span>
-              <span className="rdm-stat-lbl">Minggu Ini</span>
+              <span className="rdm-stat-val" style={{ fontSize: "0.78rem" }}>
+                {rule.service_scope || "ALL"}
+              </span>
+              <span className="rdm-stat-lbl">Service Scope</span>
             </div>
             <div className="rdm-stat-divider" />
             <div className="rdm-stat">
-              <span className="rdm-stat-val">{rule.hitMonth ?? 0}</span>
-              <span className="rdm-stat-lbl">Bulan Ini</span>
+              <span className="rdm-stat-val" style={{ fontSize: "0.78rem" }}>
+                {rule.severity || "—"}
+              </span>
+              <span className="rdm-stat-lbl">Severity</span>
+            </div>
+            <div className="rdm-stat-divider" />
+            <div className="rdm-stat">
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
+                <span
+                  className="rdm-stat-val"
+                  style={{
+                    fontSize: "0.76rem",
+                    fontWeight: 700,
+                    color: "#111827",
+                    textAlign: "center",
+                  }}
+                >
+                  {rule.createdBy || "—"}
+                </span>
+                {rule.createdByRole && (
+                  <span
+                    style={{
+                      fontSize: "0.63rem",
+                      fontWeight: 600,
+                      padding: "1px 5px",
+                      borderRadius: 3,
+                      background: "#eff6ff",
+                      color: "#1d4ed8",
+                    }}
+                  >
+                    {rule.createdByRole}
+                  </span>
+                )}
+                {rule.createdById && (
+                  <span
+                    style={{
+                      fontSize: "0.6rem",
+                      color: "#9ca3af",
+                      fontFamily: "Courier New, monospace",
+                    }}
+                  >
+                    #{rule.createdById}
+                  </span>
+                )}
+              </div>
+              <span className="rdm-stat-lbl">Dibuat oleh</span>
             </div>
           </div>
 
@@ -142,11 +196,15 @@ const RuleDetailModal = ({
           </div>
           <div className="rdm-info-grid">
             <div className="rdm-info-item">
-              <span className="rdm-info-label">Prioritas</span>
-              <span className="rdm-info-val">
-                <span className={`rdm-priority-pill ${prioCls}`}>
-                  {rule.priority}
-                </span>
+              <span className="rdm-info-label">Rule Key</span>
+              <span
+                className="rdm-info-val"
+                style={{
+                  fontFamily: "Courier New, monospace",
+                  fontSize: "0.78rem",
+                }}
+              >
+                {rule.rule_key || "—"}
               </span>
             </div>
             <div className="rdm-info-item">
@@ -171,6 +229,10 @@ const RuleDetailModal = ({
               <span className="rdm-info-label">Dibuat</span>
               <span className="rdm-info-val">{rule.createdAt || "—"}</span>
             </div>
+            <div className="rdm-info-item">
+              <span className="rdm-info-label">Rule Group</span>
+              <span className="rdm-info-val">{rule.rule_group || "—"}</span>
+            </div>
           </div>
 
           <div className="rdm-section-title">
@@ -186,17 +248,24 @@ const RuleDetailModal = ({
 
           <div className="rdm-section-title">
             <i className="bi bi-bar-chart-fill" />
-            Statistik Hit
+            Statistik Rule
           </div>
           <div className="rdm-hit-grid">
             {[
-              { label: "Hari Ini", val: rule.hitToday ?? 0 },
-              { label: "Minggu Ini", val: rule.hitWeek ?? 0 },
-              { label: "Bulan Ini", val: rule.hitMonth ?? 0 },
+              { label: "Total Hit", val: rule.hitCount ?? 0 },
+              { label: "Prioritas", val: rule.priority ?? 0 },
+              { label: "Dibuat", val: rule.createdAt || "—", isText: true },
             ].map((h) => (
               <div className="rdm-hit-card" key={h.label}>
-                <span className={`rdm-hit-val ${h.val === 0 ? "zero" : ""}`}>
-                  {h.val === 0 ? "—" : h.val.toLocaleString("id-ID")}
+                <span
+                  className={`rdm-hit-val ${!h.isText && h.val === 0 ? "zero" : ""}`}
+                  style={h.isText ? { fontSize: "0.75rem" } : {}}
+                >
+                  {h.isText
+                    ? h.val
+                    : h.val === 0
+                      ? "—"
+                      : h.val.toLocaleString("id-ID")}
                 </span>
                 <span className="rdm-hit-period">{h.label}</span>
               </div>
@@ -270,32 +339,54 @@ const RuleDetailModal = ({
               </div>
               <h3 className="rdm-confirm-title">Hapus Rule Ini?</h3>
               <p className="rdm-confirm-msg">
-                Rule <strong>"{rule.name}"</strong> akan{" "}
-                <strong>terhapus secara permanen</strong> dan tidak dapat
-                dikembalikan.
+                Rule <strong>"{rule.name}"</strong> akan dinonaktifkan (soft
+                delete) dan tidak lagi dievaluasi engine.
               </p>
-              <div className="rdm-confirm-warning">
-                <i className="bi bi-shield-exclamation" />
-                Apakah Anda ingin melanjutkan?
-              </div>
+              {rule.enabled ? (
+                <div className="rdm-confirm-warning">
+                  <i className="bi bi-shield-exclamation" />
+                  Rule ini <strong>sedang aktif</strong> — nonaktifkan dulu
+                  sebelum menghapus untuk menghindari gangguan deteksi.
+                </div>
+              ) : (
+                <div className="rdm-confirm-warning">
+                  <i className="bi bi-shield-exclamation" />
+                  Apakah Anda ingin melanjutkan?
+                </div>
+              )}
               <div className="rdm-confirm-actions">
                 <button
                   className="rdm-confirm-btn-cancel"
                   onClick={() => setConfirmDelete(false)}
                 >
                   <i className="bi bi-arrow-left" />
-                  Batal
+                  {rule.enabled ? "Nonaktifkan Dulu" : "Batal"}
                 </button>
-                <button
-                  className="rdm-confirm-btn-delete"
-                  onClick={() => {
-                    onDelete(rule.id);
-                    onClose();
-                  }}
-                >
-                  <i className="bi bi-trash3-fill" />
-                  Ya, Hapus
-                </button>
+                {rule.enabled ? (
+                  <button
+                    className="rdm-confirm-btn-delete"
+                    style={{ background: "#d97706" }}
+                    onClick={() => {
+                      onToggle(rule.id);
+                      setConfirmDelete(false);
+                      onClose();
+                    }}
+                  >
+                    <i className="bi bi-pause-circle" />
+                    Nonaktifkan
+                  </button>
+                ) : (
+                  <button
+                    className="rdm-confirm-btn-delete"
+                    onClick={() => {
+                      onDelete(rule.id);
+                      onClose();
+                    }}
+                  >
+                    <i className="bi bi-trash3-fill" />
+                    Ya, Hapus
+                  </button>
+                )}
               </div>
             </div>
           </div>

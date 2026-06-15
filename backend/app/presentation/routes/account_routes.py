@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Body 
+from fastapi import APIRouter, Depends, Body
+from pydantic import BaseModel 
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -81,14 +82,17 @@ def update_my_profile_route(
         department=request.department
     )
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
 @router.post("/change-password")
 def change_password_route(
-    old_password: str,
-    new_password: str,
+    request: ChangePasswordRequest,
     db: Session = Depends(get_db),
     current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST"))
 ):
-    return change_password(db, current_admin, old_password, new_password)
+    return change_password(db, current_admin, request.old_password, request.new_password)
 
 # UPDATE ACCOUNT
 @router.patch("/{admin_id}", response_model=AdminResponse)

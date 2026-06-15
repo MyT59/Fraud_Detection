@@ -186,7 +186,7 @@ const RuleEngine = ({ rules, onAdd, onEdit, onDelete, onToggle, onDetail }) => {
 
   const processed = useMemo(() => {
     const q = search.toLowerCase();
-    let result = rules.filter(
+    let result = (rules || []).filter(
       (r) =>
         (!q ||
           r.name.toLowerCase().includes(q) ||
@@ -225,8 +225,8 @@ const RuleEngine = ({ rules, onAdd, onEdit, onDelete, onToggle, onDetail }) => {
           <span className="re-title">
             Rule Engine — Deteksi Berbasis Aturan
             <span style={{ color: "#9ca3af", fontWeight: 400, marginLeft: 6 }}>
-              ({rules.filter((r) => r.enabled).length} aktif / {rules.length}{" "}
-              total)
+              ({(rules || []).filter((r) => r.enabled).length} aktif /{" "}
+              {(rules || []).length} total)
             </span>
           </span>
           <span className="re-subtitle">

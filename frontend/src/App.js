@@ -23,27 +23,28 @@ import AlertsLog from "./pages/AlertsLog";
 import FraudPatterns from "./pages/FraudPatterns";
 import ActivityTimeline from "./pages/ActivityTimeline";
 import RetrainSchedule from "./pages/RetrainSchedule";
+import ChangePassword from "./pages/ChangePassword";
 import Login from "./pages/Login";
 import "./App.css";
 
 // ─── Auth Guard ───────────────────────────────────────────────────
-// Redirect ke /login jika belum autentikasi
-
 const ProtectedRoute = ({ children }) => {
-  return authService.isAuthenticated() ? (
-    children
-  ) : (
-    <Navigate to="/login" replace />
-  );
+  const user = storage.getUser();
+
+  if (!authService.isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Kalau password masih temporary, paksa ke /change-password
+  if (user?.is_password_temporary) {
+    return <Navigate to="/change-password" replace />;
+  }
+
+  return children;
 };
 
 // ─── Role Guard ───────────────────────────────────────────────────
-// Tampilkan 403 inline jika role tidak sesuai.
-// Tidak redirect agar user tahu kenapa tidak bisa akses.
-
 const RoleGuard = ({ allowedRoles, children }) => {
-  // FIX: gunakan storage.getUser() dari apiService (key "user"),
-  // bukan authService.getCurrentUser() yang baca dari key "current_user" (AuthService.js lama)
   const user = storage.getUser();
   const role = user?.role || null;
 
@@ -119,7 +120,6 @@ const RoleGuard = ({ allowedRoles, children }) => {
 };
 
 // ─── App ──────────────────────────────────────────────────────────
-
 function App() {
   const isMobile = () => window.innerWidth <= 992;
 
@@ -142,6 +142,19 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+
+        {/* Route change-password: hanya bisa diakses kalau sudah login */}
+        <Route
+          path="/change-password"
+          element={
+            authService.isAuthenticated() ? (
+              <ChangePassword />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
         <Route
           path="/*"
           element={
@@ -159,7 +172,6 @@ function App() {
                   />
                   <main className="main-content">
                     <Routes>
-                      {/* ── Public (semua role) ── */}
                       <Route path="/" element={<Dashboard />} />
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/transactions" element={<Transactions />} />
@@ -171,21 +183,11 @@ function App() {
                         path="/activity-timeline"
                         element={<ActivityTimeline />}
                       />
-
-                      {/* ── Manual Review
-                          FRAUD_ANALYST  : My Assigned Cases tab
-                          RISK_MANAGER   : Analyst Performance + Timeline tab
-                          SUPER_ADMIN    : Semua tab
-                          → Tidak di-guard di sini karena ManualReview.js
-                            sendiri yang handle tab per role
-                      ── */}
                       <Route path="/manual-review" element={<ManualReview />} />
                       <Route
                         path="/review-history"
                         element={<ReviewHistory />}
                       />
-
-                      {/* ── Risk Management: RISK_MANAGER & SUPER_ADMIN ── */}
                       <Route
                         path="/risk-management"
                         element={
@@ -196,8 +198,6 @@ function App() {
                           </RoleGuard>
                         }
                       />
-
-                      {/* ── Control Panel: SUPER_ADMIN only ── */}
                       <Route
                         path="/super-admin"
                         element={
@@ -220,7 +220,11 @@ function App() {
                         path="/fraud-patterns"
                         element={
                           <RoleGuard
-                            allowedRoles={["SUPER_ADMIN", "RISK_MANAGER"]}
+                            allowedRoles={[
+                              "SUPER_ADMIN",
+                              "RISK_MANAGER",
+                              "FRAUD_ANALYST",
+                            ]}
                           >
                             <FraudPatterns />
                           </RoleGuard>
@@ -229,9 +233,7 @@ function App() {
                       <Route
                         path="/retrain-schedule"
                         element={
-                          <RoleGuard
-                            allowedRoles={["SUPER_ADMIN", "RISK_MANAGER"]}
-                          >
+                          <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
                             <RetrainSchedule />
                           </RoleGuard>
                         }

@@ -15,5 +15,5 @@ class UserSession(Base):
     browser = Column(String(100))         
     is_current = Column(Boolean, default=False)  
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_used_at = Column(DateTime(timezone=True))

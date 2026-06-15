@@ -6,8 +6,12 @@ from app.core.device_parser import parse_device
 # 🔥 IMPORT SERVICE LOG UTAMA & ENUM
 from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
+from app.core.logging import get_logger, log_performance
+
+logger = get_logger(__name__)
 
 
+@log_performance
 def create_session(db, admin, access_token, refresh_token, ip, user_agent):
     repo = UserSessionRepository(db)
     repo.deactivate_current_sessions(admin.id)
@@ -38,6 +42,7 @@ def create_session(db, admin, access_token, refresh_token, ip, user_agent):
     return repo.create(session)
 
 
+@log_performance
 def get_sessions(db, current_admin):
     repo = UserSessionRepository(db)
     sessions = repo.get_active_sessions(current_admin.id)
@@ -54,11 +59,16 @@ def get_sessions(db, current_admin):
     ]
 
 
+@log_performance
 def revoke_session(db, session_id, current_admin):
     repo = UserSessionRepository(db)
-    
-    # Ambil metadata sesi terlebih dahulu untuk kebutuhan forensik log sebelum dicabut
+
+    # Guard: tidak boleh revoke session yang sedang aktif dipakai
     session_record = db.query(UserSession).filter(UserSession.id == session_id).first()
+
+    if session_record and session_record.is_current:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Cannot revoke your current active session")
     
     repo.revoke(session_id, current_admin.id)
     db.flush()
