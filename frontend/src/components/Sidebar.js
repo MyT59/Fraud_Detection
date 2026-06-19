@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { authService } from "../services/apiService";
+import { authService } from "../services/AuthService"; // ✅ FIX
 import "./Sidebar.css";
 
 const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
@@ -11,12 +11,8 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
   const isSuperAdmin = role === "SUPER_ADMIN";
   const isFraudAnalyst = role === "FRAUD_ANALYST";
   const canManage = isRiskManager || isSuperAdmin;
-
-  // Fraud Patterns: dashboard read-only, bisa diakses RISK_MANAGER, SUPER_ADMIN,
-  // dan FRAUD_ANALYST (lihat pattern_routes.py & App.js RoleGuard)
   const canViewFraudPatterns = canManage || isFraudAnalyst;
 
-  // Menu utama — semua role bisa lihat
   const menuItems = [
     { path: "/dashboard", icon: "bi-speedometer2", label: "Dashboard" },
     { path: "/alerts", icon: "bi-bell-fill", label: "Alerts" },
@@ -35,9 +31,6 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
       icon: "bi-arrow-left-right",
       label: "Transactions",
     },
-    // Fraud Patterns: dashboard read-only — RISK_MANAGER, SUPER_ADMIN, FRAUD_ANALYST
-    // Diletakkan dekat Transactions/Manual Review karena secara konteks
-    // menjawab "kenapa transaksi ini di-flag" — bukan laporan administratif.
     ...(canViewFraudPatterns
       ? [
           {
@@ -53,7 +46,6 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
       label: "Activity Timeline",
     },
     { path: "/reports", icon: "bi-file-earmark-text", label: "Reports" },
-    // Risk Management: hanya RISK_MANAGER & SUPER_ADMIN
     ...(canManage
       ? [
           {
@@ -65,7 +57,6 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
       : []),
   ];
 
-  // Control Panel — RISK_MANAGER & SUPER_ADMIN
   const adminMenu = canManage
     ? [
         ...(isSuperAdmin
@@ -78,9 +69,6 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
             ]
           : []),
         { path: "/audit-log", icon: "bi-journal-text", label: "Audit Log" },
-        // Retrain Schedule: hanya SUPER_ADMIN.
-        // Retraining model adalah operasi infrastruktur ML (separation of
-        // duties dari kebijakan risk yang dipegang Risk Manager).
         ...(isSuperAdmin
           ? [
               {
@@ -126,7 +114,6 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
   return (
     <>
       {isOpen && <div className="sidebar-overlay" onClick={onClose} />}
-
       <aside
         className={`sidebar ${isOpen ? "open" : ""} ${collapsed ? "collapsed" : ""}`}
       >
@@ -140,12 +127,8 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
           />
           {!collapsed && <span>Tutup</span>}
         </button>
-
         <nav className="sidebar-nav">
-          {/* Main Menu */}
           <ul className="sidebar-menu">{menuItems.map(renderMenuItem)}</ul>
-
-          {/* Control Panel — hanya tampil jika canManage */}
           {canManage && adminMenu.length > 0 && (
             <>
               {!collapsed && (

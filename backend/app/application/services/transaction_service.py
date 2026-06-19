@@ -235,12 +235,105 @@ def process_transaction(data: dict, db: Session):
             return _apply_hard_block(trx, violations, db, bl_score)
 
         # =========================
-        # 5. PATTERN ENGINE
         # =========================
+        # 5. PATTERN ENGINE
+        # Before running pattern engine, build and persist a small set of
+        # deterministic features synchronously so pattern resolvers (which
+        # read `transaction.transaction_details`) can evaluate them on the
+        # same request. Heavy ML scoring remains async.
+        # =========================
+        try:
+            # lazy import to avoid pulling heavy ML libs into hot path
+            from app.application.services.transaction_feature_snapshot_service import build_transaction_snapshot
+            from app.infrastructure.ml.feature_builder import build_features_from_snapshot
+
+            snapshot = build_transaction_snapshot(db, trx.id)
+            if snapshot:
+                features = build_features_from_snapshot(snapshot.get("transaction", {}).get("domain"), snapshot)
+
+                # map UPPERCASE feature keys -> lower-case keys used in transaction_details
+                feature_map = {
+                    # Agenusa
+                    "IS_NIGHT_TX": "is_night_tx",
+                    "AMOUNT_OVER_AVG_RATIO": "amount_over_avg_ratio",
+                    "IS_DECLINED": "is_declined",
+                    "GAP_MINUTES": "gap_minutes",
+                    "DEST_ACCOUNT_NUMBER": "dest_account_number",
+                    "TERMINAL_SWITCH_FAST": "terminal_switch_fast",
+
+                    # Nusabill
+                    "PAYMENT_GAP_MINUTES": "payment_gap_minutes",
+                    "PAYMENT_TO_BILL_RATIO": "payment_to_bill_ratio",
+                    "CHANNEL": "channel",
+                    "CHANNEL_API_FLAG": "channel_api_flag",
+                    "PAYMENT_DELAY_DAYS": "payment_delay_days",
+                    "CHANNEL_SWITCH_TO_API": "channel_switch_to_api",
+                }
+
+                existing_details = dict(trx.transaction_details or {})
+                for k_src, k_dst in feature_map.items():
+                    if k_src in features:
+                        val = features.get(k_src)
+                        # primitive types only
+                        if isinstance(val, (int, float, str)) or val is None:
+                            existing_details[k_dst] = val
+                        else:
+                            try:
+                                existing_details[k_dst] = int(val)
+                            except Exception:
+                                existing_details[k_dst] = val
+
+                trx.transaction_details = existing_details
+        except Exception as e:
+            logger.exception(f"[SYNC_FEATURE_BUILD] gagal menyimpan fitur sinkron ke transaction_details: {e}")
+
         _tick("pattern")
         pattern_violations, pattern_ids, pattern_score, pattern_actions = run_pattern_engine(db, trx)
         violations.extend(pattern_violations)
         _perf_pattern = _tock("pattern")
+
+        # If pattern engine or other processors mark some patterns as
+        # suppressed (e.g. {'suppressed': True} in the violation dict),
+        # persist them into `transaction_details` so the frontend can show
+        # Additional Signals for forensic review. This is intentionally
+        # permissive: if no suppressed flags are present, nothing changes.
+        try:
+            suppressed = [v for v in pattern_violations if v.get("suppressed")]
+            if suppressed:
+                existing_details = dict(trx.transaction_details or {})
+                # store full objects (if provided) and a list of ids when available
+                existing_details["suppressed_patterns"] = suppressed
+                existing_details["suppressed_pattern_ids"] = [
+                    v.get("id") for v in suppressed if v.get("id") is not None
+                ]
+                trx.transaction_details = existing_details
+        except Exception as e:
+            logger.warning(f"[SUPPRESS] gagal menyimpan suppressed patterns: {e}")
+
+        # Additionally, detect patterns that are currently disabled (is_active==False)
+        # but would match this transaction — surface them as suppressed signals
+        # for analysts without changing DB state.
+        try:
+            from app.application.services.pattern_engine_service import detect_suppressed_patterns
+
+            inactive_matches = detect_suppressed_patterns(db, trx)
+            if inactive_matches:
+                existing_details = dict(trx.transaction_details or {})
+                prev = existing_details.get("suppressed_patterns") or []
+                prev_ids = set(existing_details.get("suppressed_pattern_ids") or [])
+
+                # merge while avoiding duplicates
+                for m in inactive_matches:
+                    if m.get("id") not in prev_ids:
+                        prev.append(m)
+                        if m.get("id") is not None:
+                            prev_ids.add(m.get("id"))
+
+                existing_details["suppressed_patterns"] = prev
+                existing_details["suppressed_pattern_ids"] = list(prev_ids)
+                trx.transaction_details = existing_details
+        except Exception as e:
+            logger.warning(f"[SUPPRESS_INACTIVE] gagal mendeteksi suppressed inactive patterns: {e}")
 
         if isinstance(pattern_actions, str):
             pattern_actions = [pattern_actions]
@@ -270,6 +363,9 @@ def process_transaction(data: dict, db: Session):
         if any("Super" in v["name"] or "Decline + Velocity" in v["name"] for v in violations):
             trx.risk_score = min(100, trx.risk_score + 20)
 
+        if any("Fan-In" in v["name"] or "Syndicate" in v["name"] for v in violations):
+            trx.risk_score = min(100, trx.risk_score + 10)
+
         if trx.risk_score >= 90:
             trx.final_status = TransactionStatusEnum.FRAUD
 
@@ -290,6 +386,7 @@ def process_transaction(data: dict, db: Session):
             "ml_score":      ml_score,
             "final_score":   trx.risk_score,
             "pattern_names": [v["name"] for v in violations if v["type"] == "PATTERN"],
+            "pattern_ids":   pattern_ids,
             "rule_names":    [v["name"] for v in violations if v["type"] == "RULE"],
         }
 

@@ -25,6 +25,7 @@ from app.infrastructure.database.models.retrain_history_model import RetrainHist
 from app.infrastructure.database.models.ml_model_model import MLModel
 from app.infrastructure.ml.evaluation_loader import EvaluationLoader
 from app.infrastructure.repositories.report_repository import ReportRepository
+from app.infrastructure.storage.report_storage import ReportStorage
 from app.core.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
@@ -162,7 +163,8 @@ class ReportService:
     # STORAGE HELPER
     # ==========================================
 
-    def _build_file_path(self, report: Report) -> str:
+    def _build_local_temp_path(self, report: Report) -> str:
+        """Path file sementara di local disk, sebelum di-upload ke Supabase."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         extension_map = {
@@ -172,12 +174,78 @@ class ReportService:
         }
 
         extension = extension_map[report.format]
-        folder = Path(f"storage/reports/{extension}")
+        folder = Path(f"storage/tmp_reports/{extension}")
         folder.mkdir(parents=True, exist_ok=True)
 
         return str(
-            folder / f"{report.report_type.value.lower()}_{timestamp}.{extension}"
+            folder / f"{report.report_type.value.lower()}_{timestamp}_{report.id}.{extension}"
         )
+
+    def _build_storage_path(self, report: Report) -> str:
+        """Path tujuan di Supabase Storage bucket 'reports'."""
+        extension_map = {
+            ReportFormatEnum.CSV: "csv",
+            ReportFormatEnum.XLSX: "xlsx",
+            ReportFormatEnum.PDF: "pdf",
+        }
+        extension = extension_map[report.format]
+        return f"{report.report_type.value.lower()}/{report.id}.{extension}"
+
+    def _export_and_finalize(self, report: Report, headers, rows):
+        """
+        Export ke local temp file -> coba upload ke Supabase Storage.
+        Jika Supabase tidak aktif/gagal, fallback ke local file storage
+        (file_path diberi prefix "local:" agar route download tahu cara handle-nya).
+        """
+        local_path = self._build_local_temp_path(report)
+        self._export(report, headers, rows, local_path)
+
+        storage_path = self._build_storage_path(report)
+        final_file_path = None
+
+        try:
+            ReportStorage.upload_report(
+                local_file_path=local_path,
+                storage_path=storage_path,
+            )
+            final_file_path = storage_path
+
+            try:
+                Path(local_path).unlink(missing_ok=True)
+            except Exception:
+                logger.warning(f"Gagal menghapus temp file lokal: {local_path}")
+
+        except Exception as e:
+            # Supabase tidak aktif / gagal upload -> fallback ke local storage permanen
+            logger.warning(
+                f"Upload ke Supabase Storage gagal ({e}). Fallback ke local storage."
+            )
+            permanent_local_path = self._move_to_permanent_local_storage(local_path, report)
+            final_file_path = f"local:{permanent_local_path}"
+
+        self.repo.mark_completed(
+            report,
+            file_path=final_file_path,
+            total_records=len(rows),
+            completed_at=datetime.now(timezone.utc),
+        )
+        self.db.commit()
+        return report
+
+    def _move_to_permanent_local_storage(self, local_temp_path: str, report: Report) -> str:
+        """Pindahkan file dari folder temp ke folder permanen lokal saat Supabase tidak tersedia."""
+        extension_map = {
+            ReportFormatEnum.CSV: "csv",
+            ReportFormatEnum.XLSX: "xlsx",
+            ReportFormatEnum.PDF: "pdf",
+        }
+        extension = extension_map[report.format]
+        folder = Path(f"storage/reports/{extension}")
+        folder.mkdir(parents=True, exist_ok=True)
+
+        permanent_path = folder / f"{report.report_type.value.lower()}_{report.id}.{extension}"
+        Path(local_temp_path).replace(permanent_path)
+        return str(permanent_path)
 
     # ==========================================
     # TRANSACTION REPORT WITH DYNAMIC FILTERING
@@ -289,19 +357,7 @@ class ReportService:
             ]
 
         # Generate File
-        file_path = self._build_file_path(report)
-        self._export(report, headers, rows, file_path)
-
-        # Finish
-        self.repo.mark_completed(
-            report,
-            file_path=file_path,
-            total_records=len(rows),
-            completed_at=datetime.now(timezone.utc),
-        )
-        self.db.commit()
-
-        return report
+        return self._export_and_finalize(report, headers, rows)
 
     # ==========================================
     # FRAUD DETECTION REPORT
@@ -366,17 +422,7 @@ class ReportService:
         for pattern in patterns:
             rows.append([pattern.pattern_name, pattern.hit_count or 0])
 
-        file_path = self._build_file_path(report)
-        self._export(report, headers, rows, file_path)
-
-        self.repo.mark_completed(
-            report,
-            file_path=file_path,
-            total_records=len(rows),
-            completed_at=datetime.now(timezone.utc),
-        )
-        self.db.commit()
-        return report
+        return self._export_and_finalize(report, headers, rows)
 
     # ==========================================
     # FRAUD PATTERN REPORT
@@ -473,17 +519,7 @@ class ReportService:
                 for p in patterns
             ]
 
-        file_path = self._build_file_path(report)
-        self._export(report, headers, rows, file_path)
-
-        self.repo.mark_completed(
-            report,
-            file_path=file_path,
-            total_records=len(rows),
-            completed_at=datetime.now(timezone.utc),
-        )
-        self.db.commit()
-        return report
+        return self._export_and_finalize(report, headers, rows)
 
     # ==========================================
     # ML PERFORMANCE REPORT
@@ -705,17 +741,7 @@ class ReportService:
             "sedangkan fraud rate adalah hasil keputusan final (rule engine + pattern + ML + review analis).",
         ])
 
-        file_path = self._build_file_path(report)
-        self._export(report, headers, rows, file_path)
-
-        self.repo.mark_completed(
-            report,
-            file_path=file_path,
-            total_records=len(rows),
-            completed_at=datetime.now(timezone.utc),
-        )
-        self.db.commit()
-        return report
+        return self._export_and_finalize(report, headers, rows)
 
     # ==========================================
     # BLACKLIST REPORT
@@ -788,17 +814,7 @@ class ReportService:
                 for item in items
             ]
 
-        file_path = self._build_file_path(report)
-        self._export(report, headers, rows, file_path)
-
-        self.repo.mark_completed(
-            report,
-            file_path=file_path,
-            total_records=len(rows),
-            completed_at=datetime.now(timezone.utc),
-        )
-        self.db.commit()
-        return report
+        return self._export_and_finalize(report, headers, rows)
 
     # ==========================================
     # ACTIVITY LOG REPORT
@@ -891,18 +907,7 @@ class ReportService:
                 for log in logs
             ]
 
-        file_path = self._build_file_path(report)
-        self._export(report, headers, rows, file_path)
-
-        self.repo.mark_completed(
-            report,
-            file_path=file_path,
-            total_records=len(rows),
-            completed_at=datetime.now(timezone.utc),
-        )
-        self.db.commit()
-
-        return report
+        return self._export_and_finalize(report, headers, rows)
 
     # ==========================================
     # EXPORT DISPATCHER

@@ -59,16 +59,6 @@ class TransactionFeatureSnapshotService:
             limit=10,
         )
 
-        recent_device_transactions = self._get_recent_device_transactions(
-            device_id=getattr(transaction, "device_id", None),
-            limit=10,
-        )
-
-        recent_ip_transactions = self._get_recent_ip_transactions(
-            ip_address=getattr(transaction, "ip_address", None),
-            limit=10,
-        )
-
         # =========================================================
         # NORMALIZED SNAPSHOT PAYLOAD
         # =========================================================
@@ -82,7 +72,6 @@ class TransactionFeatureSnapshotService:
                 "amount": float(transaction.amount or 0),
                 "merchant_id": getattr(transaction, "merchant_id", None),
                 "terminal_id": getattr(transaction, "terminal_id", None),
-                "device_id": getattr(transaction, "device_id", None),
                 "ip_address": getattr(transaction, "ip_address", None),
                 "transaction_time": getattr(
                     transaction,
@@ -113,8 +102,6 @@ class TransactionFeatureSnapshotService:
             },
             "historical_context": {
                 "recent_account_transactions": recent_account_transactions,
-                "recent_device_transactions": recent_device_transactions,
-                "recent_ip_transactions": recent_ip_transactions,
             },
             "metadata": {
                 "snapshot_generated_at": datetime.now(
@@ -173,68 +160,6 @@ class TransactionFeatureSnapshotService:
             for trx in transactions
         ]
 
-    def _get_recent_device_transactions(
-        self,
-        device_id: str,
-        limit: int = 10,
-    ):
-        """
-        Retrieve recent transactions by device.
-        """
-
-        if not device_id:
-            return []
-
-        if not hasattr(
-            self.transaction_repository,
-            "get_recent_transactions_by_device",
-        ):
-            return []
-
-        transactions = (
-            self.transaction_repository
-            .get_recent_transactions_by_device(
-                device_id=device_id,
-                limit=limit,
-            )
-        )
-
-        return [
-            self._serialize_transaction(trx)
-            for trx in transactions
-        ]
-
-    def _get_recent_ip_transactions(
-        self,
-        ip_address: str,
-        limit: int = 10,
-    ):
-        """
-        Retrieve recent transactions by IP address.
-        """
-
-        if not ip_address:
-            return []
-
-        if not hasattr(
-            self.transaction_repository,
-            "get_recent_transactions_by_ip",
-        ):
-            return []
-
-        transactions = (
-            self.transaction_repository
-            .get_recent_transactions_by_ip(
-                ip_address=ip_address,
-                limit=limit,
-            )
-        )
-
-        return [
-            self._serialize_transaction(trx)
-            for trx in transactions
-        ]
-
     def _serialize_transaction(self, transaction):
         """
         Normalize transaction object.
@@ -247,7 +172,6 @@ class TransactionFeatureSnapshotService:
             "transaction_time": getattr(transaction, "transaction_time", None),
             "merchant_id": getattr(transaction, "merchant_id", None),
             "terminal_id": getattr(transaction, "terminal_id", None),
-            "device_id": getattr(transaction, "device_id", None),
             "ip_address": getattr(transaction, "ip_address", None),
             "risk_score": getattr(transaction, "risk_score", None),
             "is_flagged_ml": getattr(transaction, "is_flagged_ml", None),

@@ -1,3 +1,4 @@
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +9,7 @@ from app.application.services.report_service import ReportService
 from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.session import get_db
 from app.infrastructure.repositories.report_repository import ReportRepository
+from app.infrastructure.storage.report_storage import ReportStorage
 from app.infrastructure.database.enums import (
     ActivityActionEnum,
     SeverityLevelEnum,
@@ -18,6 +20,7 @@ from app.presentation.schemas.report_schema import (
     ReportGenerateRequest,
     ReportPaginatedResponse,
     ReportResponse,
+    ReportDownloadResponse,
 )
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -137,7 +140,7 @@ def get_report_detail(
 # ==========================================
 # DOWNLOAD REPORT
 # ==========================================
-@router.get("/{report_id}/download")
+@router.get("/{report_id}/download", response_model=ReportDownloadResponse)
 def download_report(
     report_id: UUID,
     db: Session = Depends(get_db),
@@ -151,6 +154,16 @@ def download_report(
 
     if not report.file_path:
         raise HTTPException(status_code=400, detail="Report file not available")
+
+    # Cek apakah file disimpan lokal (fallback) atau di Supabase Storage
+    if report.file_path.startswith("local:"):
+        local_path = report.file_path.removeprefix("local:")
+        if not Path(local_path).exists():
+            raise HTTPException(status_code=404, detail="Report file not found on local storage")
+        # Untuk file lokal, arahkan ke endpoint static-serve internal
+        download_url = f"/reports/{report.id}/raw"
+    else:
+        download_url = ReportStorage.generate_download_url(report.file_path)
 
     log_activity(
         db=db,
@@ -168,7 +181,43 @@ def download_report(
     )
     db.commit()
 
+    return {
+        "report_id": report.id,
+        "report_name": report.report_name,
+        "format": report.format,
+        "download_url": download_url,
+    }
+
+
+# ==========================================
+# RAW FILE SERVE (fallback lokal saja)
+# ==========================================
+@router.get("/{report_id}/raw")
+def download_report_raw(
+    report_id: UUID,
+    db: Session = Depends(get_db),
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST")),
+):
+    """Serve file lokal langsung — hanya dipakai saat Supabase tidak aktif (fallback)."""
+    repo = ReportRepository(db)
+    report = repo.get_by_id(report_id)
+
+    if not report or not report.file_path or not report.file_path.startswith("local:"):
+        raise HTTPException(status_code=404, detail="Local report file not found")
+
+    local_path = report.file_path.removeprefix("local:")
+    if not Path(local_path).exists():
+        raise HTTPException(status_code=404, detail="Report file not found on disk")
+
+    extension = local_path.rsplit(".", 1)[-1].lower()
+    media_type_map = {
+        "pdf": "application/pdf",
+        "csv": "text/csv",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+
     return FileResponse(
-        path=report.file_path,
-        filename=report.file_path.split("/")[-1],
+        path=local_path,
+        filename=f"{report.report_name}.{extension}",
+        media_type=media_type_map.get(extension, "application/octet-stream"),
     )

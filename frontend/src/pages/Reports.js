@@ -64,12 +64,7 @@ const Reports = () => {
 
   const handleDownloadReport = async (report) => {
     try {
-      const ext =
-        report.format?.toLowerCase() === "xlsx"
-          ? "xlsx"
-          : report.format?.toLowerCase() || "pdf";
-      const filename = `${report.report_name?.replace(/[^a-z0-9]+/gi, "_") || "report"}.${ext}`;
-      await reportService.downloadReport(report.id, filename);
+      await reportService.downloadReport(report.id);
     } catch (err) {
       console.error("Download failed:", err.message);
       alert(`Gagal download report: ${err.message}`);

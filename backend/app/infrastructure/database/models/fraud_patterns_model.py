@@ -1,8 +1,10 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, text
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, text, Enum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.infrastructure.database.base import Base
+from app.infrastructure.database.enums import PatternSourceEnum
+
 
 
 class FraudPattern(Base):
@@ -21,6 +23,13 @@ class FraudPattern(Base):
     action = Column(String(20), server_default="FLAG")  # FLAG | REVIEW | BLOCK
     risk_score = Column(Integer, server_default="50")
     priority = Column(Integer, server_default="1")
+
+    # Pattern source: tracks where pattern came from
+    pattern_source = Column(
+        Enum(PatternSourceEnum, name="pattern_source_enum"),
+        server_default="MANUAL_CREATE",
+        nullable=False
+    )
 
     hit_count = Column(Integer, server_default="0")
     true_positive = Column(Integer, server_default="0") 

@@ -12,11 +12,15 @@ const Login = () => {
   const sessionExpired =
     new URLSearchParams(location.search).get("reason") === "expired";
 
-  const handleLoginSuccess = () => {
-    // Redirect ke /change-password (kalau is_password_temporary)
-    // sudah ditangani penuh oleh authService.login() di apiService.js
-    // via window.location.href, jadi di sini cukup ke dashboard
-    // sebagai fallback untuk kasus normal.
+  // ✅ FIX: terima parameter requirePasswordChange dari LoginForm
+  const handleLoginSuccess = ({ requirePasswordChange } = {}) => {
+    console.log("handleLoginSuccess called:", requirePasswordChange);
+    if (requirePasswordChange) {
+      console.log("navigating to /change-password");
+      navigate("/change-password", { replace: true });
+      return;
+    }
+    console.log("navigating to /dashboard");
     navigate("/dashboard");
   };
 

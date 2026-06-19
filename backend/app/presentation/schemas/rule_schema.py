@@ -56,6 +56,7 @@ class RuleResponse(RuleBase):
     id: int
     is_active: bool
     hit_count: int = 0
+    rule_config: Optional[dict] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     created_by: Optional[int] = None

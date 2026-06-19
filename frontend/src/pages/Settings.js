@@ -7,7 +7,8 @@ import ApiSettings from "../components/settings/ApiSettings";
 import SettingsTabs from "../components/settings/SettingsTabs";
 import "./Settings.css";
 import PageLoader from "../components/common/PageLoader";
-import api, { storage, authService } from "../services/apiService";
+import api, { storage } from "../services/apiService";
+import { authService } from "../services/AuthService"; // 2705 FIX
 
 const ROLE_LABEL = {
   SUPER_ADMIN: "Super Admin",

@@ -519,6 +519,14 @@
   border: 1px solid #ddd6fe;
 }
 
+/* Suppressed / additional signals (forensic view) */
+.tdm-tag-suppressed {
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  font-weight: 600;
+}
+
 /* ─── Badges ─────────────────────────────────────────────────────────────── */
 
 .tdm-badge {

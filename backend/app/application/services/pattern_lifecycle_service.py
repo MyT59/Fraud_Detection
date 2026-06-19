@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 from app.core.logging import get_logger, log_performance
+from app.application.cache.fraud_cache import invalidate_pattern_cache
 
 logger = get_logger(__name__)
 
@@ -18,6 +19,11 @@ COOLDOWN_DAYS = 7
 
 @log_performance(label="PatternLifecycle.apply_pattern_lifecycle")
 def apply_pattern_lifecycle(db, pattern):
+    # Snapshot original values to detect changes that require cache invalidation
+    orig_is_active = pattern.is_active
+    orig_action = pattern.action
+    orig_risk_score = pattern.risk_score
+
     tp = pattern.true_positive or 0
     fp = pattern.false_positive or 0
 
@@ -70,6 +76,11 @@ def apply_pattern_lifecycle(db, pattern):
                 target_type="PATTERN", target_id=str(pattern.id),
                 details={"pattern_name": pattern.pattern_name, "msg": "Pattern re-activated after cooling down"}
             )
+            # Pattern status changed — invalidate pattern cache so engine reloads
+            try:
+                invalidate_pattern_cache()
+            except Exception:
+                logger.exception("Failed to invalidate pattern cache after re-activation")
 
     # =========================
     # AUTO DISABLE (Kinerja Buruk)
@@ -91,6 +102,10 @@ def apply_pattern_lifecycle(db, pattern):
                 "reason": f"Accuracy dropped below critical threshold ({round(accuracy, 2)} < {DISABLE_THRESHOLD})"
             }
         )
+        try:
+            invalidate_pattern_cache()
+        except Exception:
+            logger.exception("Failed to invalidate pattern cache after auto-disable")
 
     # =========================
     # AUTO PROMOTE 
@@ -111,6 +126,10 @@ def apply_pattern_lifecycle(db, pattern):
                 "reason": f"High accuracy performance promoted to automated BLOCK ({round(accuracy, 2)} >= {PROMOTE_THRESHOLD})"
             }
         )
+        try:
+            invalidate_pattern_cache()
+        except Exception:
+            logger.exception("Failed to invalidate pattern cache after auto-promote")
 
     elif accuracy < 0.6:
         pattern.action = "REVIEW"
@@ -120,3 +139,14 @@ def apply_pattern_lifecycle(db, pattern):
     new_score = max(10, min(new_score, 100))
 
     pattern.risk_score = new_score
+    # If risk_score or action/is_active changed, invalidate cache so pattern engine
+    # sees up-to-date values on next transaction.
+    try:
+        if (
+            pattern.is_active != orig_is_active
+            or pattern.action != orig_action
+            or pattern.risk_score != orig_risk_score
+        ):
+            invalidate_pattern_cache()
+    except Exception:
+        logger.exception("Failed to invalidate pattern cache after lifecycle update")

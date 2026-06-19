@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from typing import Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ...core.logging import get_logger
 
@@ -19,14 +19,19 @@ def _safe_divide(a: float, b: float, default: float = 0.0) -> float:
 
 
 def _parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
-    """Parse ISO datetime string safely."""
+    """Parse ISO datetime string safely and return UTC-aware datetime."""
     if not dt_str:
         return None
     try:
         if isinstance(dt_str, datetime):
-            return dt_str
+            if dt_str.tzinfo is None:
+                return dt_str.replace(tzinfo=timezone.utc)
+            return dt_str.astimezone(timezone.utc)
         # Handle ISO format
-        return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+        parsed = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     except Exception:
         return None
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useMemo, useRef, useEffect } from "react";
 import "./RuleEngine.css";
 
 const PAGE_SIZE = 10;
@@ -28,7 +28,6 @@ const ACTION_CONFIG = {
 };
 
 const getPriorityCls = (p) => (p <= 3 ? "p-high" : p <= 6 ? "p-med" : "p-low");
-const nextDir = (cur) => (cur === null ? "asc" : cur === "asc" ? "desc" : null);
 
 const SortIcon = ({ dir }) => {
   if (dir === "asc") return <i className="bi bi-sort-up re-sort-icon active" />;
@@ -57,23 +56,52 @@ const ColDropdown = ({ isOpen, onClose, children }) => {
   );
 };
 
-const RuleEngine = ({ rules, onAdd, onEdit, onDelete, onToggle, onDetail }) => {
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+// ─── Helper: next sort direction cycle ───────────────────────────────────────
+const nextDir = (cur) => (cur === null ? "asc" : cur === "asc" ? "desc" : null);
 
-  const [sortKey, setSortKey] = useState(null);
-  const [sortPDir, setSortPDir] = useState(null);
-  const [filterAction, setFilterAction] = useState(null);
-  const [sortHDir, setSortHDir] = useState(null);
-  const [period, setPeriod] = useState(null);
-
-  const [openDrop, setOpenDrop] = useState(null);
-
+// ─── RuleEngine ──────────────────────────────────────────────────────────────
+// Semua filter/sort/search/page state dikelola dari parent (RiskManagement)
+// dan diteruskan via props agar tetap hidup saat tab di-switch.
+//
+// Props state:
+//   page, setPage
+//   search, setSearch
+//   sortKey, setSortKey
+//   sortPDir, setSortPDir
+//   sortHDir, setSortHDir
+//   filterAction, setFilterAction
+//   period, setPeriod
+//   openDrop, setOpenDrop
+const RuleEngine = ({
+  rules,
+  onAdd,
+  onEdit,
+  onDelete,
+  onToggle,
+  onDetail,
+  // ── lifted state ──
+  page,
+  setPage,
+  search,
+  setSearch,
+  sortKey,
+  setSortKey,
+  sortPDir,
+  setSortPDir,
+  sortHDir,
+  setSortHDir,
+  filterAction,
+  setFilterAction,
+  period,
+  setPeriod,
+  openDrop,
+  setOpenDrop,
+}) => {
   const resetPage = () => setPage(1);
   const closeDrop = () => setOpenDrop(null);
-
   const toggleDrop = (name) => setOpenDrop((p) => (p === name ? null : name));
 
+  // ── Active filter chips ───────────────────────────────────────────────────
   const activeFilters = useMemo(() => {
     const chips = [];
     if (sortKey === "priority" && sortPDir)
@@ -125,7 +153,18 @@ const RuleEngine = ({ rules, onAdd, onEdit, onDelete, onToggle, onDetail }) => {
       });
     }
     return chips;
-  }, [sortKey, sortPDir, filterAction, sortHDir, period]);
+  }, [
+    sortKey,
+    sortPDir,
+    filterAction,
+    sortHDir,
+    period,
+    setSortPDir,
+    setSortKey,
+    setFilterAction,
+    setSortHDir,
+    setPeriod,
+  ]);
 
   const resetAll = () => {
     setSortKey(null);
@@ -137,6 +176,7 @@ const RuleEngine = ({ rules, onAdd, onEdit, onDelete, onToggle, onDetail }) => {
     resetPage();
   };
 
+  // ── Apply helpers ─────────────────────────────────────────────────────────
   const applyPSort = (dir) => {
     setSortPDir(dir);
     setSortHDir(null);
@@ -167,6 +207,7 @@ const RuleEngine = ({ rules, onAdd, onEdit, onDelete, onToggle, onDetail }) => {
     closeDrop();
   };
 
+  // ── Derived display values ────────────────────────────────────────────────
   const hitField =
     period === "today"
       ? "hitToday"
@@ -175,6 +216,7 @@ const RuleEngine = ({ rules, onAdd, onEdit, onDelete, onToggle, onDetail }) => {
         : period === "month"
           ? "hitMonth"
           : "hitCount";
+
   const periodLabel =
     period === "today"
       ? "Hari Ini"
@@ -184,6 +226,7 @@ const RuleEngine = ({ rules, onAdd, onEdit, onDelete, onToggle, onDetail }) => {
           ? "Bulan Ini"
           : null;
 
+  // ── Processed rows ────────────────────────────────────────────────────────
   const processed = useMemo(() => {
     const q = search.toLowerCase();
     let result = (rules || []).filter(
@@ -592,7 +635,10 @@ const RuleEngine = ({ rules, onAdd, onEdit, onDelete, onToggle, onDetail }) => {
         <span>
           {processed.length === 0
             ? "Tidak ada data"
-            : `${Math.min((safePage - 1) * PAGE_SIZE + 1, processed.length)}–${Math.min(safePage * PAGE_SIZE, processed.length)} dari ${processed.length}`}
+            : `${Math.min((safePage - 1) * PAGE_SIZE + 1, processed.length)}–${Math.min(
+                safePage * PAGE_SIZE,
+                processed.length,
+              )} dari ${processed.length}`}
         </span>
         <div className="re-pg-btns">
           <button

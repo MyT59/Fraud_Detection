@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { authService } from "../../services/apiService";
+import { authService } from "../../services/AuthService"; // ✅ FIX: dari AuthService bukan apiService
 
 import { BRAND } from "./loginData";
 
@@ -31,11 +31,16 @@ const LoginForm = ({ onLoginSuccess, sessionExpired }) => {
     setLoading(true);
 
     try {
-      // authService.login() dari apiService.js sudah otomatis
-      // redirect ke /change-password kalau is_password_temporary = true.
-      // Kalau tidak, lanjut ke onLoginSuccess (redirect ke dashboard).
-      await authService.login(formData.email, formData.password);
-      onLoginSuccess();
+      const result = await authService.login(formData.email, formData.password);
+      console.log("result:", result);
+      console.log("requirePasswordChange:", result.requirePasswordChange);
+
+      if (result.requirePasswordChange) {
+        onLoginSuccess({ requirePasswordChange: true });
+        return;
+      }
+
+      onLoginSuccess({ requirePasswordChange: false });
     } catch (err) {
       if (err.status === 401) {
         setError("Invalid email or password. Please try again.");

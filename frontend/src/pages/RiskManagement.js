@@ -11,64 +11,67 @@ import PageLoader from "../components/common/PageLoader";
 import { api } from "../services/apiService";
 import "./RiskManagement.css";
 
-const ruleFromApi = (r) => ({
-  id: r.id,
-  name: r.rule_name || "Rule Tanpa Nama",
-  description: r.description || "",
-  priority: r.priority ?? 0,
-  action: (r.action || "FLAG").toLowerCase(),
-  enabled: r.is_active ?? true,
-  condition: buildConditionText(r),
-  condField: r.condition_field || "",
-  condOp: r.operator || ">",
-  condValue: r.threshold_value || "",
-  rule_key: r.rule_key || "",
-  service_scope: r.service_scope || "ALL",
-  severity: r.severity || "MEDIUM",
-  rule_group: r.rule_group || null,
-  hitCount: r.hit_count ?? 0,
-  hitToday: 0,
-  hitWeek: 0,
-  hitMonth: 0,
-  createdBy: r.created_by_name || null,
-  createdByRole: r.created_by_role || null,
-  createdById: r.created_by || null,
-  createdAt: r.created_at
-    ? new Date(r.created_at).toLocaleDateString("id-ID", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : "—",
-});
+const ruleFromApi = (r) => {
+  console.log("[ruleFromApi] raw:", JSON.stringify(r, null, 2));
+  return {
+    id: r.id,
+    name: r.rule_name || "Rule Tanpa Nama",
+    description: r.description || "",
+    priority: r.priority ?? 0,
+    action: (r.action || "FLAG").toLowerCase(),
+    enabled: r.is_active ?? true,
+    condition: buildConditionText(r),
+    condField: r.condition_field || "",
+    condOp: r.operator || ">",
+    condValue: r.threshold_value || "",
+    rule_key: r.rule_key || "",
+    service_scope: r.service_scope || "ALL",
+    severity: r.severity || "MEDIUM",
+    rule_group: r.rule_group || null,
+    hitCount: r.hit_count ?? 0,
+    hitToday: 0,
+    hitWeek: 0,
+    hitMonth: 0,
+    createdBy: r.created_by_name || null,
+    createdByRole: r.created_by_role || null,
+    createdById: r.created_by || null,
+    createdAt: r.created_at
+      ? new Date(r.created_at).toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })
+      : "—",
+  };
+};
 
 function buildConditionText(r) {
-  // Simple rule — punya condition_field
   if (r.condition_field) {
-    const field = r.condition_field;
-    const op = r.operator || ">";
-    const val = r.threshold_value || "";
-    return `${field} ${op} ${val}`.trim();
+    return `${r.condition_field} ${r.operator || ">"} ${r.threshold_value || ""}`.trim();
   }
 
-  // Builder rule — punya rule_config (JSONB)
   if (r.rule_config) {
-    const cfg = r.rule_config;
-    const logic = cfg.AND ? "AND" : cfg.OR ? "OR" : null;
+    // Parse kalau masih string (dari DB/API kadang balik sebagai JSON string)
+    let cfg = r.rule_config;
+    if (typeof cfg === "string") {
+      try {
+        cfg = JSON.parse(cfg);
+      } catch {
+        return "—";
+      }
+    }
 
-    // Single leaf condition
     if (cfg.field) {
       return `${cfg.field} ${cfg.operator} ${cfg.value}`;
     }
 
-    // Group condition — ringkas: tampilkan jumlah kondisi dan logic
+    const logic = cfg.AND ? "AND" : cfg.OR ? "OR" : null;
     if (logic) {
       const items = cfg[logic] || [];
-      const count = items.length;
-      if (count === 1 && items[0].field) {
+      if (items.length === 1 && items[0].field) {
         return `${items[0].field} ${items[0].operator} ${items[0].value}`;
       }
-      return `${count} kondisi (${logic})`;
+      return `${items.length} kondisi (${logic})`;
     }
   }
 
@@ -90,7 +93,6 @@ const ruleToCreatePayload = (form) => ({
 });
 
 const ruleToUpdatePayload = (form) => ({
-  // rule_key sengaja tidak disertakan — BE tidak izinkan update unique key
   rule_name: form.name,
   service_scope: form.service_scope || "ALL",
   condition_field: form.condField || null,
@@ -114,7 +116,7 @@ const blFromApi = (item) => ({
   accountNumber: item.value,
   accountName: "",
   type: item.type,
-  bank: item.type, // kolom "Tipe" di tabel — diisi dari BlacklistTypeEnum
+  bank: item.type,
   reason: item.reason,
   reasonDetail: item.review_note || "",
   review_note: item.review_note || "",
@@ -132,14 +134,11 @@ const blFromApi = (item) => ({
         year: "numeric",
       })
     : "—",
-
   _apiStatus: item.status,
   _isActive: item.is_active,
 });
 
 const blToApiPayload = (form) => ({
-  // AddForm kirim { value, type, service_scope, reason }
-  // EditForm kirim { accountNumber, reason, ... } — map ke field BE
   value: form.value ?? form.accountNumber,
   type: form.type ?? "ACCOUNT_NUMBER",
   service_scope: (form.service_scope ?? "ALL").toUpperCase(),
@@ -203,8 +202,9 @@ const RiskManagement = () => {
     open: false,
     editData: null,
   });
-  const [activeTab, setActiveTab] = useState("blacklist"); // "blacklist" | "rules" | "patterns"
+  const [activeTab, setActiveTab] = useState("blacklist");
   const [patterns, setPatterns] = useState([]);
+  const [patternCandidates, setPatternCandidates] = useState([]);
   const [effectiveness, setEffectiveness] = useState([]);
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -216,6 +216,18 @@ const RiskManagement = () => {
     open: false,
     rule: null,
   });
+
+  // ── RuleEngine lifted state ─────────────────────────────────────────────────
+  // Diangkat ke sini agar tidak reset saat user switch tab dan kembali ke Rules.
+  const [rePage, setRePage] = useState(1);
+  const [reSearch, setReSearch] = useState("");
+  const [reSortKey, setReSortKey] = useState(null);
+  const [reSortPDir, setReSortPDir] = useState(null);
+  const [reSortHDir, setReSortHDir] = useState(null);
+  const [reFilterAction, setReFilterAction] = useState(null);
+  const [rePeriod, setRePeriod] = useState(null);
+  const [reOpenDrop, setReOpenDrop] = useState(null);
+  // ───────────────────────────────────────────────────────────────────────────
 
   const { toasts, push, dismiss } = useToast();
 
@@ -250,11 +262,10 @@ const RiskManagement = () => {
         api.get("/patterns/candidates"),
         api.get("/patterns/effectiveness"),
       ]);
-      const all = [
-        ...(active || []).map((p) => ({ ...p, is_active: true })),
-        ...(candidates || []).map((p) => ({ ...p, is_active: false })),
-      ];
-      setPatterns(all);
+      setPatterns((active || []).map((p) => ({ ...p, is_active: true })));
+      setPatternCandidates(
+        (candidates || []).map((p) => ({ ...p, is_active: false })),
+      );
       setEffectiveness(eff || []);
     } catch (err) {
       console.warn("[RiskManagement] Gagal memuat patterns:", err.message);
@@ -349,45 +360,62 @@ const RiskManagement = () => {
 
   const handleRuleDetail = (rule) => setRuleDetailModal({ open: true, rule });
 
-  // ── Pattern handlers ──────────────────────────────────────────────────────
+  // ── Pattern handlers ───────────────────────────────────────────────────────
   const handlePatternActivate = async (id) => {
-    setPatterns((p) =>
-      p.map((x) => (x.id === id ? { ...x, is_active: true } : x)),
-    );
+    const prevPatterns = patterns;
+    const prevCandidates = patternCandidates;
+    const candidate = patternCandidates.find((x) => x.id === id);
+
+    if (candidate) {
+      setPatternCandidates((p) => p.filter((x) => x.id !== id));
+      setPatterns((p) => [{ ...candidate, is_active: true }, ...p]);
+    } else {
+      setPatterns((p) =>
+        p.map((x) => (x.id === id ? { ...x, is_active: true } : x)),
+      );
+    }
+
     try {
       await api.patch(`/patterns/${id}/activate`);
       push("Pattern berhasil diaktifkan.", "success");
     } catch (err) {
-      setPatterns((p) =>
-        p.map((x) => (x.id === id ? { ...x, is_active: false } : x)),
-      );
+      setPatterns(prevPatterns);
+      setPatternCandidates(prevCandidates);
       push(`Gagal mengaktifkan pattern: ${err.message}`, "error");
     }
   };
 
   const handlePatternDeactivate = async (id) => {
-    setPatterns((p) =>
-      p.map((x) => (x.id === id ? { ...x, is_active: false } : x)),
-    );
+    const prevPatterns = patterns;
+    const prevCandidates = patternCandidates;
+    const target = patterns.find((x) => x.id === id);
+
+    setPatterns((p) => p.filter((x) => x.id !== id));
+    if (target) {
+      setPatternCandidates((p) => [{ ...target, is_active: false }, ...p]);
+    }
+
     try {
       await api.patch(`/patterns/${id}/deactivate`);
       push("Pattern dinonaktifkan.", "warn");
     } catch (err) {
-      setPatterns((p) =>
-        p.map((x) => (x.id === id ? { ...x, is_active: true } : x)),
-      );
+      setPatterns(prevPatterns);
+      setPatternCandidates(prevCandidates);
       push(`Gagal menonaktifkan: ${err.message}`, "error");
     }
   };
 
   const handlePatternDelete = async (id) => {
-    const prev = patterns;
+    const prevPatterns = patterns;
+    const prevCandidates = patternCandidates;
     setPatterns((p) => p.filter((x) => x.id !== id));
+    setPatternCandidates((p) => p.filter((x) => x.id !== id));
     try {
       await api.del(`/patterns/${id}`);
       push("Pattern dihapus.", "warn");
     } catch (err) {
-      setPatterns(prev);
+      setPatterns(prevPatterns);
+      setPatternCandidates(prevCandidates);
       push(`Gagal menghapus: ${err.message}`, "error");
     }
   };
@@ -408,12 +436,12 @@ const RiskManagement = () => {
     }
   };
 
+  // ── Blacklist handlers ─────────────────────────────────────────────────────
   const handleBlSubmit = async (mode, items) => {
     if (mode === "edit") {
       const item = items[0];
       try {
         await api.put(`/blacklist/${item.id}`, blToApiPayload(item));
-
         await fetchBlacklist();
         push(
           `Rekening ${item.accountNumber} diperbarui. Status kembali ke Pending verifikasi.`,
@@ -429,7 +457,6 @@ const RiskManagement = () => {
       const item = items[0];
       try {
         const created = await api.post("/blacklist/", blToApiPayload(item));
-
         setBlacklist((p) => [blFromApi(created), ...p]);
         push(
           `Rekening ${item.accountNumber} ditambahkan, menunggu verifikasi.`,
@@ -476,7 +503,6 @@ const RiskManagement = () => {
 
   const handleBlDelete = async (id) => {
     const item = blacklist.find((b) => b.id === id);
-
     setBlacklist((p) => p.filter((b) => b.id !== id));
     try {
       await api.del(`/blacklist/${id}`);
@@ -489,7 +515,6 @@ const RiskManagement = () => {
 
   const handleBlApprove = async (id) => {
     const item = blacklist.find((b) => b.id === id);
-
     setBlacklist((p) =>
       p.map((b) =>
         b.id === id
@@ -517,7 +542,6 @@ const RiskManagement = () => {
 
   const handleBlReject = async (id, reviewNote) => {
     const item = blacklist.find((b) => b.id === id);
-
     setBlacklist((p) =>
       p.map((b) =>
         b.id === id
@@ -545,13 +569,11 @@ const RiskManagement = () => {
     }
   };
 
-  const handleBlEdit = (item) => {
+  const handleBlEdit = (item) =>
     setBlModal({ open: true, mode: "single", editData: item });
-  };
 
   const handleBlToggleStatus = async (id, newStatus) => {
     const item = blacklist.find((b) => b.id === id);
-
     setBlacklist((p) =>
       p.map((b) => (b.id === id ? { ...b, status: newStatus } : b)),
     );
@@ -744,12 +766,30 @@ const RiskManagement = () => {
             onDelete={handleRuleDelete}
             onToggle={handleRuleToggle}
             onDetail={handleRuleDetail}
+            // ── lifted state ──
+            page={rePage}
+            setPage={setRePage}
+            search={reSearch}
+            setSearch={setReSearch}
+            sortKey={reSortKey}
+            setSortKey={setReSortKey}
+            sortPDir={reSortPDir}
+            setSortPDir={setReSortPDir}
+            sortHDir={reSortHDir}
+            setSortHDir={setReSortHDir}
+            filterAction={reFilterAction}
+            setFilterAction={setReFilterAction}
+            period={rePeriod}
+            setPeriod={setRePeriod}
+            openDrop={reOpenDrop}
+            setOpenDrop={setReOpenDrop}
           />
         ))}
 
       {activeTab === "patterns" && (
         <PatternPanel
           data={patterns}
+          candidates={patternCandidates}
           effectiveness={effectiveness}
           onAdd={() => setPatternModal({ open: true, editData: null })}
           onEdit={(p) => setPatternModal({ open: true, editData: p })}

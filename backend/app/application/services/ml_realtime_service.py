@@ -12,10 +12,65 @@ from app.application.services.transaction_feature_snapshot_service import (
 )
 from app.infrastructure.ml.scoring import score_transaction_snapshot
 from app.application.services.alert_service import create_alert
+from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.session import SessionLocal
+from app.infrastructure.database.enums import (
+    ActivityActionEnum,
+    SeverityLevelEnum,
+    EventSourceEnum,
+)
+from app.domain.entities.target_type import TargetType
 from app.core.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
+
+
+# =====================================================================
+# RISK LEVEL → SEVERITY MAPPING (untuk activity log audit trail)
+# =====================================================================
+_RISK_LEVEL_TO_SEVERITY = {
+    "critical": SeverityLevelEnum.CRITICAL,
+    "warning": SeverityLevelEnum.WARNING,
+    "low": SeverityLevelEnum.INFO,
+}
+
+
+def _log_ml_scoring_activity(db: Session, transaction, scoring_result: dict[str, Any]) -> None:
+    """
+    Catat hasil ML scoring ke activity_log (immutable audit trail).
+
+    Berbeda dengan transaction.score_breakdown yang bisa ke-overwrite
+    saat re-scoring, record di activity_log bersifat append-only —
+    sehingga histori "model versi X menilai tx ini = score Y pada waktu Z"
+    tetap tersimpan permanen untuk kebutuhan audit forensik.
+    """
+    risk_level = scoring_result.get("risk_level", "low")
+    severity = _RISK_LEVEL_TO_SEVERITY.get(risk_level, SeverityLevelEnum.INFO)
+
+    try:
+        log_activity(
+            db=db,
+            admin=None,
+            action_type=ActivityActionEnum.ML_SCORING_COMPLETED,
+            module_source=EventSourceEnum.ML,
+            severity=severity,
+            target_type=TargetType.TRANSACTION,
+            target_id=transaction.id,
+            details={
+                "ml_score": scoring_result.get("score"),
+                "is_anomaly": scoring_result.get("is_anomaly"),
+                "risk_level": risk_level,
+                "patterns": scoring_result.get("patterns", []),
+                "domain": scoring_result.get("domain"),
+                "model_version": scoring_result.get("metadata", {}).get("model_version"),
+                "scored_at": scoring_result.get("metadata", {}).get("scored_at"),
+            },
+        )
+    except Exception as e:
+        logger.error(
+            f"[ML_REALTIME] tx_id={transaction.id} gagal mencatat activity_log — "
+            f"{type(e).__name__}: {e}"
+        )
 
 # =====================================================================
 # CONCURRENCY LIMITER
@@ -228,6 +283,58 @@ class MLRealtimeService:
         patterns = scoring_result.get("patterns", [])
         thresholds = scoring_result.get("thresholds", {})
 
+        # ===== BUILD & PERSIST SELECTED FEATURES INTO transaction_details =====
+        # Feature builder returns UPPERCASE keys; pattern engine expects
+        # lower-case keys inside transaction.transaction_details (det.get(...)).
+        try:
+            from app.infrastructure.ml.feature_builder import build_features_from_snapshot
+
+            snapshot = build_transaction_snapshot(self.db, transaction.id)
+            if snapshot:
+                features = build_features_from_snapshot(snapshot.get("transaction", {}).get("domain"), snapshot)
+                # map feature keys (UPPERCASE) -> transaction_details keys (lowercase)
+                feature_map = {
+                    # Agenusa
+                    "IS_NIGHT_TX": "is_night_tx",
+                    "AMOUNT_OVER_AVG_RATIO": "amount_over_avg_ratio",
+                    "IS_DECLINED": "is_declined",
+                    "GAP_MINUTES": "gap_minutes",
+                    "DEST_ACCOUNT_NUMBER": "dest_account_number",
+                    "TERMINAL_SWITCH_FAST": "terminal_switch_fast",
+
+                    # Nusabill
+                    "PAYMENT_GAP_MINUTES": "payment_gap_minutes",
+                    "PAYMENT_TO_BILL_RATIO": "payment_to_bill_ratio",
+                    "CHANNEL": "channel",
+                    "CHANNEL_API_FLAG": "channel_api_flag",
+                    "PAYMENT_DELAY_DAYS": "payment_delay_days",
+                    "CHANNEL_SWITCH_TO_API": "channel_switch_to_api",
+                }
+
+                existing_details = dict(transaction.transaction_details or {})
+                for k_src, k_dst in feature_map.items():
+                    if k_src in features:
+                        # ensure primitive types for JSON storage
+                        val = features.get(k_src)
+                        if isinstance(val, (int, float, str)) or val is None:
+                            existing_details[k_dst] = val
+                        else:
+                            # cast booleans/np types
+                            try:
+                                existing_details[k_dst] = int(val)
+                            except Exception:
+                                existing_details[k_dst] = val
+
+                transaction.transaction_details = existing_details
+        except Exception as e:
+            logger.exception(f"[ML_REALTIME] tx_id={transaction.id} gagal menyimpan fitur ke transaction_details: {e}")
+
+        # ===== IMMUTABLE AUDIT TRAIL =====
+        # Catat hasil scoring ke activity_log (append-only) SEBELUM
+        # transaction.score_breakdown di-overwrite, supaya histori
+        # keputusan ML per-waktu tetap terjaga untuk audit forensik.
+        _log_ml_scoring_activity(self.db, transaction, scoring_result)
+
         # ===== UPDATE TRANSACTION ML FIELDS =====
         transaction.anomaly_score = ml_score
         transaction.is_flagged_ml = is_anomaly
@@ -258,6 +365,54 @@ class MLRealtimeService:
 
         if is_anomaly:
             try:
+                # ── Opsi B: ML update final_status ───────────────────────
+                # Jika ML deteksi anomali dan final_status masih SAFE/PENDING,
+                # eskalasi ke UNDER_REVIEW agar tidak lolos tanpa review.
+                # Jika sudah FRAUD (dari Rule/Pattern), tidak di-downgrade.
+                from app.infrastructure.database.enums import TransactionStatusEnum
+
+                current_status = (
+                    transaction.final_status.value
+                    if hasattr(transaction.final_status, "value")
+                    else str(transaction.final_status)
+                )
+
+                if current_status in ("SAFE", "PENDING", "safe", "pending"):
+                    transaction.final_status = TransactionStatusEnum.UNDER_REVIEW
+                    transaction.is_flagged_ml = True
+
+                    # Kontribusikan ML score ke risk_score
+                    # Isolation Forest: semakin negatif = semakin anomali
+                    # Konversi ke skala 0-100 untuk ditambahkan ke risk_score
+                    if risk_level == "critical":
+                        ml_risk_contribution = 40
+                    elif risk_level == "warning":
+                        ml_risk_contribution = 20
+                    else:
+                        ml_risk_contribution = 10
+
+                    current_risk  = float(transaction.risk_score or 0)
+                    new_risk      = min(100, int(current_risk + ml_risk_contribution))
+                    transaction.risk_score = new_risk
+
+                    # Update risk_level jika naik
+                    if new_risk >= 80:   transaction.risk_level = "CRITICAL"
+                    elif new_risk >= 60: transaction.risk_level = "HIGH"
+                    elif new_risk >= 40: transaction.risk_level = "MEDIUM"
+
+                    # Update score_breakdown dengan kontribusi ML
+                    existing_breakdown.update({
+                        "ml_risk_contribution": ml_risk_contribution,
+                        "final_score": new_risk,
+                    })
+
+                    logger.info(
+                        f"[ML_REALTIME] tx_id={transaction_id} "
+                        f"final_status eskalasi SAFE → UNDER_REVIEW | "
+                        f"risk_score {int(current_risk)} → {new_risk} (+{ml_risk_contribution}) | "
+                        f"ML risk_level={risk_level}"
+                    )
+
                 # 🔍 Cek apakah alert untuk transaksi ini sudah dibuat oleh engine lain
                 existing_alert = (
                     self.db.query(FraudAlert)
@@ -362,6 +517,9 @@ class MLRealtimeService:
         risk_level = scoring_result.get("risk_level", "low")
         patterns = scoring_result.get("patterns", [])
         thresholds = scoring_result.get("thresholds", {})
+
+        # ===== IMMUTABLE AUDIT TRAIL =====
+        _log_ml_scoring_activity(self.db, transaction, scoring_result)
 
         # ===== UPDATE TRANSACTION ML FIELDS =====
         transaction.anomaly_score = ml_score

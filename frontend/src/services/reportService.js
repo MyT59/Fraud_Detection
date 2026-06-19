@@ -30,38 +30,62 @@ const reportService = {
 
   /**
    * GET /reports/{id}/download
-   * Download file dengan auth header, lalu trigger save sebagai blob.
+   * BE return JSON { download_url }.
+   * - Jika Supabase aktif: signed URL Supabase (full URL, public, langsung window.open)
+   * - Jika fallback lokal: path relatif "/reports/{id}/raw" yang butuh auth header,
+   *   jadi di-fetch manual sebagai blob (window.open tidak bisa kirim Bearer token)
    */
-  downloadReport: async (id, fallbackFilename = "report") => {
-    const base = process.env.REACT_APP_API_URL || "http://localhost:8000";
-    const token = storage.getAccessToken();
-
-    const res = await fetch(`${base}/reports/${id}/download`, {
-      method: "GET",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      throw new Error(data?.detail || `HTTP ${res.status}`);
+  downloadReport: async (id) => {
+    const res = await api.get(`/reports/${id}/download`);
+    if (!res?.download_url) {
+      throw new Error("Download URL tidak tersedia dari server.");
     }
 
-    // Ambil filename dari Content-Disposition header jika ada
-    const disposition = res.headers.get("Content-Disposition") || "";
-    const match = disposition.match(/filename="?([^"]+)"?/);
-    const filename = match ? match[1] : fallbackFilename;
+    const isLocalFallback = res.download_url.startsWith("/");
+    const format = (res.format || "").toUpperCase();
 
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+    // PDF bisa langsung dibuka di tab baru — browser punya PDF viewer built-in.
+    // CSV/XLSX tidak punya viewer built-in, browser akan tampilkan sebagai teks
+    // mentah kalau dibuka langsung, jadi harus di-force download sebagai file.
+    const shouldForceDownload = format === "CSV" || format === "XLSX";
+
+    if (!isLocalFallback && !shouldForceDownload) {
+      // Supabase signed URL untuk PDF — public, langsung buka di tab baru
+      window.open(res.download_url, "_blank");
+      return res;
+    }
+
+    // CSV/XLSX (Supabase atau lokal) ATAU semua format dari local fallback
+    // -> fetch sebagai blob lalu force download
+    const fileUrl = isLocalFallback
+      ? `${process.env.REACT_APP_API_URL || "http://localhost:8000"}${res.download_url}`
+      : res.download_url;
+
+    const fetchOptions = isLocalFallback
+      ? { headers: { Authorization: `Bearer ${storage.getAccessToken()}` } }
+      : {};
+
+    const fileRes = await fetch(fileUrl, fetchOptions);
+    if (!fileRes.ok) {
+      throw new Error(`Gagal mengambil file (HTTP ${fileRes.status})`);
+    }
+
+    const blob = await fileRes.blob();
+    const ext = format.toLowerCase() || "pdf";
+    const filename = `${res.report_name?.replace(/[^a-z0-9]+/gi, "_") || "report"}.${ext}`;
+
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = blobUrl;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(blobUrl);
     }, 100);
+
+    return res;
   },
 };
 

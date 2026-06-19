@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { authService, storage } from "../services/apiService";
+import { authService } from "../services/AuthService"; // ✅ FIX: dari AuthService bukan apiService
+import { storage } from "../services/apiService";
 import "./ChangePassword.css";
 
 const ChangePassword = () => {

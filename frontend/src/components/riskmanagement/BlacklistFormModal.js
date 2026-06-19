@@ -127,32 +127,6 @@ const SCOPE_ICONS = {
   NUSABILL: "bi-receipt",
 };
 
-const BANKS = [
-  "BCA",
-  "BRI",
-  "Mandiri",
-  "BNI",
-  "BSI",
-  "CIMB Niaga",
-  "Danamon",
-  "Permata",
-  "BTN",
-  "Maybank",
-  "OCBC",
-  "Panin",
-  "Lainnya",
-];
-const REASONS_BULK = [
-  "Penipuan Online",
-  "Rekening Mule",
-  "Phishing",
-  "Social Engineering",
-  "Investasi Bodong",
-  "Jual Beli Palsu",
-  "Pinjol Ilegal",
-  "Lainnya",
-];
-
 const flatTypes = (scope) => TYPE_MAP[scope].flatMap((g) => g.types);
 
 const getTypeInfo = (scope, typeVal) =>
@@ -161,22 +135,70 @@ const getTypeInfo = (scope, typeVal) =>
 const normVal = (raw, typeInfo) =>
   typeInfo?.cs ? raw.trim() : raw.trim().toLowerCase();
 
+const VALID_TYPES = [
+  "USER_ID",
+  "CUSTOMER_ID",
+  "ACCOUNT_NUMBER",
+  "DEVICE_ID",
+  "TERMINAL_ID",
+  "IP_ADDRESS",
+  "MERCHANT_ID",
+  "INVOICE_NUMBER",
+  "RRN",
+  "PAYMENT_CODE",
+  "BILLER_ID",
+  "CUSTOMER_PHONE",
+  "CUSTOMER_EMAIL",
+  "VIRTUAL_ACCOUNT_NUMBER",
+];
+const VALID_SCOPES = ["ALL", "AGENUSA", "NUSABILL"];
+
+const downloadTemplate = () => {
+  const header = "value,type,service_scope,reason";
+  const examples = [
+    "user123,USER_ID,ALL,Percobaan penipuan berulang",
+    "1234567890,ACCOUNT_NUMBER,AGENUSA,Rekening mule",
+    "192.168.1.1,IP_ADDRESS,ALL,IP mencurigakan",
+    "scam@gmail.com,CUSTOMER_EMAIL,NUSABILL,Email penipuan",
+    "MRC001,MERCHANT_ID,AGENUSA,Merchant terlibat fraud",
+  ].join("\n");
+  const csv = `${header}\n${examples}`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "template_blacklist_import.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 const parseBulkText = (text) => {
   const lines = text
     .split("\n")
     .map((l) => l.trim())
-    .filter(Boolean);
+    .filter((l) => l && !l.startsWith("value,") && !l.startsWith("#"));
+
   return lines
     .map((line, i) => {
       const parts = line.split(",").map((s) => s.trim());
-      const acct = parts[0]?.replace(/\D/g, "") || "";
-      if (!acct) return null;
+      const value = parts[0] || "";
+      if (!value) return null;
+
+      const type = VALID_TYPES.includes(parts[1]?.toUpperCase())
+        ? parts[1].toUpperCase()
+        : "ACCOUNT_NUMBER";
+      const service_scope = VALID_SCOPES.includes(parts[2]?.toUpperCase())
+        ? parts[2].toUpperCase()
+        : "ALL";
+      const reason = parts[3] || "Bulk Import";
+
       return {
         id: Date.now() + i,
-        accountNumber: acct,
-        accountName: parts[1] || "",
-        bank: BANKS.includes(parts[2]) ? parts[2] : "Lainnya",
-        reason: REASONS_BULK.includes(parts[3]) ? parts[3] : "Lainnya",
+        value,
+        accountNumber: value,
+        type,
+        service_scope,
+        reason,
         source: "import",
         status: "pending",
         hitCount: 0,
@@ -228,7 +250,7 @@ const AddForm = ({ onClose, onSubmit }) => {
       setType("");
       setValue("");
     }
-  }, [scope]);
+  }, [scope, type]);
 
   const handleScope = (s) => {
     setScope(s);
@@ -398,29 +420,40 @@ const AddForm = ({ onClose, onSubmit }) => {
   );
 };
 
-const REASONS_EDIT = [
-  "Penipuan Online",
-  "Rekening Mule",
-  "Phishing",
-  "Social Engineering",
-  "Investasi Bodong",
-  "Jual Beli Palsu",
-  "Pinjol Ilegal",
-  "Lainnya",
+const TYPE_OPTIONS = [
+  "USER_ID",
+  "CUSTOMER_ID",
+  "ACCOUNT_NUMBER",
+  "DEVICE_ID",
+  "TERMINAL_ID",
+  "IP_ADDRESS",
+  "MERCHANT_ID",
+  "INVOICE_NUMBER",
+  "RRN",
+  "PAYMENT_CODE",
+  "BILLER_ID",
+  "CUSTOMER_PHONE",
+  "CUSTOMER_EMAIL",
+  "VIRTUAL_ACCOUNT_NUMBER",
 ];
 
+const SCOPE_OPTIONS = ["ALL", "AGENUSA", "NUSABILL"];
+
 const EMPTY_EDIT = {
-  accountNumber: "",
-  accountName: "",
-  bank: "BCA",
-  reason: "Penipuan Online",
-  reasonDetail: "",
-  status: "active",
-  source: "manual",
+  value: "",
+  type: "ACCOUNT_NUMBER",
+  service_scope: "ALL",
+  reason: "",
 };
 
 const EditForm = ({ editData, onClose, onSubmit }) => {
-  const [form, setForm] = useState({ ...EMPTY_EDIT, ...editData });
+  const [form, setForm] = useState({
+    ...EMPTY_EDIT,
+    value: editData?.value || editData?.accountNumber || "",
+    type: editData?.type || editData?.bank || "ACCOUNT_NUMBER",
+    service_scope: editData?.service_scope || "ALL",
+    reason: editData?.reason || "",
+  });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
@@ -431,11 +464,8 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
 
   const validate = () => {
     const e = {};
-    if (!form.accountNumber.trim())
-      e.accountNumber = "Nomor rekening wajib diisi.";
-    else if (!/^\d{6,20}$/.test(form.accountNumber))
-      e.accountNumber = "Masukkan 6–20 digit angka.";
-    if (!form.accountName.trim()) e.accountName = "Nama pemilik wajib diisi.";
+    if (!form.value.trim()) e.value = "Nilai / Identifier wajib diisi.";
+    if (!form.reason.trim()) e.reason = "Alasan wajib diisi.";
     return e;
   };
 
@@ -446,18 +476,20 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
       return;
     }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 420));
-    const now = new Date().toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+
+    // Simulasi loading sebentar
+    await new Promise((r) => setTimeout(r, 300));
+
     onSubmit("edit", [
       {
-        ...form,
-        id: editData?.id || Date.now(),
-        hitCount: editData?.hitCount ?? 0,
-        addedAt: editData?.addedAt || now,
+        ...editData,
+        value: form.value,
+        accountNumber: form.value, // fallback untuk kompatibilitas data lama
+        type: form.type,
+        bank: form.type, // fallback untuk kompatibilitas data lama
+        service_scope: form.service_scope,
+        reason: form.reason,
+        id: editData?.id,
       },
     ]);
     setLoading(false);
@@ -467,100 +499,76 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
   return (
     <>
       <div className="bfm-body">
+        {/* SEKARANG BISA DIEDIT & ADA VALIDASI ERROR */}
         <Field
-          label="Nomor Rekening"
+          label="Nilai / Identifier"
           req
-          err={errors.accountNumber}
-          hint="Nomor rekening tidak dapat diubah"
+          err={errors.value}
+          hint="Pastikan format sesuai dengan tipe yang dipilih"
         >
           <input
-            className={`bfm-input bfm-mono${errors.accountNumber ? " err" : ""}`}
+            className={`bfm-input bfm-mono${errors.value ? " err" : ""}`}
             type="text"
-            placeholder="cth: 1234567890"
-            value={form.accountNumber}
-            disabled
-            onChange={() => {}}
+            placeholder="Masukkan nilai identifier..."
+            value={form.value}
+            onChange={(e) => set("value", e.target.value)} // <-- Mengaktifkan input mengetik
           />
         </Field>
-        <Field label="Nama Pemilik" req err={errors.accountName}>
+
+        <div className="bfm-row">
+          <Field label="Tipe Identifier" req>
+            <div className="bfm-select-wrap">
+              <select
+                className="bfm-select"
+                value={form.type}
+                onChange={(e) => set("type", e.target.value)}
+              >
+                {TYPE_OPTIONS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Field>
+
+          <Field label="Service Scope">
+            <div className="bfm-select-wrap">
+              <select
+                className="bfm-select"
+                value={form.service_scope}
+                onChange={(e) => set("service_scope", e.target.value)}
+              >
+                {SCOPE_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Field>
+        </div>
+
+        <Field label="Alasan Blacklist" req err={errors.reason}>
           <input
-            className={`bfm-input${errors.accountName ? " err" : ""}`}
+            className={`bfm-input${errors.reason ? " err" : ""}`}
             type="text"
-            placeholder="cth: Budi Santoso"
-            value={form.accountName}
-            onChange={(e) => set("accountName", e.target.value)}
+            placeholder="Contoh: Terlibat kasus fraud penipuan online"
+            value={form.reason}
+            onChange={(e) => set("reason", e.target.value)}
           />
         </Field>
-        <div className="bfm-row">
-          <Field label="Bank" req>
-            <div className="bfm-select-wrap">
-              <select
-                className="bfm-select"
-                value={form.bank}
-                onChange={(e) => set("bank", e.target.value)}
-              >
-                {BANKS.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </Field>
-          <Field label="Alasan Blacklist" req>
-            <div className="bfm-select-wrap">
-              <select
-                className="bfm-select"
-                value={form.reason}
-                onChange={(e) => set("reason", e.target.value)}
-              >
-                {REASONS_EDIT.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </Field>
+
+        <div className="bfm-info-badge bfm-info-badge--warning">
+          <i className="bi bi-info-circle-fill" />
+          <span>
+            Menyimpan perubahan akan mereset status ke <strong>PENDING</strong>,
+            menonaktifkan blokir sementara, dan membutuhkan verifikasi ulang
+            oleh Risk Manager.
+          </span>
         </div>
-        <div className="bfm-row">
-          <Field label="Status">
-            <div className="bfm-select-wrap">
-              <select
-                className="bfm-select"
-                value={form.status}
-                onChange={(e) => set("status", e.target.value)}
-              >
-                <option value="active">Aktif Blokir</option>
-                <option value="pending">Menunggu Verifikasi</option>
-                <option value="inactive">Nonaktif</option>
-              </select>
-            </div>
-          </Field>
-          <Field label="Sumber">
-            <div className="bfm-select-wrap">
-              <select
-                className="bfm-select"
-                value={form.source}
-                onChange={(e) => set("source", e.target.value)}
-              >
-                <option value="manual">Input Manual</option>
-                <option value="import">Bulk Import</option>
-                <option value="system">Auto-Detect</option>
-              </select>
-            </div>
-          </Field>
-        </div>
-        <Field label="Keterangan Tambahan" opt>
-          <textarea
-            className="bfm-textarea"
-            placeholder="Deskripsikan bukti, nomor laporan, atau detail lainnya..."
-            value={form.reasonDetail}
-            onChange={(e) => set("reasonDetail", e.target.value)}
-            rows={3}
-          />
-        </Field>
       </div>
+
       <div className="bfm-footer">
         <button className="bfm-btn-cancel" onClick={onClose} disabled={loading}>
           Batal
@@ -627,22 +635,38 @@ const BulkForm = ({ onClose, onSubmit }) => {
     <>
       <div className="bfm-body">
         <div className="bfm-format-box">
-          <div className="bfm-format-title">
-            <i className="bi bi-file-text" /> Format CSV (satu baris per
-            rekening)
+          <div
+            className="bfm-format-title"
+            style={{ justifyContent: "space-between" }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <i className="bi bi-file-earmark-spreadsheet" /> Format CSV
+            </span>
+            <button
+              className="bfm-dl-btn"
+              onClick={downloadTemplate}
+              title="Download template CSV"
+            >
+              <i className="bi bi-download" /> Download Template
+            </button>
           </div>
           <code className="bfm-format-code">
-            NoRekening,NamaPemilik,Bank,Alasan
+            value,type,service_scope,reason
           </code>
           <div className="bfm-format-example">
-            <span>Contoh:</span>
-            <code>1234567890,Budi Santoso,BCA,Penipuan Online</code>
-            <code>0987654321,Sari Bohong,BRI,Rekening Mule</code>
+            <span>Contoh baris:</span>
+            <code>user123,USER_ID,ALL,Percobaan penipuan berulang</code>
+            <code>1234567890,ACCOUNT_NUMBER,AGENUSA,Rekening mule</code>
+            <code>192.168.1.1,IP_ADDRESS,ALL,IP mencurigakan</code>
           </div>
           <div className="bfm-format-note">
-            <i className="bi bi-info-circle" /> Bank yang valid:{" "}
-            {BANKS.slice(0, 6).join(", ")}, dst. Kolom Nama, Bank, Alasan
-            bersifat opsional.
+            <i className="bi bi-info-circle" />
+            <span>
+              <strong>type</strong> valid: USER_ID, CUSTOMER_ID, ACCOUNT_NUMBER,
+              IP_ADDRESS, MERCHANT_ID, CUSTOMER_EMAIL, dll.{" "}
+              <strong>service_scope</strong>: ALL / AGENUSA / NUSABILL. Kolom
+              type/scope opsional — default ACCOUNT_NUMBER / ALL.
+            </span>
           </div>
         </div>
 
@@ -651,7 +675,7 @@ const BulkForm = ({ onClose, onSubmit }) => {
             ref={firstRef}
             className={`bfm-textarea bfm-textarea-bulk bfm-mono${bulkError ? " err" : ""}`}
             placeholder={
-              "1234567890,Budi Santoso,BCA,Penipuan Online\n0987654321,Sari Bohong,BRI,Rekening Mule\n..."
+              "value,type,service_scope,reason\nuser123,USER_ID,ALL,Percobaan penipuan berulang\n1234567890,ACCOUNT_NUMBER,AGENUSA,Rekening mule\n..."
             }
             value={bulkText}
             onChange={(e) => handleChange(e.target.value)}

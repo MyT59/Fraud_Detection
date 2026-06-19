@@ -65,6 +65,13 @@ class RiskLevelEnum(str, enum.Enum):
     CRITICAL = "CRITICAL"
 
 
+class PatternSourceEnum(str, enum.Enum):
+    """Indicates where a pattern originated from"""
+    MANUAL_CREATE = "MANUAL_CREATE"      # Manually created by user
+    MANUAL_REVIEW = "MANUAL_REVIEW"      # Generated from manual fraud reviews
+    RETRAIN_ML = "RETRAIN_ML"            # Generated from ML retrain process
+
+
 class ReviewDecisionEnum(str, enum.Enum):
     SAFE = "SAFE"
     FRAUD = "FRAUD"
@@ -104,8 +111,11 @@ class ActivityActionEnum(str, enum.Enum):
 
     # Patterns (ML & Manual)
     PATTERN_CREATED = "PATTERN_CREATED"
+    PATTERN_UPDATED = "PATTERN_UPDATED"
     PATTERN_AUTO_DISABLE = "PATTERN_AUTO_DISABLE"
     PATTERN_AUTO_PROMOTE = "PATTERN_AUTO_PROMOTE"
+    PATTERN_ACTIVATED = "PATTERN_ACTIVATED"
+    PATTERN_DEACTIVATED = "PATTERN_DEACTIVATED"
     PATTERN_REACTIVATED = "PATTERN_REACTIVATED" 
     PATTERN_TRIGGERED = "PATTERN_TRIGGERED" 
 
@@ -137,6 +147,9 @@ class ActivityActionEnum(str, enum.Enum):
     # Reports
     REPORT_GENERATED = "REPORT_GENERATED"
     REPORT_DOWNLOADED = "REPORT_DOWNLOADED"
+
+    # ML Engine
+    ML_SCORING_COMPLETED = "ML_SCORING_COMPLETED"
 
 
 class SeverityLevelEnum(str, enum.Enum):

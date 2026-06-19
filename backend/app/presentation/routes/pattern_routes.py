@@ -4,6 +4,7 @@ from typing import List
 
 from app.infrastructure.database.session import get_db
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
+from app.infrastructure.database.enums import PatternSourceEnum
 
 from app.application.services.pattern_learning_service import (
     generate_patterns_from_reviews,
@@ -42,12 +43,12 @@ def generate_patterns(
     current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     patterns = generate_patterns_from_reviews(db)
-    count = save_generated_patterns(db, patterns)
+    count = save_generated_patterns(db, patterns, source=PatternSourceEnum.MANUAL_REVIEW)
 
     log_activity(
         db=db,
         admin=current_admin,
-        action_type=ActivityActionEnum.PATTERN_GENERATED,
+        action_type=ActivityActionEnum.PATTERN_CREATED,
         module_source=EventSourceEnum.PATTERN_ENGINE,
         severity=SeverityLevelEnum.INFO,
         target_type=TargetType.PATTERN,
@@ -103,8 +104,10 @@ def get_active_patterns(db: Session = Depends(get_db)):
 # =========================
 @router.get("/candidates", dependencies=[Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))])
 def get_candidates(db: Session = Depends(get_db)):
+    """Get pattern candidates from manual reviews and retrain ML (inactive only)"""
     patterns = db.query(FraudPattern).filter(
-        FraudPattern.is_active == False
+        FraudPattern.is_active == False,
+        FraudPattern.pattern_source.in_([PatternSourceEnum.MANUAL_REVIEW, PatternSourceEnum.RETRAIN_ML])
     ).all()
 
     return [
@@ -126,6 +129,7 @@ def get_candidates(db: Session = Depends(get_db)):
             "priority": p.priority,
             "pattern_rules": p.pattern_rules,
             "is_active": p.is_active,
+            "pattern_source": p.pattern_source.value if p.pattern_source else "MANUAL_CREATE",
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "updated_at": p.updated_at.isoformat() if p.updated_at else None,
             "disabled_at": p.disabled_at.isoformat() if p.disabled_at else None,
@@ -197,6 +201,7 @@ def create_pattern_manual(
             risk_score=payload.risk_score,
             action=payload.action,
             service_source=payload.service_source,
+            pattern_source=PatternSourceEnum.MANUAL_CREATE,
             is_active=payload.is_active,
             priority=payload.priority
         )

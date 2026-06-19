@@ -43,16 +43,15 @@ def get_cached_patterns(db) -> list:
             return _pattern_cache
 
         from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
-
-        _pattern_cache = (
-            db.query(FraudPattern)
-            .filter(FraudPattern.is_active == True)
-            .order_by(FraudPattern.priority.desc(), FraudPattern.risk_score.desc())
-            .all()
-        )
-        logger.info(f"[CACHE] FraudPattern loaded from DB — {len(_pattern_cache)} patterns")
-
-    return _pattern_cache
+        patterns = db.query(FraudPattern).filter(FraudPattern.is_active == True).all()
+        
+        # JURUS SAKTI CACHING: Lepaskan objek dari ikatan Session
+        for p in patterns:
+            db.expunge(p)
+            
+        _pattern_cache = patterns
+        logger.info(f"[CACHE] FraudPattern loaded — {len(_pattern_cache)} patterns")
+        return _pattern_cache
 
 
 def invalidate_pattern_cache():
@@ -77,16 +76,15 @@ def get_cached_rules(db) -> list:
             return _rule_cache
 
         from app.infrastructure.database.models.global_rule_model import GlobalRule
-
-        _rule_cache = (
-            db.query(GlobalRule)
-            .filter(GlobalRule.is_active == True)
-            .order_by(GlobalRule.priority.desc())
-            .all()
-        )
-        logger.info(f"[CACHE] GlobalRule loaded from DB — {len(_rule_cache)} rules")
-
-    return _rule_cache
+        rules = db.query(GlobalRule).filter(GlobalRule.is_active == True).all()
+        
+        # JURUS SAKTI CACHING: Lepaskan objek dari ikatan Session
+        for r in rules:
+            db.expunge(r)
+            
+        _rule_cache = rules
+        logger.info(f"[CACHE] GlobalRule loaded — {len(_rule_cache)} rules")
+        return _rule_cache
 
 
 def invalidate_rule_cache():

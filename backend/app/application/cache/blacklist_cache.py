@@ -24,8 +24,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_lock           = threading.Lock()
-_blacklist_cache: list | None = None   # List[BlacklistItem] | None
+_lock: threading.Lock = threading.Lock()
+_blacklist_cache: list[dict[str, Any]] | None = None   # Cached plain blacklist records
 
 
 def get_cached_blacklist(db) -> list:
@@ -45,7 +45,7 @@ def get_cached_blacklist(db) -> list:
 
         from app.infrastructure.database.models.blacklist_items_model import BlacklistItem
 
-        _blacklist_cache = (
+        rows = (
             db.query(BlacklistItem)
             .filter(
                 BlacklistItem.is_active == True,
@@ -53,6 +53,18 @@ def get_cached_blacklist(db) -> list:
             )
             .all()
         )
+
+        _blacklist_cache = [
+            {
+                "id": item.id,
+                "service_scope": item.service_scope,
+                "type": item.type.value if hasattr(item.type, "value") else str(item.type),
+                "value": item.value,
+                "reason": item.reason,
+                "hit_count": item.hit_count or 0,
+            }
+            for item in rows
+        ]
         logger.info(f"[CACHE] BlacklistItem loaded from DB — {len(_blacklist_cache)} items")
 
     return _blacklist_cache
@@ -126,11 +138,11 @@ def find_match_from_cache(db, trx) -> Any | None:
     # Evaluasi in-memory
     for item in items:
         # Filter service scope
-        if item.service_scope != "ALL" and item.service_scope != service:
+        if item["service_scope"] != "ALL" and item["service_scope"] != service:
             continue
 
-        item_type  = item.type.value if hasattr(item.type, "value") else str(item.type)
-        item_value = str(item.value).strip()
+        item_type  = item["type"]
+        item_value = str(item["value"]).strip()
 
         candidates = check_map.get(item_type, [])
         for candidate in candidates:

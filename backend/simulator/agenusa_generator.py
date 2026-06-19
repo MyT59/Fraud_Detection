@@ -27,7 +27,7 @@ IP_POOL         = ["36.90.120.15", "114.10.20.30", "180.250.50.60"]
 
 # ⚠️ Pastikan sudah ada di tabel blacklist_items sebelum demo
 BLACKLISTED_IP       = "99.99.99.99"     # type = IP_ADDRESS
-BLACKLISTED_ACCOUNT  = "CARD_BL_000001"  # type = ACCOUNT_NUMBER
+BLACKLISTED_ACCOUNT  = "card_bl_000001"  # type = ACCOUNT_NUMBER
 BLACKLISTED_TERMINAL = "TRM_BL_00001"    # type = TERMINAL_ID
 BLACKLISTED_MERCHANT = "M_BL_00001"      # type = MERCHANT_ID
 
@@ -127,10 +127,10 @@ def generate_blacklist_merchant() -> list[dict]:
 # ============================================================
 def generate_bruteforce() -> list[dict]:
     """4 percobaan PIN salah dalam 1 menit (gap ~20 detik), lalu 1 sukses."""
-    records = []
+    records   = []
     base_time = datetime.now(timezone.utc) - timedelta(minutes=5)
     card_num  = "CARD_BRUTE_" + "".join(random.choices(string.digits, k=6))
-    term_id   = random.choice(TERMINALS)
+    term_id   = "TERM_BRUTE_001"  # ← dedicated, bukan random.choice(TERMINALS)
 
     for i in range(4):
         trx = _base_trx(time_override=base_time + timedelta(seconds=i * 20))
@@ -139,7 +139,7 @@ def generate_bruteforce() -> list[dict]:
         trx["customer_ref_number"]   = card_num
         trx["terminal_id"]           = term_id
         trx["processing_code"]       = "300000"
-        trx["response_code"]         = "55"   # PIN Wrong
+        trx["response_code"]         = "55"
         records.append(trx)
 
     trx_ok = _base_trx(time_override=base_time + timedelta(seconds=90))
@@ -185,44 +185,53 @@ def generate_decline_velocity() -> list[dict]:
 #                 risk_score: 95, action: BLOCK
 # ============================================================
 def generate_super_pattern() -> list[dict]:
-    """3 decline → 1 sukses → 3 burst transaksi besar."""
-    records  = []
+    """
+    Pattern ID 11 — Agenusa - Super Pattern (Advanced Syndicate Attack)
+    Trigger: failure_count>=3 AND has_success_after_failure==true
+             AND tx_count>=15 AND total_amount>=50,000,000
+             dalam 15 menit — 1 kartu, bukan multi-terminal
+
+    Struktur: 3× decline → 1× success → 12× burst = 16 tx total
+    - failure_count = 3 >= 3 ✅
+    - has_success_after_failure = True ✅
+    - tx_count = 16 >= 15 ✅
+    - total_amount = 13 × 4jt = 52 juta >= 50 juta ✅
+    - amount 4 juta < 10 juta → lolos Global Rule ✅
+    """
+    records   = []
     base_time = datetime.now(timezone.utc)
     card_num  = "CARD_SUPER_" + "".join(random.choices(string.digits, k=6))
 
+    # 3× decline berturut-turut
     for i in range(3):
-        trx = _base_trx(time_override=base_time + timedelta(seconds=i * 25))
-        trx["issuer_account_number"] = card_num
-        trx["account_number"]        = card_num
-        trx["customer_ref_number"]   = card_num
-        trx["response_code"]         = "51"
-        records.append(trx)
+        trx_dec = _base_trx(time_override=base_time + timedelta(seconds=i * 30))
+        trx_dec["issuer_account_number"] = card_num
+        trx_dec["account_number"]        = card_num
+        trx_dec["customer_ref_number"]   = card_num
+        trx_dec["response_code"]         = "51"
+        trx_dec["amount"]                = 4_000_000
+        records.append(trx_dec)
 
-    trx_ok = _base_trx(time_override=base_time + timedelta(seconds=80))
+    # 1× success setelah decline → has_success_after_failure=True ✅
+    trx_ok = _base_trx(time_override=base_time + timedelta(seconds=100))
     trx_ok["issuer_account_number"] = card_num
     trx_ok["account_number"]        = card_num
     trx_ok["customer_ref_number"]   = card_num
     trx_ok["response_code"]         = "00"
+    trx_ok["amount"]                = 4_000_000
     records.append(trx_ok)
 
-    for j in range(3):
-        trx_burst = _base_trx(time_override=base_time + timedelta(seconds=90 + j * 15))
+    # 12× burst → total tx = 16 >= 15 ✅, total amount = 13 × 4jt = 52 juta >= 50 juta ✅
+    for j in range(12):
+        trx_burst = _base_trx(time_override=base_time + timedelta(seconds=120 + j * 30))
         trx_burst["issuer_account_number"] = card_num
         trx_burst["account_number"]        = card_num
         trx_burst["customer_ref_number"]   = card_num
         trx_burst["response_code"]         = "00"
-        trx_burst["amount"]                = round(random.uniform(1_000_000, 5_000_000), 2)
+        trx_burst["amount"]                = 4_000_000
         records.append(trx_burst)
 
     return records
-
-
-# ============================================================
-# SCENARIO 9 — FAN-IN (EDC Collusion)
-# Target engine : Pattern Engine (NETWORK_FAN_IN)
-# Trigger       : distinct_account_count >= 10 dalam 5 menit
-#                 risk_score: 80, action: BLOCK
-# ============================================================
 def generate_fan_in() -> list[dict]:
     """12 kartu berbeda di 1 terminal EDC dalam < 5 menit."""
     records         = []
@@ -401,39 +410,43 @@ def generate_high_amount() -> list[dict]:
 # ============================================================
 def generate_chain_decline_success_burst() -> list[dict]:
     """
-    Pola state machine:
-      3× decline → 1× success → 3× burst success
-    Semua dalam window 5 menit dari kartu yang sama.
-    Berbeda dengan super_pattern: urutan harus ketat dan burst
-    minimal 3 sukses berturut-turut tanpa diselingi decline.
-    """
-    records   = []
-    base_time = datetime.now(timezone.utc)
-    card_num  = "CARD_CHAIN_" + "".join(random.choices(string.digits, k=6))
+    Pattern ID 2 — Agenusa: Critical Card Testing Burst Detection
+    Trigger: chain_decline_success_burst==True AND tx_count>=7 dalam 15 menit
 
-    # 3× decline berturut-turut
+    Struktur: 3× decline → 1× success → 4× burst = 8 tx total (>=7)
+    Pakai terminal dedicated agar tidak overlap dengan skenario EDC Terminal Pooling.
+    """
+    records          = []
+    base_time        = datetime.now(timezone.utc)
+    card_num         = "CARD_CHAIN_" + "".join(random.choices(string.digits, k=6))
+    dedicated_terminal = "TERM_CHAIN_001"
+
+    # 3× decline berturut-turut (interval 90 detik)
     for i in range(3):
-        trx = _base_trx(time_override=base_time + timedelta(seconds=i * 20))
+        trx = _base_trx(time_override=base_time + timedelta(seconds=i * 90))
         trx["issuer_account_number"] = card_num
         trx["account_number"]        = card_num
         trx["customer_ref_number"]   = card_num
-        trx["response_code"]         = "51"  # Insufficient funds
+        trx["terminal_id"]           = dedicated_terminal
+        trx["response_code"]         = "51"
         records.append(trx)
 
-    # 1× success (setelah 3 decline — state machine masuk ke SUCCESS)
-    trx_ok = _base_trx(time_override=base_time + timedelta(seconds=65))
+    # 1× success setelah decline
+    trx_ok = _base_trx(time_override=base_time + timedelta(minutes=5))
     trx_ok["issuer_account_number"] = card_num
     trx_ok["account_number"]        = card_num
     trx_ok["customer_ref_number"]   = card_num
+    trx_ok["terminal_id"]           = dedicated_terminal
     trx_ok["response_code"]         = "00"
     records.append(trx_ok)
 
-    # 3× burst success berturut-turut (state machine: burst_count >= 3 → chain_detected)
-    for j in range(3):
-        trx_burst = _base_trx(time_override=base_time + timedelta(seconds=75 + j * 15))
+    # 4× burst success → chain_detected=True, tx_count=8 >= 7 ✅
+    for j in range(4):
+        trx_burst = _base_trx(time_override=base_time + timedelta(minutes=6, seconds=j * 60))
         trx_burst["issuer_account_number"] = card_num
         trx_burst["account_number"]        = card_num
         trx_burst["customer_ref_number"]   = card_num
+        trx_burst["terminal_id"]           = dedicated_terminal
         trx_burst["response_code"]         = "00"
         trx_burst["amount"]                = round(random.uniform(1_000_000, 5_000_000), 2)
         records.append(trx_burst)
@@ -441,6 +454,53 @@ def generate_chain_decline_success_burst() -> list[dict]:
     return records
 
 
+# ============================================================
+# SCENARIO 16 — EDC TERMINAL POOLING
+# Pattern ID 4 — "Agenusa - EDC Terminal Pooling & Card Washing Detection"
+# Trigger: distinct_account_count>=5 AND tx_count>=5 dalam 10 menit
+# risk_score: 90, action: BLOCK
+# ============================================================
+def generate_edc_terminal_pooling() -> list[dict]:
+    """
+    6 kartu berbeda di 1 terminal dalam 8 menit.
+    Lebih ringan dari fan_in (butuh 10 kartu) — pattern ini cukup 5 kartu.
+    """
+    records         = []
+    base_time       = datetime.now(timezone.utc)
+    target_terminal = "71809340"
+
+    for i in range(6):  # 6 kartu > threshold 5
+        trx = _base_trx(time_override=base_time + timedelta(seconds=i * 70))
+        trx["terminal_id"]           = target_terminal
+        trx["issuer_account_number"] = f"CARD_POOL_{i:03d}"
+        trx["account_number"]        = f"CARD_POOL_{i:03d}"
+        trx["customer_ref_number"]   = f"CARD_POOL_{i:03d}"
+        records.append(trx)
+
+    return records
+
+# ============================================================
+# SCENARIO 17 — RULE: AGENUSA MAX CASH OUT
+# Target rule : rule_agenusa_max_cash_out (Global Rule)
+# Trigger     : amount > 10_000_000
+# ============================================================
+def generate_rule_agenusa_max_cash_out() -> list[dict]:
+    """Tarik tunai fisik melebihi batas maksimal Rp 10.000.000."""
+    trx = _base_trx()
+    trx["amount"] = round(random.uniform(10_500_000, 15_000_000), 2)
+    return [trx]
+
+
+# ============================================================
+# SCENARIO 18 — RULE: AGENUSA SUSPENDED BANK
+# Target rule : rule_agenusa_suspended_bank (Global Rule)
+# Trigger     : issuer_bank == "BANK_CADANGAN_X"
+# ============================================================
+def generate_rule_agenusa_suspended_bank() -> list[dict]:
+    """Transaksi kartu dari Bank Partner yang sedang ditangguhkan."""
+    trx = _base_trx()
+    trx["issuer_bank"] = "BANK_CADANGAN_X"
+    return [trx]
 # ============================================================
 # PUBLIC API
 # ============================================================
@@ -460,12 +520,15 @@ def get_all_scenarios() -> dict[str, list[dict]]:
         "decline_velocity":              generate_decline_velocity(),
         "super_pattern":                 generate_super_pattern(),
         "chain_decline_success_burst":   generate_chain_decline_success_burst(),
+        "edc_terminal_pooling":          generate_edc_terminal_pooling(),
         "fan_in":                        generate_fan_in(),
         "midnight_spike":                generate_midnight_spike(),
         "velocity_burst":                generate_velocity_burst(),
         "money_mule":                    generate_money_mule(),
         "terminal_switch_fast":          generate_terminal_switch_fast(),
         "high_amount":                   generate_high_amount(),
+        "rule_agenusa_max_cash_out":     generate_rule_agenusa_max_cash_out(),
+        "rule_agenusa_suspended_bank":   generate_rule_agenusa_suspended_bank(),
     }
 
 
@@ -479,8 +542,6 @@ if __name__ == "__main__":
     records = []
     for name, txs in scenarios.items():
         records.extend(txs)
-
-    random.shuffle(records)
 
     db = SessionLocal()
     try:

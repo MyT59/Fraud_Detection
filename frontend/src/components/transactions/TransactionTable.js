@@ -440,6 +440,15 @@ const TransactionTable = ({
                 </td>
                 <td>
                   <span className="txn3-id">{t.original_trx_id}</span>
+                  {t.suppressed_count > 0 && (
+                    <span
+                      className="txn3-badge-suppressed"
+                      title={`${t.suppressed_count} suppressed signals`}
+                    >
+                      <i className="bi bi-slash-circle"></i>
+                      {t.suppressed_count}
+                    </span>
+                  )}
                 </td>
                 <td>
                   <span className="txn3-account">{t.user_account_id}</span>

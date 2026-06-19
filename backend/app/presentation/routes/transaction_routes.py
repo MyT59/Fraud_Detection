@@ -7,6 +7,7 @@ from app.application.services.transaction_service import process_transaction
 from app.infrastructure.repositories.transaction_repository import (
     TransactionRepository
 )
+from app.application.services.pattern_engine_service import detect_suppressed_patterns
 from app.presentation.schemas.transaction_schema import (
     TransactionCreate,
     TransactionResponse,
@@ -83,6 +84,7 @@ def get_transactions(
                 "transaction_time": trx.transaction_time,
                 "city": trx.city,
                 "country": trx.country,
+                "suppressed_count": len(detect_suppressed_patterns(db, trx)),
             }
             for trx in items
         ]
@@ -128,7 +130,10 @@ def get_transaction_detail(
         "violation_reason": trx.violation_reason,
         "violation_rule_ids": trx.violation_rule_ids,
         "violation_pattern_ids": trx.violation_pattern_ids,
-
+        # Optional suppressed signals for forensic review. Stored inside
+        # `transaction_details` by backend processors when applicable.
+        "suppressed_patterns": (trx.transaction_details or {}).get("suppressed_patterns"),
+        "suppressed_pattern_ids": (trx.transaction_details or {}).get("suppressed_pattern_ids"),
         "ip_address": trx.ip_address,
         "terminal_id": trx.terminal_id,
         "merchant_id": trx.merchant_id,
@@ -174,3 +179,20 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
 
     except Exception:
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/debug/suppressed_example")
+def get_suppressed_example():
+    """Smoke endpoint for frontend QA: returns an example suppressed_patterns
+    payload so analysts can verify UI rendering without needing backend
+    suppression logic to be triggered in production.
+    """
+    example = {
+        "suppressed_patterns": [
+            {"id": 101, "name": "Low Confidence Pattern A", "reason": "manual_suppress"},
+            {"id": 202, "name": "Historical Pattern B", "reason": "auto_disable"},
+            {"pattern_name": "Weird Channel Spike", "notes": "meta info here"},
+        ],
+        "suppressed_pattern_ids": [101, 202]
+    }
+    return example

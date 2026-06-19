@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.enums import ActivityActionEnum
+from app.application.services.blacklist_service import normalize_blacklist_value
 from app.domain.entities.target_type import TargetType
 from app.core.rbac import require_roles
 from app.infrastructure.database.session import get_db
@@ -32,7 +33,7 @@ def add_blacklist(
     current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     item = BlacklistItem(
-        value=data.value.strip().lower(),
+        value=normalize_blacklist_value(data.value, data.type),
         type=data.type,
         service_scope=data.service_scope.upper(),
         reason=data.reason,
@@ -155,7 +156,7 @@ def update_blacklist(
     }
 
     # Isi data baru
-    item.value = data.value.strip().lower()
+    item.value = normalize_blacklist_value(data.value, data.type)
     item.type = data.type
     item.service_scope = data.service_scope.upper()
     item.reason = data.reason
@@ -211,7 +212,7 @@ def bulk_import_blacklist(
 
     for item in data.items:
         try:
-            normalized_value = item.value.strip().lower()
+            normalized_value = normalize_blacklist_value(item.value, item.type)
 
             exists = db.query(BlacklistItem).filter(
                 BlacklistItem.type          == item.type,
@@ -298,7 +299,8 @@ def get_blacklist(
     # FILTER
     # =========================
     if value:
-        query = query.filter(BlacklistItem.value.ilike(f"%{value.lower()}%"))
+        normalized_value = normalize_blacklist_value(value, type)
+        query = query.filter(BlacklistItem.value.ilike(f"%{normalized_value}%"))
 
     if type:
         query = query.filter(BlacklistItem.type == BlacklistTypeEnum(type))

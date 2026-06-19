@@ -10,8 +10,8 @@ def map_agenusa(data: dict):
         "merchant_id": data.get("merchant_id"),
         "account_number": data.get("account_number"),
         "ip_address": data.get("ip_address"),
-        "city": None,
-        "country": None,
+        "city": data.get("city") or "Jakarta",
+        "country": data.get("country") or "ID",
 
         "transaction_details": {
             "stan": data.get("stan"),

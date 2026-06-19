@@ -259,6 +259,62 @@ def generate_velocity_burst() -> list[dict]:
 
 
 # ============================================================
+# SCENARIO 13 — HIGH VELOCITY SMURFING
+# Pattern ID 3 — "Nusabill - High-Velocity Split Payment Anomaly (Smurfing)"
+# Trigger: tx_count>=5 AND total_amount>=24,999,998 dalam 8 menit
+# risk_score: 80, action: REVIEW
+# ============================================================
+def generate_smurfing() -> list[dict]:
+    """
+    6 pembayaran besar dari 1 customer dalam 7 menit.
+    Total amount > 25 juta (memenuhi total_amount>=24,999,998).
+    Setiap invoice ~5 juta → total 6 × 5 juta = ~30 juta.
+    """
+    records     = []
+    base_time   = datetime.now(timezone.utc)
+    customer_id = "CUST-SMURF-" + "".join(random.choices(string.digits, k=4))
+
+    for i in range(6):  # tx_count=6 >= 5 ✅
+        inv = _base_invoice(time_override=base_time + timedelta(seconds=i * 60))
+        inv["customer_id"]    = customer_id
+        # ~5 juta per transaksi → total ~30 juta >= 24,999,998 ✅
+        amount = round(random.uniform(4_500_000, 6_000_000), 2)
+        inv["total_tagihan"]  = amount
+        inv["payment_amount"] = amount
+        records.append(inv)
+
+    return records
+
+
+# ============================================================
+# SCENARIO 14 — FAKE INVOICE BLAST
+# Pattern ID 6 — "Nusabill - Tuned Fake Invoice Blast Detection (Low Nominal Trap)"
+# Trigger: distinct_customer_count>=20 AND amount>=250,000 dalam 6 menit
+# risk_score: 85, action: REVIEW
+# Berbeda dari fan_out_spam (nominal bebas) — ini butuh amount >= 250.000
+# ============================================================
+def generate_fake_invoice_blast() -> list[dict]:
+    """
+    1 user membayar tagihan 22 nama customer berbeda dalam < 5 menit,
+    masing-masing minimal 250.000 (sesuai threshold pattern ID 6).
+    """
+    records   = []
+    base_time = datetime.now(timezone.utc)
+    hacker_id = "CUST-BLAST-" + "".join(random.choices(string.digits, k=4))
+
+    for i in range(22):  # distinct_customer_count=22 >= 20 ✅
+        inv = _base_invoice(time_override=base_time + timedelta(seconds=i * 12))
+        inv["customer_id"]   = hacker_id
+        inv["nama_customer"] = f"BLAST_VICTIM_{i:03d}"
+        amount = round(random.uniform(250_000, 500_000), 2)  # amount >= 250.000 ✅
+        inv["total_tagihan"]  = amount
+        inv["payment_amount"] = amount
+        records.append(inv)
+
+    return records
+
+
+# ============================================================
 # SCENARIO 12 — HIGH AMOUNT
 # Target engine : Rule Engine (amount) + Pattern Engine (AMOUNT)
 # Trigger       : amount >= AMOUNT_THRESHOLD (5_000_000)
@@ -270,6 +326,55 @@ def generate_high_amount() -> list[dict]:
     inv["total_tagihan"]  = big
     inv["payment_amount"] = big
     return [inv]
+
+# ============================================================
+# SCENARIO 15 — RULE: NUSABILL REPAYMENT BLOCK
+# Target rule : rule_nusabill_repayment_block (Global Rule)
+# Trigger     : status_tagihan == "PAID"
+# ============================================================
+def generate_rule_nusabill_repayment_block() -> list[dict]:
+    """Mencoba membayar invoice dengan status yang sudah PAID (Double Payment)."""
+    inv = _base_invoice()
+    inv["status_tagihan"] = "PAID"
+    return [inv]
+
+
+# ============================================================
+# SCENARIO 16 — RULE: NUSABILL MAX UNVERIFIED BILL
+# Target rule : rule_nusabill_max_unverified_bill (Global Rule)
+# Trigger     : amount > 5_000_000 (Untuk Unverified KYC Biller)
+# ============================================================
+def generate_rule_nusabill_max_unverified_bill() -> list[dict]:
+    """Tagihan dari Biller yang belum KYC melebihi threshold Rp 5.000.000."""
+    inv = _base_invoice()
+    big_amount = round(random.uniform(5_500_000, 10_000_000), 2)
+    inv["total_tagihan"]  = big_amount
+    inv["payment_amount"] = big_amount
+    return [inv]
+
+
+# ============================================================
+# SCENARIO 17 — VELOCITY BURST API ABUSE
+# Pattern ID 13 — "Nusabill - Velocity Burst (API Abuse / Bulk Anomaly)"
+# Trigger: tx_count>=100 dalam 5 menit
+# risk_score: 75, action: REVIEW
+# ============================================================
+def generate_api_abuse() -> list[dict]:
+    """
+    1 customer membombardir 105 transaksi dalam < 5 menit via API.
+    tx_count=105 >= 100 ✅, interval ~2.7 detik → semua dalam 5 menit ✅
+    """
+    records     = []
+    base_time   = datetime.now(timezone.utc)
+    customer_id = "CUST-API-" + "".join(random.choices(string.digits, k=4))
+
+    for i in range(105):  # 105 tx >= 100 ✅
+        inv = _base_invoice(time_override=base_time + timedelta(seconds=i * 2.7))
+        inv["customer_id"] = customer_id
+        inv["channel"]     = "API"
+        records.append(inv)
+
+    return records
 
 
 # ============================================================
@@ -293,7 +398,12 @@ def get_all_scenarios() -> dict[str, list[dict]]:
         "channel_switch":         generate_channel_switch(),
         "early_payment_anomaly":  generate_early_payment_anomaly(),
         "velocity_burst":         generate_velocity_burst(),
+        "smurfing":               generate_smurfing(),
+        "fake_invoice_blast":     generate_fake_invoice_blast(),
         "high_amount":            generate_high_amount(),
+        "api_abuse":              generate_api_abuse(),
+        "rule_nusabill_repayment_block":       generate_rule_nusabill_repayment_block(),
+        "rule_nusabill_max_unverified_bill":   generate_rule_nusabill_max_unverified_bill(),
     }
 
 

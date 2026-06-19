@@ -2,91 +2,72 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import "./PatternFormModal.css";
 import { api } from "../../services/apiService";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const CAT_SVC = {
-  VELOCITY: ["ALL", "AGENUSA", "NUSABILL"],
-  AMOUNT: ["ALL", "AGENUSA", "NUSABILL"],
-  NETWORK_FAN_IN: ["AGENUSA"],
-  NETWORK_FAN_OUT: ["NUSABILL"],
-  DECLINE_VELOCITY: ["AGENUSA"],
-  SUPER_PATTERN: ["AGENUSA"],
-};
+// ─── Definisi Data Master Field Berdasarkan Karakteristik Layanan ─────────────────
+const FIELD_GROUPS = [
+  {
+    group: "Metrik Finansial Umum (Universal)",
+    services: ["ALL", "AGENUSA", "NUSABILL"],
+    items: [
+      { l: "Jumlah Transaksi (tx_count)", f: "tx_count", t: "number", w: true },
+      {
+        l: "Nominal Per Transaksi (amount)",
+        f: "amount",
+        t: "number",
+        w: false,
+      },
+      {
+        l: "Akumulasi Nominal Window (total_amount)",
+        f: "total_amount",
+        t: "number",
+        w: true,
+      },
+    ],
+  },
+  {
+    group: "Metrik Perangkat Mini ATM (Khusus Agenusa)",
+    services: ["AGENUSA"],
+    items: [
+      {
+        l: "Jumlah Gagal Beruntun (failure_count)",
+        f: "failure_count",
+        t: "number",
+        w: true,
+      },
+      {
+        l: "Jumlah Kartu Unik di EDC (distinct_account_count)",
+        f: "distinct_account_count",
+        t: "number",
+        w: true,
+      },
+      {
+        l: "Ada Sukses Setelah Gagal (has_success_after_failure)",
+        f: "has_success_after_failure",
+        t: "bool",
+        w: true,
+      },
+    ],
+  },
+  {
+    group: "Metrik Distribusi Invoice & VA (Khusus Nusabill)",
+    services: ["NUSABILL"],
+    items: [
+      {
+        l: "Jumlah Customer Unik Tagihan (distinct_customer_count)",
+        f: "distinct_customer_count",
+        t: "number",
+        w: true,
+      },
+    ],
+  },
+];
 
-const CAT_HINT = {
-  VELOCITY: "Mendeteksi lonjakan jumlah transaksi dalam window waktu.",
-  AMOUNT:
-    "Mendeteksi transaksi dengan nominal di atas ambang batas — per transaksi (amount) atau akumulasi window (total_amount).",
-  NETWORK_FAN_IN:
-    "Mendeteksi banyak kartu berbeda digesek di satu mesin EDC (AGENUSA).",
-  NETWORK_FAN_OUT:
-    "Mendeteksi satu user tagih ke banyak customer berbeda (NUSABILL).",
-  DECLINE_VELOCITY: "Mendeteksi rangkaian gagal transaksi beruntun (AGENUSA).",
-  SUPER_PATTERN:
-    "Kombinasi decline beruntun + velocity + sukses akhir (AGENUSA).",
-};
-
-const CAT_FIELDS = {
-  VELOCITY: [
-    { l: "Jumlah transaksi (tx_count)", f: "tx_count", t: "number", w: true },
-  ],
-  AMOUNT: [
-    { l: "Nominal transaksi (amount)", f: "amount", t: "number", w: false },
-    {
-      l: "Total nominal dalam window (total_amount)",
-      f: "total_amount",
-      t: "number",
-      w: true,
-    },
-  ],
-  NETWORK_FAN_IN: [
-    {
-      l: "Jumlah kartu berbeda (distinct_account_count)",
-      f: "distinct_account_count",
-      t: "number",
-      w: true,
-    },
-  ],
-  NETWORK_FAN_OUT: [
-    {
-      l: "Jumlah customer berbeda (distinct_customer_count)",
-      f: "distinct_customer_count",
-      t: "number",
-      w: true,
-    },
-  ],
-  DECLINE_VELOCITY: [
-    {
-      l: "Jumlah gagal (failure_count)",
-      f: "failure_count",
-      t: "number",
-      w: true,
-    },
-  ],
-  SUPER_PATTERN: [
-    {
-      l: "Jumlah gagal (failure_count)",
-      f: "failure_count",
-      t: "number",
-      w: true,
-    },
-    { l: "Jumlah transaksi (tx_count)", f: "tx_count", t: "number", w: true },
-    {
-      l: "Ada sukses setelah gagal (has_success_after_failure)",
-      f: "has_success_after_failure",
-      t: "bool",
-      w: true,
-    },
-  ],
-};
+// Flat list global untuk helper utility pencarian meta data tipe
+const ALL_FIELDS_FLAT = FIELD_GROUPS.reduce(
+  (acc, curr) => [...acc, ...curr.items],
+  [],
+);
 
 const OPS = ["==", "!=", ">", "<", ">=", "<="];
-
-const EMPTY_COND = () => ({
-  id: Date.now() + Math.random(),
-  field: "",
-  operator: "==",
-  value: "",
-});
 
 const EMPTY_FORM = {
   pattern_name: "",
@@ -100,12 +81,15 @@ const EMPTY_FORM = {
   time_window_minutes: "",
 };
 
-// ─── Condition Row ────────────────────────────────────────────────────────────
-const CondRow = ({ cond, fields, onChange, onRemove, showRemove }) => {
-  const meta = fields.find((f) => f.f === cond.field);
+// ─── Komponen Row Kondisi Dinamis ─────────────────────────────────────────────
+const CondRow = ({ cond, currentService, onChange, onRemove, showRemove }) => {
+  const availableGroups = FIELD_GROUPS.filter((g) =>
+    g.services.includes(currentService),
+  );
+  const meta = ALL_FIELDS_FLAT.find((f) => f.f === cond.field);
 
   const handleFieldChange = (f) => {
-    const newMeta = fields.find((x) => x.f === f);
+    const newMeta = ALL_FIELDS_FLAT.find((x) => x.f === f);
     onChange({ ...cond, field: f, value: newMeta?.t === "bool" ? "true" : "" });
   };
 
@@ -116,10 +100,17 @@ const CondRow = ({ cond, fields, onChange, onRemove, showRemove }) => {
         value={cond.field}
         onChange={(e) => handleFieldChange(e.target.value)}
       >
-        {fields.map((f) => (
-          <option key={f.f} value={f.f}>
-            {f.l}
-          </option>
+        <option value="" disabled>
+          — Pilih Indikator Matriks —
+        </option>
+        {availableGroups.map((grp) => (
+          <optgroup key={grp.group} label={grp.group}>
+            {grp.items.map((f) => (
+              <option key={f.f} value={f.f}>
+                {f.l}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
 
@@ -151,7 +142,7 @@ const CondRow = ({ cond, fields, onChange, onRemove, showRemove }) => {
           <input
             className="pfm-input"
             type="number"
-            placeholder="nilai..."
+            placeholder="Nilai..."
             value={cond.value}
             onChange={(e) => onChange({ ...cond, value: e.target.value })}
           />
@@ -162,7 +153,7 @@ const CondRow = ({ cond, fields, onChange, onRemove, showRemove }) => {
         <button
           className="pfm-remove-btn"
           onClick={onRemove}
-          title="Hapus kondisi"
+          title="Hapus baris"
         >
           <i className="bi bi-x" />
         </button>
@@ -171,7 +162,7 @@ const CondRow = ({ cond, fields, onChange, onRemove, showRemove }) => {
   );
 };
 
-// ─── Main Modal ───────────────────────────────────────────────────────────────
+// ─── Main Modal Component ─────────────────────────────────────────────────────
 const PatternFormModal = ({
   isOpen,
   onClose,
@@ -187,18 +178,33 @@ const PatternFormModal = ({
   const [loading, setLoading] = useState(false);
   const nameRef = useRef();
 
-  const availableCategories = Object.entries(CAT_SVC)
-    .filter(([, svcs]) => svcs.includes(form.service_source))
-    .map(([cat]) => cat);
-
-  const fields = CAT_FIELDS[form.pattern_category] || [];
-
   const needsWindow = conditions.some((c) => {
-    const meta = fields.find((f) => f.f === c.field);
+    const meta = ALL_FIELDS_FLAT.find((f) => f.f === c.field);
     return meta?.w === true;
   });
 
-  // ── Populate saat edit ──────────────────────────────────────────────────────
+  const handleServiceChange = (newService) => {
+    setForm((prev) => ({ ...prev, service_source: newService }));
+
+    const validGroups = FIELD_GROUPS.filter((g) =>
+      g.services.includes(newService),
+    );
+    const fallbackField = validGroups[0]?.items[0]?.f || "tx_count";
+
+    setConditions((prevConditions) =>
+      prevConditions.map((c) => {
+        const isFieldValidForNewService = validGroups.some((g) =>
+          g.items.some((item) => item.f === c.field),
+        );
+
+        if (!isFieldValidForNewService) {
+          return { ...c, field: fallbackField, value: "" };
+        }
+        return c;
+      }),
+    );
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     setShowPreview(false);
@@ -227,10 +233,12 @@ const PatternFormModal = ({
       setConditions(conds.length ? conds : []);
     } else {
       setForm(EMPTY_FORM);
-      setConditions([]);
+      setConditions([
+        { id: Date.now(), field: "tx_count", operator: ">=", value: "" },
+      ]);
     }
     setTimeout(() => nameRef.current?.focus(), 50);
-  }, [isOpen, editData]);
+  }, [isOpen, editData, isEdit]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -241,77 +249,44 @@ const PatternFormModal = ({
     };
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e) => {
-      if (e.key === "Escape") {
-        if (showBlockConfirm) setShowBlockConfirm(false);
-        else onClose();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [isOpen, onClose, showBlockConfirm]);
-
-  // Saat service_source berubah, reset category jika tidak kompatibel
-  const handleServiceChange = (val) => {
-    const stillValid = CAT_SVC[form.pattern_category]?.includes(val);
-    setForm((p) => ({
-      ...p,
-      service_source: val,
-      pattern_category: stillValid ? p.pattern_category : "",
-    }));
-    if (!stillValid) setConditions([]);
-  };
-
-  const handleCategoryChange = (val) => {
-    setForm((p) => ({ ...p, pattern_category: val }));
-    if (val) {
-      const firstField = CAT_FIELDS[val]?.[0];
-      setConditions([
-        {
-          id: Date.now(),
-          field: firstField?.f || "",
-          operator: "==",
-          value: "",
-        },
-      ]);
-    } else {
-      setConditions([]);
-    }
-  };
-
   const updateCond = (id, val) => {
     setConditions((p) => p.map((c) => (c.id === id ? { ...c, ...val } : c)));
   };
 
   const addCond = () => {
-    if (!fields.length) return;
     setConditions((p) => [
       ...p,
-      { id: Date.now(), field: fields[0].f, operator: "==", value: "" },
+      {
+        id: Date.now() + Math.random(),
+        field: "tx_count",
+        operator: ">=",
+        value: "",
+      },
     ]);
   };
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
-  // ── Validation ──────────────────────────────────────────────────────────────
   const isValid = useCallback(() => {
     if (!form.pattern_name.trim()) return false;
-    if (!form.pattern_category) return false;
+    if (!form.pattern_category.trim()) return false;
     if (!conditions.length) return false;
-    const anyEmpty = conditions.some((c) => String(c.value).trim() === "");
-    if (anyEmpty) return false;
+
+    const anyInvalidCond = conditions.some(
+      (c) => !c.field || String(c.value).trim() === "",
+    );
+    if (anyInvalidCond) return false;
+
     const prio = parseInt(form.priority);
     if (!(prio >= 1 && prio <= 10)) return false;
     if (needsWindow && !form.time_window_minutes) return false;
+
     return true;
   }, [form, conditions, needsWindow]);
 
-  // ── Build payload ───────────────────────────────────────────────────────────
   const buildPayload = () => {
     const conds = conditions.map((c) => {
-      const meta = fields.find((f) => f.f === c.field);
+      const meta = ALL_FIELDS_FLAT.find((f) => f.f === c.field);
       let val = c.value;
       if (meta?.t === "bool") val = val === true || val === "true";
       else if (val !== "" && !isNaN(val)) val = parseFloat(val);
@@ -319,8 +294,9 @@ const PatternFormModal = ({
     });
 
     const rules = { logic: form.logic };
-    if (form.time_window_minutes)
+    if (form.time_window_minutes) {
       rules.time_window_minutes = parseInt(form.time_window_minutes);
+    }
     rules.conditions = conds;
 
     return {
@@ -335,7 +311,6 @@ const PatternFormModal = ({
     };
   };
 
-  // ── Save ────────────────────────────────────────────────────────────────────
   const execSave = async () => {
     const p = buildPayload();
     setLoading(true);
@@ -346,29 +321,18 @@ const PatternFormModal = ({
         onUpdate?.({ ...p, ...json, id: editData.id });
         onClose();
       } else {
-        // Call BE langsung
         const json = await api.post("/patterns/manual", p);
         setLoading(false);
         onSuccess?.({ ...p, ...json });
         onClose();
       }
     } catch (err) {
-      console.error("Save pattern error:", err);
+      console.error("Error saving fraud pattern:", err);
       setLoading(false);
     }
   };
 
-  const handleSave = () => {
-    if (form.action === "BLOCK") {
-      setShowBlockConfirm(true);
-      return;
-    }
-    execSave();
-  };
-
   if (!isOpen) return null;
-
-  const catHint = CAT_HINT[form.pattern_category] || "";
 
   return (
     <div
@@ -378,7 +342,6 @@ const PatternFormModal = ({
       }
     >
       <div className="pfm-box">
-        {/* Header */}
         <div className="pfm-header">
           <div className="pfm-header-left">
             <div className="pfm-header-icon">
@@ -386,12 +349,11 @@ const PatternFormModal = ({
             </div>
             <div>
               <div className="pfm-header-title">
-                {isEdit ? "Edit Pattern" : "Tambah Pattern Baru"}
+                {isEdit ? "Edit Fraud Pattern" : "Tambah Universal Pattern"}
               </div>
               <div className="pfm-header-sub">
-                {isEdit
-                  ? `Edit: ${editData?.pattern_name || ""}`
-                  : "Buat aturan deteksi fraud berbasis pola transaksi"}
+                Rancang kombinasi parameter fraud yang tersinkronisasi otomatis
+                per layanan
               </div>
             </div>
           </div>
@@ -401,92 +363,89 @@ const PatternFormModal = ({
         </div>
 
         <div className="pfm-body">
-          {/* Section A — Informasi Umum */}
           <div className="pfm-section-head">
             <div className="pfm-step-badge">A</div>
-            <span>Informasi umum pattern</span>
+            <span>Informasi Klasifikasi Pattern</span>
           </div>
           <div className="pfm-card">
             <div className="pfm-grid">
-              {/* Nama pattern */}
               <div className="pfm-field pfm-field--full">
                 <label className="pfm-label">
-                  Nama pattern <span className="pfm-req">*</span>
+                  Nama Pattern / Skenario Kasus{" "}
+                  <span className="pfm-req">*</span>
                 </label>
                 <input
-                  ref={nameRef}
                   className="pfm-input"
                   type="text"
-                  placeholder="Contoh: Deteksi Spam Billing Akun Bot"
+                  placeholder="Masukkan nama skenario..."
                   value={form.pattern_name}
                   onChange={(e) => set("pattern_name", e.target.value)}
                 />
               </div>
 
-              {/* Service source */}
               <div className="pfm-field">
-                <label className="pfm-label">Service source</label>
-                <div className="pfm-select-wrap">
-                  <select
-                    className="pfm-select"
-                    value={form.service_source}
-                    onChange={(e) => handleServiceChange(e.target.value)}
-                  >
-                    <option value="ALL">ALL — universal</option>
-                    <option value="AGENUSA">AGENUSA — Mini ATM & EDC</option>
-                    <option value="NUSABILL">NUSABILL — Tagihan & VA</option>
-                  </select>
-                </div>
-                <div className="pfm-field-hint">
-                  Menentukan kategori & field kondisi yang tersedia.
-                </div>
+                <label className="pfm-label">Scope Service Source</label>
+                <select
+                  className="pfm-select"
+                  value={form.service_source}
+                  onChange={(e) => handleServiceChange(e.target.value)}
+                >
+                  <option value="ALL">ALL — Lintas Layanan (Universal)</option>
+                  <option value="AGENUSA">AGENUSA — Mini ATM & EDC</option>
+                  <option value="NUSABILL">NUSABILL — Tagihan & VA</option>
+                </select>
               </div>
 
-              {/* Kategori */}
+              {/* Ruangan Input Kategori Menggunakan Fitur DataList */}
               <div className="pfm-field">
                 <label className="pfm-label">
-                  Kategori pattern{" "}
-                  <span className="pfm-label-meta">(pattern_category)</span>
+                  Label Kategori Analisis <span className="pfm-req">*</span>
                 </label>
-                <div className="pfm-select-wrap">
-                  <select
-                    className="pfm-select"
-                    value={form.pattern_category}
-                    onChange={(e) => handleCategoryChange(e.target.value)}
-                  >
-                    <option value="">— Pilih kategori —</option>
-                    {availableCategories.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+                <input
+                  className="pfm-input"
+                  type="text"
+                  list="category-suggestions" // <-- Disambungkan ke ID datalist di bawah
+                  placeholder="Misal: Money Laundering & Split Transaction"
+                  value={form.pattern_category}
+                  onChange={(e) => set("pattern_category", e.target.value)}
+                />
+
+                {/* Koleksi data cadangan untuk mempermudah kemasukan data */}
+                <datalist id="category-suggestions">
+                  <option value="Money Laundering & Split Transaction" />
+                  <option value="Velocity Spike Attack" />
+                  <option value="Amount Threshold Anomaly" />
+                  <option value="Decline Velocity Anomaly" />
+                  <option value="High Risk Card Testing" />
+                  <option value="Account Takeover Suspect" />
+                </datalist>
+
+                <div className="pfm-field-hint">
+                  Boleh pilih cadangan industri atau taip terus jenis fraud
+                  baharu.
                 </div>
-                {catHint && <div className="pfm-field-hint">{catHint}</div>}
               </div>
 
-              {/* Action */}
               <div className="pfm-field pfm-field--full">
                 <label className="pfm-label">
-                  Tindakan eksekusi{" "}
-                  <span className="pfm-label-meta">(action)</span>
+                  Tindakan Mitigasi Otomatis (Action)
                 </label>
                 <div className="pfm-action-grid">
                   {[
                     {
                       v: "BLOCK",
                       icon: "bi-ban",
-                      desc: "Tolak transaksi otomatis",
+                      desc: "Tolak transaksi seketika",
                     },
                     {
                       v: "REVIEW",
                       icon: "bi-eye",
-                      desc: "Kirim ke Manual Review",
+                      desc: "Kirim Antrean Manual Review",
                     },
                     {
                       v: "FLAG",
                       icon: "bi-flag-fill",
-                      desc: "Tandai mencurigakan",
+                      desc: "Tandai log mencurigakan",
                     },
                   ].map((a) => (
                     <button
@@ -500,16 +459,11 @@ const PatternFormModal = ({
                     </button>
                   ))}
                 </div>
-                <div className="pfm-field-hint" style={{ marginTop: 6 }}>
-                  Lifecycle: auto-promote ke BLOCK (akurasi ≥ 85%) atau
-                  downgrade ke FLAG (akurasi &lt; 40%).
-                </div>
               </div>
 
-              {/* Risk score */}
               <div className="pfm-field">
                 <label className="pfm-label">
-                  Risk score <span className="pfm-label-meta">(1–100)</span>
+                  Risk Score Intensitas (1–100)
                 </label>
                 <div className="pfm-slider-wrap">
                   <input
@@ -522,21 +476,6 @@ const PatternFormModal = ({
                       set("risk_score", parseInt(e.target.value))
                     }
                   />
-                  <div className="pfm-range-badges">
-                    {[
-                      { max: 33, cls: "low", label: "Rendah" },
-                      { max: 66, cls: "medium", label: "Sedang" },
-                      { max: 100, cls: "high", label: "Tinggi" },
-                    ].map((b) => (
-                      <button
-                        key={b.label}
-                        className={`pfm-range-badge pfm-range-badge--${b.cls}`}
-                        onClick={() => set("risk_score", b.max)}
-                      >
-                        {b.label} · {b.max}
-                      </button>
-                    ))}
-                  </div>
                   <div className="pfm-range-val">
                     <span
                       className={`pfm-score-chip ${form.risk_score >= 67 ? "high" : form.risk_score >= 34 ? "medium" : "low"}`}
@@ -545,61 +484,28 @@ const PatternFormModal = ({
                     </span>
                   </div>
                 </div>
-                <div className="pfm-field-hint">
-                  Engine: <code>max(risk_score, pattern.risk_score)</code>.
-                  Decay tiap lifecycle × akurasi.
-                </div>
               </div>
 
-              {/* Prioritas */}
               <div className="pfm-field">
                 <label className="pfm-label">
-                  Prioritas <span className="pfm-label-meta">(1–10)</span>
+                  Prioritas Antrean Eksekusi (1–10)
                 </label>
-                <div className="pfm-priority-row">
-                  <input
-                    className="pfm-input pfm-input--sm"
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={form.priority}
-                    onChange={(e) =>
-                      set(
-                        "priority",
-                        Math.max(
-                          1,
-                          Math.min(10, parseInt(e.target.value) || 1),
-                        ),
-                      )
-                    }
-                  />
-                  <div className="pfm-priority-pills">
-                    {[
-                      { l: "Tinggi", v: 10, cls: "high" },
-                      { l: "Sedang", v: 5, cls: "med" },
-                      { l: "Rendah", v: 1, cls: "low" },
-                    ].map((p) => (
-                      <button
-                        key={p.v}
-                        className={`pfm-prio-pill pfm-prio-pill--${p.cls}`}
-                        onClick={() => set("priority", p.v)}
-                      >
-                        {p.l} · {p.v}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="pfm-field-hint">
-                  Engine order: <code>priority.desc(), risk_score.desc()</code>
-                </div>
+                <input
+                  className="pfm-input"
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={form.priority}
+                  onChange={(e) =>
+                    set(
+                      "priority",
+                      Math.max(1, Math.min(10, parseInt(e.target.value) || 1)),
+                    )
+                  }
+                />
               </div>
 
-              {/* Status */}
               <div className="pfm-field pfm-field--full">
-                <label className="pfm-label">
-                  Status awal{" "}
-                  <span className="pfm-label-meta">(is_active)</span>
-                </label>
                 <div className="pfm-toggle-row">
                   <label className="pfm-toggle">
                     <input
@@ -613,28 +519,23 @@ const PatternFormModal = ({
                     className={`pfm-toggle-label ${form.is_active ? "on" : ""}`}
                   >
                     {form.is_active
-                      ? "Live active — is_active: true"
-                      : "Kandidat — is_active: false"}
+                      ? "Live Active — Dievaluasi Engine"
+                      : "Draft — Non-Aktif"}
                   </span>
-                </div>
-                <div className="pfm-field-hint">
-                  Inactive = kandidat, tidak dievaluasi engine sampai
-                  diaktifkan.
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Section B — Aturan Agregasi Global */}
           <div className="pfm-section-head">
             <div className="pfm-step-badge">B</div>
-            <span>Aturan agregasi global</span>
+            <span>Aturan Konfigurasi Logika Agregasi</span>
           </div>
           <div className="pfm-card">
             <div className="pfm-grid">
               <div className="pfm-field">
                 <label className="pfm-label">
-                  Gerbang logika <span className="pfm-label-meta">(logic)</span>
+                  Hubungan Kondisi Evaluasi (Logic Gate)
                 </label>
                 <div className="pfm-logic-tabs">
                   {["AND", "OR"].map((l) => (
@@ -643,9 +544,11 @@ const PatternFormModal = ({
                       className={`pfm-logic-tab ${form.logic === l ? `pfm-logic-tab--${l.toLowerCase()} active` : ""}`}
                       onClick={() => set("logic", l)}
                     >
-                      {l}
+                      {l}{" "}
                       <span className="pfm-logic-desc">
-                        {l === "AND" ? "semua kondisi" : "cukup satu"}
+                        {l === "AND"
+                          ? "Wajib lolos semua"
+                          : "Cukup salah satu lolos"}
                       </span>
                     </button>
                   ))}
@@ -653,98 +556,58 @@ const PatternFormModal = ({
               </div>
 
               <div className="pfm-field">
-                <label className="pfm-label">
-                  Time window{" "}
-                  <span className="pfm-label-meta">(time_window_minutes)</span>
-                </label>
+                <label className="pfm-label">Time Window Durasi</label>
                 <div className="pfm-twin-row">
                   <input
-                    className={`pfm-input pfm-input--sm ${needsWindow && !form.time_window_minutes ? "pfm-input--warn" : ""}`}
+                    className={`pfm-input ${needsWindow && !form.time_window_minutes ? "pfm-input--warn" : ""}`}
                     type="number"
                     min={1}
-                    max={1440}
-                    placeholder="—"
+                    placeholder="10"
                     value={form.time_window_minutes}
                     onChange={(e) => set("time_window_minutes", e.target.value)}
                   />
-                  <span className="pfm-twin-unit">menit</span>
+                  <span className="pfm-twin-unit">Menit</span>
                 </div>
                 {needsWindow && !form.time_window_minutes && (
                   <div className="pfm-field-warn">
-                    <i className="bi bi-exclamation-circle" /> Wajib diisi — ada
-                    field berbasis time window dalam kondisi ini.
-                  </div>
-                )}
-                {!needsWindow && (
-                  <div className="pfm-field-hint">
-                    Opsional — wajib jika ada field window dalam kondisi.
+                    <i className="bi bi-exclamation-circle" /> Wajib diisi
+                    (Metrik berbasis deret waktu).
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Section C — Builder Kondisi */}
           <div className="pfm-section-head">
             <div className="pfm-step-badge">C</div>
-            <span>Builder kondisi flat</span>
+            <span>Advanced Condition Builder ({form.service_source})</span>
           </div>
           <div className="pfm-card">
-            {!form.pattern_category ? (
-              <div className="pfm-cat-notice">
-                <i className="bi bi-info-circle" />
-                Pilih kategori pattern di Section A untuk mengaktifkan builder
-                kondisi.
-              </div>
-            ) : (
-              <>
-                <div className="pfm-field-hint" style={{ marginBottom: 10 }}>
-                  Field tersedia:{" "}
-                  {fields.map((f) => (
-                    <code key={f.f} style={{ marginRight: 4 }}>
-                      {f.f}
-                    </code>
-                  ))}
-                </div>
-
-                {conditions.length === 0 ? (
-                  <div className="pfm-empty-cond">
-                    <i className="bi bi-diagram-2" />
-                    <span>Belum ada kondisi.</span>
-                  </div>
-                ) : (
-                  <div className="pfm-cond-list">
-                    {conditions.map((cond, i) => (
-                      <CondRow
-                        key={cond.id}
-                        cond={cond}
-                        fields={fields}
-                        onChange={(val) => updateCond(cond.id, val)}
-                        onRemove={() =>
-                          setConditions((p) =>
-                            p.filter((c) => c.id !== cond.id),
-                          )
-                        }
-                        showRemove={conditions.length > 1}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                <div className="pfm-cond-footer">
-                  <button className="pfm-add-btn" onClick={addCond}>
-                    <i className="bi bi-plus" /> Tambah kondisi
-                  </button>
-                </div>
-              </>
-            )}
+            <div className="pfm-cond-list">
+              {conditions.map((cond) => (
+                <CondRow
+                  key={cond.id}
+                  cond={cond}
+                  currentService={form.service_source}
+                  onChange={(val) => updateCond(cond.id, val)}
+                  onRemove={() =>
+                    setConditions((p) => p.filter((c) => c.id !== cond.id))
+                  }
+                  showRemove={conditions.length > 1}
+                />
+              ))}
+            </div>
+            <div className="pfm-cond-footer">
+              <button className="pfm-add-btn" onClick={addCond}>
+                <i className="bi bi-plus" /> Tambah Batasan Kondisi
+              </button>
+            </div>
           </div>
 
-          {/* Preview JSON */}
           {showPreview && (
             <div className="pfm-preview-wrap">
               <label className="pfm-label">
-                Preview payload → <code>POST /patterns/manual</code>
+                Live Sync JSON Payload Preview
               </label>
               <pre className="pfm-preview-json">
                 {JSON.stringify(buildPayload(), null, 2)}
@@ -753,7 +616,6 @@ const PatternFormModal = ({
           )}
         </div>
 
-        {/* Footer */}
         <div className="pfm-footer">
           <button
             className="pfm-btn-cancel"
@@ -768,59 +630,21 @@ const PatternFormModal = ({
               onClick={() => setShowPreview((p) => !p)}
             >
               <i className="bi bi-code-slash" />{" "}
-              {showPreview ? "Tutup" : "Preview JSON"}
+              {showPreview ? "Sembunyikan JSON" : "Preview JSON"}
             </button>
             <button
-              className={`pfm-btn-save ${form.action === "BLOCK" ? "pfm-btn-save--block" : ""} ${loading ? "pfm-btn-save--loading" : ""}`}
+              className={`pfm-btn-save ${form.action === "BLOCK" ? "pfm-btn-save--block" : ""}`}
               disabled={!isValid() || loading}
-              onClick={handleSave}
+              onClick={() => execSave()}
             >
-              {!loading && (
-                <i className={`bi ${isEdit ? "bi-check-lg" : "bi-floppy"}`} />
-              )}
               {loading
                 ? "Menyimpan..."
                 : isEdit
-                  ? "Simpan Perubahan"
-                  : "Simpan pattern"}
+                  ? "Perbarui Pattern"
+                  : "Injeksi Pattern Baru"}
             </button>
           </div>
         </div>
-
-        {/* Block confirm overlay */}
-        {showBlockConfirm && (
-          <div className="pfm-confirm-overlay">
-            <div className="pfm-confirm-box">
-              <div className="pfm-confirm-icon">
-                <i className="bi bi-exclamation-triangle-fill" />
-              </div>
-              <h3 className="pfm-confirm-title">Konfirmasi tindakan BLOCK</h3>
-              <p className="pfm-confirm-msg">
-                Pattern <strong>BLOCK</strong> menghentikan transaksi saat
-                pattern cocok. Lifecycle engine bisa auto-promote ke BLOCK
-                (akurasi ≥ 85%) atau downgrade ke FLAG (akurasi &lt; 40%).
-                Pastikan kondisi sudah benar.
-              </p>
-              <div className="pfm-confirm-actions">
-                <button
-                  className="pfm-btn-cancel"
-                  onClick={() => setShowBlockConfirm(false)}
-                >
-                  Cek ulang dulu
-                </button>
-                <button
-                  className="pfm-btn-save pfm-btn-save--block"
-                  onClick={() => {
-                    setShowBlockConfirm(false);
-                    execSave();
-                  }}
-                >
-                  <i className="bi bi-ban" /> Ya, simpan BLOCK pattern
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

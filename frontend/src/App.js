@@ -5,7 +5,8 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { authService, storage } from "./services/apiService";
+import { storage } from "./services/apiService";
+import { authService } from "./services/AuthService"; // ✅ FIX: dari AuthService
 
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
@@ -25,7 +26,49 @@ import ActivityTimeline from "./pages/ActivityTimeline";
 import RetrainSchedule from "./pages/RetrainSchedule";
 import ChangePassword from "./pages/ChangePassword";
 import Login from "./pages/Login";
+import PageLoader from "./components/common/PageLoader";
 import "./App.css";
+
+// ─── Token Validator ──────────────────────────────────────────────
+// Validasi token ke BE saat app pertama load.
+// Kalau token valid → lanjut. Kalau tidak → clear & redirect login.
+const useAuthValidator = () => {
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    const validate = async () => {
+      if (!storage.getAccessToken()) {
+        setAuthChecked(true);
+        return;
+      }
+      try {
+        const me = await fetch(
+          `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/accounts/me`,
+          {
+            headers: {
+              Authorization: `Bearer ${storage.getAccessToken()}`,
+            },
+          },
+        );
+        if (!me.ok) {
+          // Token invalid/expired → clear
+          storage.clear();
+        } else {
+          const data = await me.json();
+          storage.setUser(data);
+        }
+      } catch {
+        // Network error → biarkan, jangan clear
+      } finally {
+        setAuthChecked(true);
+      }
+    };
+
+    validate();
+  }, []);
+
+  return authChecked;
+};
 
 // ─── Auth Guard ───────────────────────────────────────────────────
 const ProtectedRoute = ({ children }) => {
@@ -35,12 +78,20 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // Kalau password masih temporary, paksa ke /change-password
   if (user?.is_password_temporary) {
     return <Navigate to="/change-password" replace />;
   }
 
   return children;
+};
+
+// ─── Change Password Guard ────────────────────────────────────────
+const ChangePasswordGuard = () => {
+  return authService.isAuthenticated() ? (
+    <ChangePassword />
+  ) : (
+    <Navigate to="/login" replace />
+  );
 };
 
 // ─── Role Guard ───────────────────────────────────────────────────
@@ -92,8 +143,7 @@ const RoleGuard = ({ allowedRoles, children }) => {
         </h2>
         <p style={{ fontSize: ".9rem", maxWidth: 360, margin: 0 }}>
           Halaman ini hanya dapat diakses oleh:{" "}
-          <strong>{allowedRoles.join(", ")}</strong>.
-          <br />
+          <strong>{allowedRoles.join(", ")}</strong>.<br />
           Role Anda saat ini: <strong>{role || "tidak diketahui"}</strong>.
         </p>
         <button
@@ -122,6 +172,7 @@ const RoleGuard = ({ allowedRoles, children }) => {
 // ─── App ──────────────────────────────────────────────────────────
 function App() {
   const isMobile = () => window.innerWidth <= 992;
+  const authChecked = useAuthValidator(); // ✅ validasi token saat app start
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -134,6 +185,11 @@ function App() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Tunggu validasi token selesai sebelum render routes
+  if (!authChecked) {
+    return <PageLoader message="Memverifikasi sesi..." />;
+  }
+
   const handleToggleSidebar = () => setMobileOpen((p) => !p);
   const closeMobileSidebar = () => setMobileOpen(false);
   const handleToggleCollapse = () => setCollapsed((p) => !p);
@@ -142,18 +198,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
-
-        {/* Route change-password: hanya bisa diakses kalau sudah login */}
-        <Route
-          path="/change-password"
-          element={
-            authService.isAuthenticated() ? (
-              <ChangePassword />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
+        <Route path="/change-password" element={<ChangePasswordGuard />} />
 
         <Route
           path="/*"

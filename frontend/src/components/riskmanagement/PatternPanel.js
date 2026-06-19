@@ -24,6 +24,7 @@ const LIFECYCLE = {
 
 const PatternPanel = ({
   data = [],
+  candidates = [],
   effectiveness = [],
   onAdd,
   onEdit,
@@ -58,8 +59,22 @@ const PatternPanel = ({
   );
 
   const categories = useMemo(
-    () => [...new Set(data.map((p) => p.pattern_category).filter(Boolean))],
-    [data],
+    () => [
+      ...new Set(
+        [...data, ...candidates].map((p) => p.pattern_category).filter(Boolean),
+      ),
+    ],
+    [data, candidates],
+  );
+
+  const enrichedCandidates = useMemo(
+    () =>
+      candidates.map((p) => ({
+        ...p,
+        _eff: effMap[p.pattern_name] || null,
+        _isCandidate: true,
+      })),
+    [candidates, effMap],
   );
 
   const filtered = useMemo(() => {
@@ -79,9 +94,26 @@ const PatternPanel = ({
     });
   }, [enriched, search, filterStatus, filterCat, filterSvc]);
 
+  const filteredCandidates = useMemo(() => {
+    const q = search.toLowerCase();
+    return enrichedCandidates.filter((p) => {
+      if (
+        q &&
+        !p.pattern_name.toLowerCase().includes(q) &&
+        !(p.pattern_category || "").toLowerCase().includes(q)
+      )
+        return false;
+      if (filterCat && p.pattern_category !== filterCat) return false;
+      if (filterSvc && p.service_source !== filterSvc) return false;
+      return true;
+    });
+  }, [enrichedCandidates, search, filterCat, filterSvc]);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const paged = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+  const candidateCount = filteredCandidates.length;
+  const hasCandidates = candidateCount > 0;
 
   useEffect(() => {
     setPage(1);
@@ -115,6 +147,121 @@ const PatternPanel = ({
   const scoreColor = (s) =>
     s >= 70 ? "#dc2626" : s >= 40 ? "#d97706" : "#16a34a";
 
+  const renderPatternRow = (p) => {
+    const act = ACTION_CFG[p.action] || ACTION_CFG.FLAG;
+    const st = p.is_active ? STATUS_CFG.active : STATUS_CFG.inactive;
+    const eff = p._eff;
+    const acc = p.accuracy_score ?? eff?.accuracy_score ?? null;
+    const isCandidate = Boolean(p._isCandidate);
+
+    return (
+      <tr
+        key={p.id}
+        className={`ptp-row${isCandidate ? " ptp-row--candidate" : ""}`}
+      >
+        <td>
+          <div className="ptp-pattern-name">{p.pattern_name}</div>
+          <div className="ptp-pattern-prio">prioritas {p.priority}</div>
+        </td>
+        <td>
+          {p.pattern_category ? (
+            <span className="ptp-cat-pill">{p.pattern_category}</span>
+          ) : (
+            <span className="ptp-muted">—</span>
+          )}
+        </td>
+        <td>
+          <span
+            className={`ptp-svc ptp-svc--${(p.service_source || "all").toLowerCase()}`}
+          >
+            {p.service_source || "ALL"}
+          </span>
+        </td>
+        <td>
+          <span className={`ptp-action ${act.cls}`}>
+            <i className={`bi ${act.icon}`} />
+            {act.label}
+          </span>
+        </td>
+        <td>
+          <span
+            className="ptp-score"
+            style={{ color: scoreColor(p.risk_score) }}
+          >
+            {p.risk_score}
+          </span>
+        </td>
+        <td>
+          <span className="ptp-acc" style={{ color: accColor(acc) }}>
+            {accLabel(acc)}
+          </span>
+        </td>
+        <td>
+          <div className="ptp-tpfp">
+            <span className="ptp-tp">
+              TP {eff?.true_positive ?? p.true_positive ?? 0}
+            </span>
+            <span className="ptp-fp">
+              FP {eff?.false_positive ?? p.false_positive ?? 0}
+            </span>
+          </div>
+        </td>
+        <td>
+          <span className={`ptp-status ${st.cls}`}>
+            <span className="ptp-status-dot" style={{ background: st.dot }} />
+            {st.label}
+          </span>
+        </td>
+        <td>
+          <div className="ptp-actions">
+            <button
+              className="ptp-action-btn detail"
+              title="Lihat detail"
+              onClick={() => setDetailPattern(p)}
+            >
+              <i className="bi bi-eye" />
+            </button>
+            <button
+              className="ptp-action-btn edit"
+              title="Edit"
+              onClick={() => onEdit(p)}
+            >
+              <i className="bi bi-pencil" />
+            </button>
+
+            {p.is_active ? (
+              <button
+                className="ptp-action-btn deactivate"
+                title="Nonaktifkan"
+                onClick={() => onDeactivate(p.id)}
+              >
+                <i className="bi bi-pause-circle" />
+              </button>
+            ) : (
+              <button
+                className={`ptp-action-btn activate${isCandidate ? " candidate-activate" : ""}`}
+                title={isCandidate ? "Aktifkan kandidat" : "Aktifkan"}
+                onClick={() => onActivate(p.id)}
+              >
+                <i
+                  className={`bi ${isCandidate ? "bi-check-circle" : "bi-play-circle"}`}
+                />
+              </button>
+            )}
+
+            <button
+              className="ptp-action-btn del"
+              title="Hapus"
+              onClick={() => setDeleteTarget(p)}
+            >
+              <i className="bi bi-trash3" />
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <div className="ptp-wrap">
       {/* Toolbar */}
@@ -122,8 +269,7 @@ const PatternPanel = ({
         <div className="ptp-toolbar-left">
           <span className="ptp-title">Pattern Management</span>
           <span className="ptp-subtitle">
-            {data.filter((p) => p.is_active).length} aktif /{" "}
-            {data.filter((p) => !p.is_active).length} kandidat
+            {data.length} aktif / {candidates.length} kandidat
           </span>
         </div>
         <div className="ptp-toolbar-right">
@@ -191,10 +337,10 @@ const PatternPanel = ({
             className={`ptp-btn secondary ${generating ? "ptp-btn--loading" : ""}`}
             onClick={onGenerate}
             disabled={generating}
-            title="Generate dari Manual Review"
+            title="Generate pola kandidat dari review manual dan retraining"
           >
             {!generating && <i className="bi bi-stars" />}
-            {generating ? "Generating..." : "Auto-generate"}
+            {generating ? "Generating..." : "Generate kandidat"}
           </button>
 
           <button className="ptp-btn primary" onClick={onAdd}>
@@ -229,159 +375,146 @@ const PatternPanel = ({
         </div>
       )}
 
-      {/* Table */}
-      <div className="ptp-table-scroll">
-        <table className="ptp-table">
-          <thead>
-            <tr>
-              <th>Pattern</th>
-              <th>Kategori</th>
-              <th>Service</th>
-              <th>Action</th>
-              <th>Risk Score</th>
-              <th>Akurasi</th>
-              <th>TP / FP</th>
-              <th>Status</th>
-              <th>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paged.length === 0 ? (
-              <tr>
-                <td colSpan={9}>
-                  <div className="ptp-empty">
-                    <i className="bi bi-shield-slash" />
-                    <p>Tidak ada pattern ditemukan.</p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              paged.map((p) => {
-                const act = ACTION_CFG[p.action] || ACTION_CFG.FLAG;
-                const st = p.is_active
-                  ? STATUS_CFG.active
-                  : STATUS_CFG.inactive;
-                const eff = p._eff;
-                const acc = p.accuracy_score ?? eff?.accuracy_score ?? null;
-
-                return (
-                  <tr key={p.id} className="ptp-row">
-                    <td>
-                      <div className="ptp-pattern-name">{p.pattern_name}</div>
-                      <div className="ptp-pattern-prio">
-                        prioritas {p.priority}
-                      </div>
-                    </td>
-                    <td>
-                      {p.pattern_category ? (
-                        <span className="ptp-cat-pill">
-                          {p.pattern_category}
-                        </span>
-                      ) : (
-                        <span className="ptp-muted">—</span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`ptp-svc ptp-svc--${(p.service_source || "all").toLowerCase()}`}
-                      >
-                        {p.service_source || "ALL"}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`ptp-action ${act.cls}`}>
-                        <i className={`bi ${act.icon}`} />
-                        {act.label}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className="ptp-score"
-                        style={{ color: scoreColor(p.risk_score) }}
-                      >
-                        {p.risk_score}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className="ptp-acc"
-                        style={{ color: accColor(acc) }}
-                      >
-                        {accLabel(acc)}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="ptp-tpfp">
-                        <span className="ptp-tp">
-                          TP {eff?.true_positive ?? p.true_positive ?? 0}
-                        </span>
-                        <span className="ptp-fp">
-                          FP {eff?.false_positive ?? p.false_positive ?? 0}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`ptp-status ${st.cls}`}>
-                        <span
-                          className="ptp-status-dot"
-                          style={{ background: st.dot }}
-                        />
-                        {st.label}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="ptp-actions">
-                        <button
-                          className="ptp-action-btn detail"
-                          title="Lihat detail"
-                          onClick={() => setDetailPattern(p)}
-                        >
-                          <i className="bi bi-eye" />
-                        </button>
-                        <button
-                          className="ptp-action-btn edit"
-                          title="Edit"
-                          onClick={() => onEdit(p)}
-                        >
-                          <i className="bi bi-pencil" />
-                        </button>
-
-                        {p.is_active ? (
-                          <button
-                            className="ptp-action-btn deactivate"
-                            title="Nonaktifkan"
-                            onClick={() => onDeactivate(p.id)}
-                          >
-                            <i className="bi bi-pause-circle" />
-                          </button>
-                        ) : (
-                          <button
-                            className="ptp-action-btn activate"
-                            title="Aktifkan"
-                            onClick={() => onActivate(p.id)}
-                          >
-                            <i className="bi bi-play-circle" />
-                          </button>
-                        )}
-
-                        <button
-                          className="ptp-action-btn del"
-                          title="Hapus"
-                          onClick={() => setDeleteTarget(p)}
-                        >
-                          <i className="bi bi-trash3" />
-                        </button>
+      {(filterStatus === "all" || filterStatus === "active") && (
+        <>
+          <div className="ptp-section-header">
+            <span className="ptp-section-title">Daftar Pattern Aktif</span>
+            <span className="ptp-section-badge">{filtered.length}</span>
+          </div>
+          <div className="ptp-table-scroll">
+            <table className="ptp-table">
+              <thead>
+                <tr>
+                  <th>Pattern</th>
+                  <th>Kategori</th>
+                  <th>Service</th>
+                  <th>Action</th>
+                  <th>Risk Score</th>
+                  <th>Akurasi</th>
+                  <th>TP / FP</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paged.length === 0 ? (
+                  <tr>
+                    <td colSpan={9}>
+                      <div className="ptp-empty">
+                        <i className="bi bi-shield-slash" />
+                        <p>Tidak ada pattern ditemukan.</p>
                       </div>
                     </td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                ) : (
+                  paged.map((p) => renderPatternRow(p))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-      {/* Pagination */}
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="ptp-pagination">
+              <span>
+                {(safePage - 1) * PER_PAGE + 1}–
+                {Math.min(safePage * PER_PAGE, filtered.length)} dari{" "}
+                {filtered.length}
+              </span>
+              <div className="ptp-pg-btns">
+                <button
+                  className="ptp-pg-btn"
+                  disabled={safePage === 1}
+                  onClick={() => setPage(safePage - 1)}
+                >
+                  <i className="bi bi-chevron-left" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(
+                    (p) =>
+                      p === 1 ||
+                      p === totalPages ||
+                      Math.abs(p - safePage) <= 1,
+                  )
+                  .reduce((acc, p, idx, arr) => {
+                    if (idx > 0 && p - arr[idx - 1] > 1) acc.push("…");
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === "…" ? (
+                      <span key={`e${i}`} className="ptp-pg-ellipsis">
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={p}
+                        className={`ptp-pg-btn ${p === safePage ? "active" : ""}`}
+                        onClick={() => setPage(p)}
+                      >
+                        {p}
+                      </button>
+                    ),
+                  )}
+                <button
+                  className="ptp-pg-btn"
+                  disabled={safePage === totalPages}
+                  onClick={() => setPage(safePage + 1)}
+                >
+                  <i className="bi bi-chevron-right" />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {(filterStatus === "all" || filterStatus === "inactive") && (
+        <div className="ptp-candidate-section">
+          <div className="ptp-section-header">
+            <div>
+              <span className="ptp-section-title">Pattern Kandidat</span>
+              <p className="ptp-section-note">
+                Pattern ini berasal dari review manual, proses retraining, atau
+                status nonaktif. Aktifkan untuk menambahkannya ke daftar pattern
+                aktif.
+              </p>
+            </div>
+            <span className="ptp-section-badge">{candidateCount}</span>
+          </div>
+          <div className="ptp-table-scroll">
+            <table className="ptp-table">
+              <thead>
+                <tr>
+                  <th>Pattern</th>
+                  <th>Kategori</th>
+                  <th>Service</th>
+                  <th>Action</th>
+                  <th>Risk Score</th>
+                  <th>Akurasi</th>
+                  <th>TP / FP</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {candidateCount === 0 ? (
+                  <tr>
+                    <td colSpan={9}>
+                      <div className="ptp-empty">
+                        <i className="bi bi-shield-slash" />
+                        <p>Tidak ada pattern kandidat.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredCandidates.map((p) => renderPatternRow(p))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       {totalPages > 1 && (
         <div className="ptp-pagination">
           <span>

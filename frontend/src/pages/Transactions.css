@@ -220,6 +220,23 @@
   line-height: 1;
 }
 
+.txn3-badge-suppressed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.22rem 0.45rem;
+  margin-left: 0.5rem;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.txn3-badge-suppressed .bi {
+  font-size: 0.82rem;
+}
+
 .txn-filter-chips {
   display: flex;
   align-items: center;

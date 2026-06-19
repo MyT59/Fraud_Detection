@@ -55,6 +55,8 @@ class TransactionListItem(BaseModel):
     city: Optional[str]
     country: Optional[str]
 
+    suppressed_count: Optional[int]
+
 class TransactionSummary(BaseModel):
     total_transactions: int
     fraud: int
@@ -95,6 +97,8 @@ class TransactionDetailResponse(BaseModel):
 
     violation_rule_ids: Optional[list]
     violation_pattern_ids: Optional[list]
+    suppressed_patterns: Optional[list]
+    suppressed_pattern_ids: Optional[list]
 
     ip_address: Optional[str]
     terminal_id: Optional[str]

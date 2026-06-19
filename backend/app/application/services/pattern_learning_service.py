@@ -5,6 +5,7 @@ P4: save_generated_patterns() memanggil invalidate_pattern_cache()
 setelah insert agar cache FraudPattern di-refresh pada transaksi berikutnya.
 """
 
+from app.infrastructure.database.enums import PatternSourceEnum
 from datetime import timedelta
 from sqlalchemy import func, distinct
 import json
@@ -231,7 +232,7 @@ def generate_rules_hash(rules: dict):
 
 
 @log_performance(label="PatternLearning.save_generated_patterns")
-def save_generated_patterns(db, patterns):
+def save_generated_patterns(db, patterns, source=PatternSourceEnum.MANUAL_CREATE):
     if not patterns:
         return 0
 
@@ -262,6 +263,7 @@ def save_generated_patterns(db, patterns):
             action           = p.get("action", "REVIEW"),
             service_source   = service,
             priority         = auto_priority,
+            pattern_source   = source,
             is_active        = False
         )
         db.add(new_pattern)

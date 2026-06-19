@@ -321,27 +321,19 @@ def update_pattern_accuracy(db, trx, is_fraud: bool):
     if not isinstance(trx.violation_pattern_ids, list) or not trx.violation_pattern_ids:
         return
     
-    # 2. Inisialisasi PatternRepository
     pattern_repo = PatternRepository(db)
 
     for pattern_id in trx.violation_pattern_ids:
-        # 3. Ganti db.query menjadi memanggil repository
         pattern = pattern_repo.get_by_id(pattern_id)
 
         if not pattern:
             continue
 
-        # =========================
-        # UPDATE COUNTER
-        # =========================
         if is_fraud:
             pattern.true_positive = (pattern.true_positive or 0) + 1
         else:
             pattern.false_positive = (pattern.false_positive or 0) + 1
 
-        # =========================
-        # UPDATE ACCURACY
-        # =========================
         tp = pattern.true_positive or 0
         fp = pattern.false_positive or 0
         total = tp + fp
@@ -350,10 +342,49 @@ def update_pattern_accuracy(db, trx, is_fraud: bool):
             pattern.accuracy_score = tp / total
             pattern.false_positive_rate = fp / total
 
-        # =========================
-        # APPLY LIFECYCLE
-        # =========================
         apply_pattern_lifecycle(db, pattern)
+
+
+def undo_pattern_accuracy(db, trx, was_fraud: bool):
+    """
+    Mengurangi counter TP atau FP sebelum override diterapkan.
+    Dipanggil oleh override_review_decision_service() untuk mencegah
+    double counting — keputusan lama di-undo, baru keputusan baru ditambah.
+
+    Args:
+        was_fraud: True jika keputusan lama adalah FRAUD (kurangi TP),
+                   False jika keputusan lama adalah SAFE (kurangi FP).
+    """
+    if not isinstance(trx.violation_pattern_ids, list) or not trx.violation_pattern_ids:
+        return
+
+    pattern_repo = PatternRepository(db)
+
+    for pattern_id in trx.violation_pattern_ids:
+        pattern = pattern_repo.get_by_id(pattern_id)
+
+        if not pattern:
+            continue
+
+        if was_fraud:
+            # Undo TP: kurangi true_positive, minimal 0
+            pattern.true_positive = max(0, (pattern.true_positive or 0) - 1)
+        else:
+            # Undo FP: kurangi false_positive, minimal 0
+            pattern.false_positive = max(0, (pattern.false_positive or 0) - 1)
+
+        # Hitung ulang accuracy setelah undo
+        tp = pattern.true_positive or 0
+        fp = pattern.false_positive or 0
+        total = tp + fp
+
+        if total > 0:
+            pattern.accuracy_score = tp / total
+            pattern.false_positive_rate = fp / total
+        else:
+            # Reset ke None jika tidak ada sample lagi
+            pattern.accuracy_score = None
+            pattern.false_positive_rate = None
 
 @log_performance(label="ReviewService.get_review_metrics_service")
 def get_review_metrics_service(db):
@@ -460,9 +491,19 @@ def override_review_decision_service(db, review_id: int, admin_id: int, new_deci
         }
 
         if new_decision == "FRAUD":
-            update_pattern_accuracy(db, trx, is_fraud=True) 
+            # [FIX] Undo counter keputusan lama sebelum tambah yang baru.
+            # Sebelumnya override hanya menambah counter baru tanpa mengurangi
+            # counter lama — menyebabkan double counting:
+            # contoh: review SAFE (FP+1) lalu override ke FRAUD (TP+1)
+            # hasilnya TP=1 FP=1 padahal seharusnya TP=1 FP=0.
+            if review.decision == "SAFE":
+                undo_pattern_accuracy(db, trx, was_fraud=False)
+            update_pattern_accuracy(db, trx, is_fraud=True)
             target_status = TransactionStatusEnum.FRAUD
         else:
+            # Override dari FRAUD ke SAFE: undo TP lama, tambah FP baru
+            if review.decision == "FRAUD":
+                undo_pattern_accuracy(db, trx, was_fraud=True)
             update_pattern_accuracy(db, trx, is_fraud=False)
             target_status = TransactionStatusEnum.SAFE
 
@@ -546,7 +587,18 @@ def log_false_negative_service(db, transaction_id: int, admin_id: int, reason: s
     )
     db.add(feedback_log)
 
-    update_pattern_accuracy(db, trx, is_fraud=True)
+    # [FIX] Cek apakah sudah ada review sebelumnya dengan decision FRAUD.
+    # Kalau sudah, skip update_pattern_accuracy untuk hindari TP di-increment
+    # dua kali untuk transaksi yang sama (sekali dari review, sekali dari
+    # false negative report ini).
+    existing_fraud_review = db.query(ManualReview).filter(
+        ManualReview.transaction_id == trx.id,
+        ManualReview.decision == "FRAUD",
+        ManualReview.is_deleted == False
+    ).first()
+
+    if not existing_fraud_review:
+        update_pattern_accuracy(db, trx, is_fraud=True)
 
     log_activity(
         db=db,

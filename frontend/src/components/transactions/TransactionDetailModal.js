@@ -127,10 +127,20 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
   const isFraud = t.final_status === "FRAUD";
   const d = t.transaction_details || {};
 
-  const violationCount =
-    (t.violation_rule_ids?.length || 0) +
-    (t.violation_pattern_ids?.length || 0) +
-    (t.violation_reason ? 1 : 0);
+  // Count only active rule / pattern violations. Do not treat a free-text
+  // `violation_reason` as a separate count (it may duplicate info).
+  const activeRuleCount = (t.violation_rule_ids || []).length;
+  const activePatternCount = (t.violation_pattern_ids || []).length;
+  const violationCount = activeRuleCount + activePatternCount;
+
+  // Support suppressed signals returned by the backend for forensic review.
+  // Backend may provide either `suppressed_patterns` (objects) or
+  // `suppressed_pattern_ids` (ids). Normalize to an array of items.
+  const suppressedPatternsRaw =
+    t.suppressed_patterns || t.suppressed_pattern_ids || [];
+  const suppressedPatterns = Array.isArray(suppressedPatternsRaw)
+    ? suppressedPatternsRaw
+    : [];
 
   return (
     <>
@@ -405,8 +415,7 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                           {t.violation_reason}
                         </p>
                       )}
-                      {(t.violation_rule_ids?.length > 0 ||
-                        t.violation_pattern_ids?.length > 0) && (
+                      {(activeRuleCount > 0 || activePatternCount > 0) && (
                         <div className="tdm-tag-list">
                           {(t.violation_rule_ids || []).map((id) => (
                             <span
@@ -427,6 +436,51 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                             </span>
                           ))}
                         </div>
+                      )}
+
+                      {/* Additional Signals (suppressed patterns) for forensic review */}
+                      {suppressedPatterns.length > 0 && (
+                        <Section
+                          title="Additional Signals"
+                          icon="bi-info-circle"
+                          defaultOpen={false}
+                        >
+                          <div className="tdm-tag-list">
+                            {suppressedPatterns.map((it, idx) => {
+                              // If backend returns numeric ids, render as Pattern #id
+                              if (
+                                typeof it === "number" ||
+                                typeof it === "string"
+                              ) {
+                                return (
+                                  <span
+                                    key={`s-${idx}`}
+                                    className="tdm-tag tdm-tag-suppressed"
+                                  >
+                                    <i className="bi bi-slash-circle me-1" />
+                                    Pattern #{it}
+                                  </span>
+                                );
+                              }
+
+                              // If backend returns object with name/id
+                              const label =
+                                it.name ||
+                                it.pattern_name ||
+                                it.id ||
+                                JSON.stringify(it);
+                              return (
+                                <span
+                                  key={`s-${idx}`}
+                                  className="tdm-tag tdm-tag-suppressed"
+                                >
+                                  <i className="bi bi-slash-circle me-1" />
+                                  {label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </Section>
                       )}
                     </Section>
                   )}

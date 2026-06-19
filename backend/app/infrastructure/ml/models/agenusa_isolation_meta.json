@@ -5,7 +5,7 @@
   "contamination": 0.05,
   "anomaly_rate_fit_data": 0.05,
   "thresholds": {
-    "review_score_threshold": 0.003,
+    "review_score_threshold": 0.004,
     "high_risk_score_threshold": -0.0026
   },
   "numeric_features": [

@@ -125,6 +125,10 @@
 .re-name-desc {
   font-size: 0.74rem;
   color: #9ca3af;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .re-condition {
@@ -138,6 +142,12 @@
   font-weight: 600;
   color: #374151;
   white-space: nowrap;
+
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block; /* override inline-flex */
+  vertical-align: middle;
 }
 
 .re-condition.cond-block {
