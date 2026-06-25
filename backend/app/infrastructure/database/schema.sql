@@ -471,123 +471,123 @@ CREATE TABLE public.reports (
 -- ------------------------------------------
 -- 11.1 Transactions Feed Indexes
 -- ------------------------------------------
-CREATE INDEX idx_transactions_transaction_time ON transactions_feed(transaction_time); [cite: 45]
-CREATE INDEX idx_transactions_user ON transactions_feed(user_account_id); [cite: 46]
-CREATE INDEX idx_trx_final_status ON transactions_feed(final_status); [cite: 46]
-CREATE INDEX idx_trx_service_time ON transactions_feed(service_source, transaction_time DESC); [cite: 46]
-CREATE INDEX idx_trx_original_id ON transactions_feed(original_trx_id); [cite: 47]
+CREATE INDEX idx_transactions_transaction_time ON transactions_feed(transaction_time); 
+CREATE INDEX idx_transactions_user ON transactions_feed(user_account_id); 
+CREATE INDEX idx_trx_final_status ON transactions_feed(final_status); 
+CREATE INDEX idx_trx_service_time ON transactions_feed(service_source, transaction_time DESC); 
+CREATE INDEX idx_trx_original_id ON transactions_feed(original_trx_id); 
 
 -- Velocity Indexes (Sangat krusial untuk FDS)
-CREATE INDEX idx_trx_ip_time ON transactions_feed (ip_address, transaction_time DESC); [cite: 47]
-CREATE INDEX idx_trx_merchant_time ON transactions_feed (merchant_id, transaction_time DESC); [cite: 48]
-CREATE INDEX idx_trx_terminal_time ON transactions_feed (terminal_id, transaction_time DESC); [cite: 48]
-CREATE INDEX idx_trx_user_time ON transactions_feed (user_account_id, transaction_time DESC); [cite: 49]
-CREATE INDEX idx_trx_account_time ON transactions_feed (account_number, transaction_time DESC); [cite: 49]
+CREATE INDEX idx_trx_ip_time ON transactions_feed (ip_address, transaction_time DESC); 
+CREATE INDEX idx_trx_merchant_time ON transactions_feed (merchant_id, transaction_time DESC); 
+CREATE INDEX idx_trx_terminal_time ON transactions_feed (terminal_id, transaction_time DESC); 
+CREATE INDEX idx_trx_user_time ON transactions_feed (user_account_id, transaction_time DESC); 
+CREATE INDEX idx_trx_account_time ON transactions_feed (account_number, transaction_time DESC); 
 
 -- Risk & Flagging (Dashboard Optimization)
-CREATE INDEX idx_trx_risk_score ON transactions_feed (risk_score DESC); [cite: 50]
-CREATE INDEX idx_trx_risk_level ON transactions_feed (risk_level); [cite: 50]
-CREATE INDEX IF NOT EXISTS idx_transactions_flagged ON transactions_feed (is_flagged_ml); [cite: 51]
+CREATE INDEX idx_trx_risk_score ON transactions_feed (risk_score DESC); 
+CREATE INDEX idx_trx_risk_level ON transactions_feed (risk_level); 
+CREATE INDEX IF NOT EXISTS idx_transactions_flagged ON transactions_feed (is_flagged_ml); 
 
 -- Partial Index (Hanya index transaksi yang menggantung untuk hemat storage)
-CREATE INDEX idx_trx_pending_review ON transactions_feed (final_status) WHERE final_status IN ('PENDING', 'UNDER_REVIEW'); [cite: 51]
+CREATE INDEX idx_trx_pending_review ON transactions_feed (final_status) WHERE final_status IN ('PENDING', 'UNDER_REVIEW'); 
 
 -- JSONB GIN Indexes
-CREATE INDEX idx_trx_pattern_ids ON transactions_feed USING GIN (violation_pattern_ids); [cite: 52]
-CREATE INDEX idx_trx_rule_ids ON transactions_feed USING GIN (violation_rule_ids); [cite: 52]
-CREATE INDEX idx_trx_score_breakdown ON transactions_feed USING GIN (score_breakdown); [cite: 53]
+CREATE INDEX idx_trx_pattern_ids ON transactions_feed USING GIN (violation_pattern_ids); 
+CREATE INDEX idx_trx_rule_ids ON transactions_feed USING GIN (violation_rule_ids); 
+CREATE INDEX idx_trx_score_breakdown ON transactions_feed USING GIN (score_breakdown); 
 
 -- ------------------------------------------
 -- 11.2 Alerts & Reviews Indexes
 -- ------------------------------------------
-CREATE INDEX idx_alerts_transaction_id ON fraud_alerts(transaction_id); [cite: 53]
-CREATE INDEX idx_alerts_status ON fraud_alerts(status); [cite: 54]
+CREATE INDEX idx_alerts_transaction_id ON fraud_alerts(transaction_id); 
+CREATE INDEX idx_alerts_status ON fraud_alerts(status); 
 
 -- Workflow & Dashboard Alerts
-CREATE INDEX idx_alerts_workflow ON fraud_alerts (status, claimed_by); [cite: 54]
-CREATE INDEX idx_alerts_priority_time ON fraud_alerts (priority DESC, created_at DESC); [cite: 55]
-CREATE INDEX idx_alerts_escalated ON fraud_alerts (is_escalated) WHERE is_escalated = TRUE; [cite: 55]
+CREATE INDEX idx_alerts_workflow ON fraud_alerts (status, claimed_by); 
+CREATE INDEX idx_alerts_priority_time ON fraud_alerts (priority DESC, created_at DESC); 
+CREATE INDEX idx_alerts_escalated ON fraud_alerts (is_escalated) WHERE is_escalated = TRUE; 
 
 -- Manual Reviews
-CREATE INDEX idx_manual_reviews_transaction_id ON manual_reviews(transaction_id); [cite: 56]
-CREATE INDEX IF NOT EXISTS idx_manual_reviews_alert_id ON manual_reviews (alert_id); [cite: 56]
-CREATE INDEX IF NOT EXISTS idx_manual_reviews_reviewer_name ON manual_reviews (reviewer_name); [cite: 57]
+CREATE INDEX idx_manual_reviews_transaction_id ON manual_reviews(transaction_id); 
+CREATE INDEX IF NOT EXISTS idx_manual_reviews_alert_id ON manual_reviews (alert_id); 
+CREATE INDEX IF NOT EXISTS idx_manual_reviews_reviewer_name ON manual_reviews (reviewer_name); 
 
 -- Partial Index (Audit QA Override)
-CREATE INDEX idx_reviews_overridden ON manual_reviews (is_overridden) WHERE is_overridden = TRUE; [cite: 57]
+CREATE INDEX idx_reviews_overridden ON manual_reviews (is_overridden) WHERE is_overridden = TRUE; 
 
 -- ------------------------------------------
 -- 11.3 Rules & Blacklist Indexes
 -- ------------------------------------------
-CREATE INDEX idx_blacklist_value ON blacklist_items(value); [cite: 58]
-CREATE INDEX idx_blacklist_lookup ON blacklist_items (type, value, service_scope) WHERE is_active = TRUE; [cite: 59]
+CREATE INDEX idx_blacklist_value ON blacklist_items(value); 
+CREATE INDEX idx_blacklist_lookup ON blacklist_items (type, value, service_scope) WHERE is_active = TRUE; 
 
-CREATE INDEX IF NOT EXISTS idx_fraud_patterns_service ON fraud_patterns(service_source); [cite: 59]
-CREATE INDEX IF NOT EXISTS idx_fraud_patterns_active ON fraud_patterns(is_active); [cite: 60]
-CREATE INDEX idx_rules_hash ON fraud_patterns(rules_hash); [cite: 60]
-CREATE INDEX idx_fraud_patterns_rules ON fraud_patterns USING GIN (pattern_rules); [cite: 61]
+CREATE INDEX IF NOT EXISTS idx_fraud_patterns_service ON fraud_patterns(service_source); 
+CREATE INDEX IF NOT EXISTS idx_fraud_patterns_active ON fraud_patterns(is_active); 
+CREATE INDEX idx_rules_hash ON fraud_patterns(rules_hash); 
+CREATE INDEX idx_fraud_patterns_rules ON fraud_patterns USING GIN (pattern_rules); 
 
 -- Partial Index (Caching Rule Aktif)
-CREATE INDEX idx_global_rules_active ON global_rules (is_active) WHERE is_active = TRUE; [cite: 61]
+CREATE INDEX idx_global_rules_active ON global_rules (is_active) WHERE is_active = TRUE; 
 
 -- ------------------------------------------
 -- 11.4 Application & Auth Indexes
 -- ------------------------------------------
-CREATE INDEX IF NOT EXISTS idx_admins_soft_delete ON admins(is_deleted); [cite: 62]
-CREATE INDEX idx_active_sessions ON user_sessions(admin_id, access_token) WHERE is_active = TRUE; [cite: 63]
-CREATE INDEX idx_sessions_access_token ON user_sessions (access_token); [cite: 63]
-CREATE INDEX idx_sessions_refresh_token ON user_sessions (refresh_token); [cite: 64]
+CREATE INDEX IF NOT EXISTS idx_admins_soft_delete ON admins(is_deleted); 
+CREATE INDEX idx_active_sessions ON user_sessions(admin_id, access_token) WHERE is_active = TRUE; 
+CREATE INDEX idx_sessions_access_token ON user_sessions (access_token); 
+CREATE INDEX idx_sessions_refresh_token ON user_sessions (refresh_token); 
 
 -- ------------------------------------------
 -- 11.5 External System Logs Indexes (Invoice & Switching)
 -- ------------------------------------------
-CREATE INDEX idx_invoice_customer ON invoice_transactions(customer_id); [cite: 64]
-CREATE INDEX idx_invoice_no_invoice ON invoice_transactions(no_invoice); [cite: 65]
-CREATE INDEX idx_invoice_time ON invoice_transactions(tanggal_pembayaran); [cite: 65]
-CREATE INDEX idx_invoice_status ON invoice_transactions(status_akhir); [cite: 65]
-CREATE INDEX idx_invoice_amount ON invoice_transactions(total_tagihan); [cite: 65]
-CREATE INDEX idx_invoice_ip ON invoice_transactions(ip_address); [cite: 66]
-CREATE INDEX idx_invoice_customer_time ON invoice_transactions(customer_id, tanggal_pembayaran); [cite: 66]
-CREATE INDEX idx_invoice_processed ON invoice_transactions(processed_at); [cite: 66]
+CREATE INDEX idx_invoice_customer ON invoice_transactions(customer_id); 
+CREATE INDEX idx_invoice_no_invoice ON invoice_transactions(no_invoice); 
+CREATE INDEX idx_invoice_time ON invoice_transactions(tanggal_pembayaran); 
+CREATE INDEX idx_invoice_status ON invoice_transactions(status_akhir); 
+CREATE INDEX idx_invoice_amount ON invoice_transactions(total_tagihan); 
+CREATE INDEX idx_invoice_ip ON invoice_transactions(ip_address); 
+CREATE INDEX idx_invoice_customer_time ON invoice_transactions(customer_id, tanggal_pembayaran); 
+CREATE INDEX idx_invoice_processed ON invoice_transactions(processed_at); 
 
-CREATE INDEX idx_switching_rrn ON switching_logs(rrn); [cite: 67]
-CREATE INDEX idx_switching_account ON switching_logs(account_number); [cite: 67]
-CREATE INDEX idx_switching_customer ON switching_logs(customer_ref_number); [cite: 67]
-CREATE INDEX idx_switching_terminal ON switching_logs(terminal_id); [cite: 67]
-CREATE INDEX idx_switching_merchant ON switching_logs(merchant_id); [cite: 68]
-CREATE INDEX idx_switching_time ON switching_logs(timestamp_db); [cite: 68]
-CREATE INDEX idx_switching_amount ON switching_logs(amount); [cite: 68]
-CREATE INDEX idx_switching_ip ON switching_logs(ip_address); [cite: 68]
-CREATE INDEX idx_switching_account_time ON switching_logs(account_number, timestamp_db); [cite: 69]
-CREATE INDEX idx_switching_customer_time ON switching_logs(customer_ref_number, timestamp_db); [cite: 69]
-CREATE INDEX idx_switching_processed ON switching_logs(processed_at); [cite: 69]
+CREATE INDEX idx_switching_rrn ON switching_logs(rrn); 
+CREATE INDEX idx_switching_account ON switching_logs(account_number); 
+CREATE INDEX idx_switching_customer ON switching_logs(customer_ref_number); 
+CREATE INDEX idx_switching_terminal ON switching_logs(terminal_id); 
+CREATE INDEX idx_switching_merchant ON switching_logs(merchant_id); 
+CREATE INDEX idx_switching_time ON switching_logs(timestamp_db); 
+CREATE INDEX idx_switching_amount ON switching_logs(amount); 
+CREATE INDEX idx_switching_ip ON switching_logs(ip_address); 
+CREATE INDEX idx_switching_account_time ON switching_logs(account_number, timestamp_db); 
+CREATE INDEX idx_switching_customer_time ON switching_logs(customer_ref_number, timestamp_db); 
+CREATE INDEX idx_switching_processed ON switching_logs(processed_at); 
 
 -- ------------------------------------------
 -- 11.6 ML Datasets, Models & Feedback Indexes
 -- ------------------------------------------
-CREATE INDEX idx_retrain_schedule_active ON retrain_schedules(is_active); [cite: 70]
-CREATE INDEX idx_retrain_history_time ON retrain_history(execution_time DESC); [cite: 70]
-CREATE INDEX idx_ml_datasets_lookup ON ml_datasets(domain, created_at DESC); [cite: 71]
-CREATE INDEX idx_retrain_history_model_id ON retrain_history(model_id); [cite: 71]
-CREATE INDEX idx_retrain_history_dataset_id ON retrain_history(dataset_id); [cite: 71]
-CREATE INDEX IF NOT EXISTS idx_ml_models_metrics ON ml_models USING GIN (metrics); [cite: 72]
+CREATE INDEX idx_retrain_schedule_active ON retrain_schedules(is_active); 
+CREATE INDEX idx_retrain_history_time ON retrain_history(execution_time DESC); 
+CREATE INDEX idx_ml_datasets_lookup ON ml_datasets(domain, created_at DESC); 
+CREATE INDEX idx_retrain_history_model_id ON retrain_history(model_id); 
+CREATE INDEX idx_retrain_history_dataset_id ON retrain_history(dataset_id); 
+CREATE INDEX IF NOT EXISTS idx_ml_models_metrics ON ml_models USING GIN (metrics); 
 
-CREATE INDEX idx_ml_feedback_review_id ON ml_feedback_logs(review_id); [cite: 72]
-CREATE INDEX idx_ml_feedback_trx_id ON ml_feedback_logs(transaction_id); [cite: 73]
-CREATE INDEX idx_ml_feedback_created_time ON ml_feedback_logs(created_at DESC); [cite: 73]
+CREATE INDEX idx_ml_feedback_review_id ON ml_feedback_logs(review_id); 
+CREATE INDEX idx_ml_feedback_trx_id ON ml_feedback_logs(transaction_id); 
+CREATE INDEX idx_ml_feedback_created_time ON ml_feedback_logs(created_at DESC); 
 
 -- ------------------------------------------
 -- 11.7 Audit / Activity Logs & Reports Indexes
 -- ------------------------------------------
-CREATE INDEX idx_activity_logs_target ON activity_logs(target_type, target_id); [cite: 74]
-CREATE INDEX idx_activity_logs_time ON activity_logs(created_at DESC); [cite: 75]
-CREATE INDEX idx_activity_logs_admin ON activity_logs(admin_id); [cite: 75]
-CREATE INDEX IF NOT EXISTS idx_activity_logs_severity ON activity_logs(severity); [cite: 75]
-CREATE INDEX IF NOT EXISTS idx_activity_logs_module ON activity_logs(module_source); [cite: 76]
-CREATE INDEX IF NOT EXISTS idx_activity_logs_session ON activity_logs(session_id); [cite: 76]
+CREATE INDEX idx_activity_logs_target ON activity_logs(target_type, target_id); 
+CREATE INDEX idx_activity_logs_time ON activity_logs(created_at DESC); 
+CREATE INDEX idx_activity_logs_admin ON activity_logs(admin_id); 
+CREATE INDEX IF NOT EXISTS idx_activity_logs_severity ON activity_logs(severity); 
+CREATE INDEX IF NOT EXISTS idx_activity_logs_module ON activity_logs(module_source); 
+CREATE INDEX IF NOT EXISTS idx_activity_logs_session ON activity_logs(session_id); 
 
-CREATE INDEX idx_reports_created_at ON reports (created_at DESC); [cite: 77]
-CREATE INDEX idx_reports_status ON reports (status); [cite: 77]
+CREATE INDEX idx_reports_created_at ON reports (created_at DESC); 
+CREATE INDEX idx_reports_status ON reports (status); 
 
 -- ==========================================
 -- 12. POST-INSTALLATION CLEANUP
@@ -599,4 +599,4 @@ WHERE id NOT IN (
     SELECT DISTINCT ON (target_service) id
     FROM ml_models
     ORDER BY target_service, created_at DESC
-); [cite: 78]
+); 
