@@ -17,7 +17,6 @@ def map_nusabill(data: dict):
         "city": None,
         "country": None,
         "transaction_details": {
-            # === DATA ASLI ===
             "nama_customer":  data.get("nama_customer"),
             "sof":            data.get("sof"),
             "biaya_admin":    float(data.get("biaya_admin") or 0),   # ← fix: Decimal → float
@@ -28,7 +27,6 @@ def map_nusabill(data: dict):
             "keterangan":     data.get("keterangan"),
             "bill_date":      str(data.get("tanggal_tagihan")) if data.get("tanggal_tagihan") else None,
             "payment_date":   str(data.get("tanggal_pembayaran")) if data.get("tanggal_pembayaran") else None,
-            # === AMOUNT FIELDS ===
             "bill_amount":    total_tagihan,
             "payment_amount": payment_amount,
             "channel":        data.get("channel", "API"),
