@@ -132,7 +132,7 @@ def apply_pattern_lifecycle(db, pattern):
             logger.exception("Failed to invalidate pattern cache after auto-promote")
 
     elif accuracy < 0.6:
-        pattern.action = "REVIEW"
+        pattern.action = "FLAG"
 
     base_score = pattern.risk_score or 40
     new_score = int(base_score * accuracy)

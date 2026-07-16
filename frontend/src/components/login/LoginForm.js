@@ -3,7 +3,7 @@ import { authService } from "../../services/AuthService"; // ✅ FIX: dari AuthS
 
 import { BRAND } from "./loginData";
 
-const LoginForm = ({ onLoginSuccess, sessionExpired }) => {
+const LoginForm = ({ onLoginSuccess, sessionExpired, onAuthAttempt }) => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -13,11 +13,13 @@ const LoginForm = ({ onLoginSuccess, sessionExpired }) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (error) setError("");
+    onAuthAttempt?.();
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    onAuthAttempt?.();
 
     if (!formData.email.trim()) {
       setError("Email address is required.");
@@ -53,6 +55,8 @@ const LoginForm = ({ onLoginSuccess, sessionExpired }) => {
         setError(
           "Too many login attempts. Please wait a moment before trying again.",
         );
+      } else if (err.status === 422) {
+        setError("Please enter a valid email address and password.");
       } else if (err.status === 0 || !err.status) {
         setError("Cannot connect to server. Please check your connection.");
       } else {
@@ -71,7 +75,7 @@ const LoginForm = ({ onLoginSuccess, sessionExpired }) => {
           <p>Sign in to your account</p>
         </div>
 
-        {sessionExpired && (
+        {sessionExpired && !error && (
           <div className="login-warning">
             <i className="bi bi-clock-history"></i>
             Your session has expired due to 60 minutes of inactivity. Please

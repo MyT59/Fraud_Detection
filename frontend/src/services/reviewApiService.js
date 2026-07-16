@@ -163,8 +163,21 @@ export const fetchMyReviewMetrics = async () => {
  * @param {object} params - { page?: number, limit?: number }
  * @returns {Promise<{ total, page, limit, items }>}
  */
-export const fetchReviewHistory = async ({ page = 1, limit = 10 } = {}) => {
-  return api.get(`/reviews/history?page=${page}&limit=${limit}`);
+export const fetchReviewHistory = async ({
+  page = 1,
+  limit = 10,
+  reviewedBy = null,
+} = {}) => {
+  const params = new URLSearchParams({ page, limit });
+  if (reviewedBy) params.set("reviewed_by", reviewedBy);
+  return api.get(`/reviews/history?${params.toString()}`);
+};
+
+export const fetchAnalystReviewHistory = async (
+  analystId,
+  { page = 1, limit = 8 } = {},
+) => {
+  return fetchReviewHistory({ page, limit, reviewedBy: analystId });
 };
 
 /**
@@ -330,6 +343,7 @@ const reviewApiService = {
   fetchMyReviewHistory,
   fetchMyReviewMetrics,
   fetchReviewHistory,
+  fetchAnalystReviewHistory,
   fetchReviewMetrics,
   fetchAnalystPerformance,
   fetchTimelineAnalytics,

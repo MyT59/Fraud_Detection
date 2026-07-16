@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import LoginBackground from "../components/login/LoginBackground";
 import LoginBrand from "../components/login/LoginBrand";
@@ -8,9 +8,11 @@ import "./Login.css";
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [dismissExpiredNotice, setDismissExpiredNotice] = useState(false);
 
   const sessionExpired =
-    new URLSearchParams(location.search).get("reason") === "expired";
+    new URLSearchParams(location.search).get("reason") === "expired" &&
+    !dismissExpiredNotice;
 
   // ✅ FIX: terima parameter requirePasswordChange dari LoginForm
   const handleLoginSuccess = ({ requirePasswordChange } = {}) => {
@@ -32,6 +34,7 @@ const Login = () => {
       <LoginForm
         onLoginSuccess={handleLoginSuccess}
         sessionExpired={sessionExpired}
+        onAuthAttempt={() => setDismissExpiredNotice(true)}
       />
     </div>
   );

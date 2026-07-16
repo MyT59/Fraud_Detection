@@ -5,6 +5,8 @@ from sqlalchemy import (
     Text,
     ForeignKey,
     Enum,
+    Boolean,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -71,6 +73,8 @@ class Report(Base):
         ),
         nullable=True,
     )
+    is_deleted = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    deleted_by = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True)
 
     status = Column(
         Enum(
@@ -108,11 +112,20 @@ class Report(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    deleted_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     # relationship
     generated_by_admin = relationship(
         "Admin",
         foreign_keys=[generated_by],
+        lazy="joined",
+    )
+    deleted_by_admin = relationship(
+        "Admin",
+        foreign_keys=[deleted_by],
         lazy="joined",
     )
 

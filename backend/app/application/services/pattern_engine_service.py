@@ -594,8 +594,11 @@ def run_pattern_engine(db, trx):
             pattern_ids.append(pattern.id)
             risk_score = max(risk_score, pattern.risk_score)
 
-            if pattern.action:
-                actions.append(pattern.action)
+            action = str(pattern.action or "FLAG").upper()
+            if action == "REVIEW":
+                action = "FLAG"
+            if action:
+                actions.append(action)
 
             # ── Update hit_count di tabel fraud_patterns ──────────────────────
             try:
@@ -618,7 +621,7 @@ def run_pattern_engine(db, trx):
                     "pattern_id":      pattern.id,
                     "pattern_name":    pattern.pattern_name,
                     "category":        pattern.pattern_category,
-                    "action_executed": pattern.action,
+                    "action_executed": action,
                     "score_assigned":  pattern.risk_score
                 }
             )
@@ -646,7 +649,10 @@ def detect_suppressed_patterns(db: Session, trx: Transaction) -> list:
         return suppressed
 
     # Load inactive patterns directly from DB (do not use cached active set)
-    inactive_patterns = db.query(FraudPattern).filter(FraudPattern.is_active == False).all()
+    inactive_patterns = db.query(FraudPattern).filter(
+        FraudPattern.is_active == False,
+        FraudPattern.is_deleted == False,
+    ).all()
 
     if not inactive_patterns:
         return suppressed

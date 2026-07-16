@@ -73,12 +73,12 @@ export const ACTION_META = {
   REVIEW_APPROVED: {
     icon: "bi-check-circle",
     color: "green",
-    title: "Review Approved",
+    title: "Transaction Success",
   },
   REVIEW_REJECTED: {
     icon: "bi-x-circle",
     color: "red",
-    title: "Review Rejected",
+    title: "Transaction Rejected",
   },
   REVIEW_OVERRIDDEN: {
     icon: "bi-arrow-repeat",

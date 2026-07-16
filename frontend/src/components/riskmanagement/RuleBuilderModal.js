@@ -2,130 +2,127 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import "./RuleBuilderModal.css";
 import { api } from "../../services/apiService";
 
-// ─── Field definitions per scope ─────────────────────────────────────────────
 const FLD = {
   ALL: [
-    { l: "Nominal transaksi", f: "amount", t: "number" },
-    { l: "Waktu transaksi", f: "transaction_time", t: "text" },
-    { l: "Alamat IP", f: "ip_address", t: "text" },
-    { l: "ID transaksi asli", f: "original_trx_id", t: "text" },
-    { l: "ID akun pengguna", f: "user_account_id", t: "text" },
-    { l: "Kota asal", f: "city", t: "text" },
-    { l: "Negara asal", f: "country", t: "text" },
-    { l: "Skor risiko sistem", f: "risk_score", t: "number" },
-    { l: "Skor anomali AI", f: "anomaly_score", t: "number" },
+    { l: "Nominal transaksi", f: "amount", t: "number", d: "Amount" },
+    {
+      l: "Waktu transaksi",
+      f: "transaction_time",
+      t: "text",
+      d: "Transaction Timestamp",
+    },
+    { l: "Alamat IP", f: "ip_address", t: "text", d: "IP Address" },
+    { l: "Kota asal", f: "city", t: "text", d: "GeoIP City" },
+    { l: "Negara asal", f: "country", t: "text", d: "GeoIP Country" },
+    { l: "Skor risiko sistem", f: "risk_score", t: "number", d: "Risk Score" },
+    { l: "Skor anomali AI", f: "anomaly_score", t: "number", d: "ML Anomaly Score" },
     {
       l: "Tingkat risiko",
       f: "risk_level",
       t: "sel",
       o: ["HIGH", "MEDIUM", "LOW"],
+      d: "Risk Level",
     },
   ],
   AGENUSA: [
-    { l: "ID terminal / EDC", f: "terminal_id", t: "text" },
-    { l: "ID agen / merchant", f: "merchant_id", t: "text" },
-    { l: "Nomor rekening asal", f: "account_number", t: "text" },
+    { l: "ID agen / merchant", f: "merchant_id", t: "text", d: "Merchant ID" },
+    { l: "ID terminal / EDC", f: "terminal_id", t: "text", d: "Terminal ID" },
+    { l: "Nomor rekening asal", f: "account_number", t: "text", d: "Source Account" },
     {
       l: "Bank penerbit kartu",
       f: "transaction_details.issuer_bank",
       t: "text",
       j: true,
+      d: "Issuer Bank",
+    },
+    {
+      l: "Nomor rekening penerbit",
+      f: "transaction_details.issuer_account_number",
+      t: "text",
+      j: true,
+      d: "Issuer Account",
     },
     {
       l: "Nomor rekening tujuan",
       f: "transaction_details.dest_account_number",
       t: "text",
       j: true,
-    },
-    {
-      l: "Kode respons bank",
-      f: "transaction_details.response_code",
-      t: "text",
-      j: true,
-    },
-    {
-      l: "Kode proses finansial",
-      f: "transaction_details.processing_code",
-      t: "text",
-      j: true,
-    },
-    { l: "Nomor urut STAN", f: "transaction_details.stan", t: "text", j: true },
-    { l: "Tipe pesan MTI", f: "transaction_details.mti", t: "text", j: true },
-    {
-      l: "Kode bank tujuan",
-      f: "transaction_details.dest_bank_code",
-      t: "text",
-      j: true,
-    },
-    {
-      l: "Kode acquirer",
-      f: "transaction_details.acquirer_code",
-      t: "text",
-      j: true,
+      d: "Destination Account",
     },
   ],
   NUSABILL: [
-    { l: "Kode pembayaran / merchant", f: "merchant_id", t: "text" },
-    {
-      l: "Nama pelanggan",
-      f: "transaction_details.nama_customer",
-      t: "text",
-      j: true,
-    },
+    { l: "Kode pembayaran / merchant", f: "merchant_id", t: "text", d: "Payment/Merchant Code" },
     {
       l: "Metode pembayaran (SOF)",
       f: "transaction_details.sof",
       t: "text",
       j: true,
+      d: "Source of Fund",
     },
     {
       l: "Jalur transaksi (channel)",
       f: "transaction_details.channel",
       t: "text",
       j: true,
+      d: "Transaction Channel",
     },
     {
       l: "Total nominal tagihan",
       f: "transaction_details.bill_amount",
       t: "number",
       j: true,
+      d: "Bill Amount",
     },
     {
       l: "Nominal yang dibayarkan",
       f: "transaction_details.payment_amount",
       t: "number",
       j: true,
+      d: "Payment Amount",
     },
     {
       l: "Biaya administrasi",
       f: "transaction_details.biaya_admin",
       t: "number",
       j: true,
+      d: "Admin Fee",
     },
     {
       l: "Status tagihan",
       f: "transaction_details.bill_status",
-      t: "text",
+      t: "sel",
+      o: ["terbayar", "belum_terbayar", "gagal", "pending"],
       j: true,
-    },
-    {
-      l: "Keterangan tagihan",
-      f: "transaction_details.keterangan",
-      t: "text",
-      j: true,
+      d: "Bill Status",
     },
   ],
 };
 
 const OPS = ["=", "!=", ">", "<", ">=", "<="];
 
-const RULE_GROUPS_PRESET = [
-  "VELOCITY",
-  "AMOUNT_LIMIT",
-  "LOCATION_CHECK",
-  "TIME_PATTERN",
-  "DEVICE_CHECK",
-];
+const RULE_GROUPS_BY_SCOPE = {
+  ALL: [
+    "AMOUNT_LIMIT",
+    "LOCATION_CHECK",
+    "TIME_PATTERN",
+    "IP_RISK",
+    "RISK_SCORE",
+  ],
+  AGENUSA: [
+    "AGENUSA_AMOUNT_LIMIT",
+    "AGENUSA_TERMINAL_RISK",
+    "AGENUSA_MERCHANT_RISK",
+    "AGENUSA_ACCOUNT_RISK",
+    "AGENUSA_BANK_RISK",
+  ],
+  NUSABILL: [
+    "NUSABILL_BILL_AMOUNT",
+    "NUSABILL_PAYMENT_MISMATCH",
+    "NUSABILL_CHANNEL_RISK",
+    "NUSABILL_SOF_RISK",
+    "NUSABILL_BILL_STATUS",
+  ],
+};
 
 // Sentinel value for "custom input" option
 const CUSTOM_VALUE = "__CUSTOM__";
@@ -137,11 +134,21 @@ function getFields(scope) {
   return base;
 }
 
+function getRuleGroups(scope) {
+  return RULE_GROUPS_BY_SCOPE[scope] || RULE_GROUPS_BY_SCOPE.ALL;
+}
+
 function fieldMeta(f, scope) {
   return getFields(scope).find((x) => x.f === f);
 }
 
-// ─── Smart value parser: auto-cast for FastAPI validation ─────────────────────
+const getTimestampHint = (field) => {
+  if (field === "transaction_time") {
+    return "Isi waktu transaksi. Bisa jam saja, tapi lebih jelas bila pakai tanggal dan jam, mis. 14:32 atau 2026-07-06 14:32.";
+  }
+  return null;
+};
+
 function smartParseValue(raw) {
   if (typeof raw !== "string") return raw;
   const trimmed = raw.trim();
@@ -151,7 +158,6 @@ function smartParseValue(raw) {
   return raw;
 }
 
-// ─── Combobox: select with "Kustom Baru" free-text fallback ──────────────────
 const Combobox = ({ options, value, onChange, placeholder, className }) => {
   const isCustom = value !== "" && !options.includes(value);
   const [mode, setMode] = useState(isCustom ? "custom" : "select");
@@ -211,19 +217,18 @@ const Combobox = ({ options, value, onChange, placeholder, className }) => {
         onChange={handleSelectChange}
         style={{ width: "100%" }}
       >
-        <option value="">— Pilih —</option>
+        <option value="">-- Pilih --</option>
         {options.map((o) => (
           <option key={o} value={o}>
             {o}
           </option>
         ))}
-        <option value={CUSTOM_VALUE}>✏️ Kustom Baru...</option>
+        <option value={CUSTOM_VALUE}>Kustom Baru...</option>
       </select>
     </div>
   );
 };
 
-// ─── FieldCombobox: select known fields OR type dot-notation custom ───────────
 const FieldCombobox = ({ fields, value, onChange, scope }) => {
   const knownField = fields.find((f) => f.f === value);
   const isCustom = !knownField && value !== "";
@@ -273,25 +278,31 @@ const FieldCombobox = ({ fields, value, onChange, scope }) => {
   }
 
   return (
-    <div className="rbm-select-wrap">
-      <select
-        className="rbm-select"
-        value={isCustom ? CUSTOM_VALUE : value}
-        onChange={handleSelectChange}
-      >
-        {fields.map((f) => (
-          <option key={f.f} value={f.f}>
-            {f.l}
-            {f.j ? " ↳" : ""}
-          </option>
-        ))}
-        <option value={CUSTOM_VALUE}>✏️ Field dot-notation kustom...</option>
-      </select>
+    <div>
+      <div className="rbm-select-wrap">
+        <select
+          className="rbm-select"
+          value={isCustom ? CUSTOM_VALUE : value}
+          onChange={handleSelectChange}
+        >
+          {fields.map((f) => (
+            <option key={f.f} value={f.f}>
+              {f.l} - {f.d || f.f}
+            </option>
+          ))}
+          <option value={CUSTOM_VALUE}>Field dot-notation kustom...</option>
+        </select>
+      </div>
+      {knownField && (
+        <div className="rbm-field-path">
+          <span>{knownField.d || knownField.l}</span>
+          <code>{knownField.f}</code>
+        </div>
+      )}
     </div>
   );
 };
 
-// ─── Condition Row ────────────────────────────────────────────────────────────
 const ConditionRow = ({
   cond,
   scope,
@@ -303,9 +314,9 @@ const ConditionRow = ({
 }) => {
   const fields = getFields(scope);
   const meta = fieldMeta(cond.field, scope);
-  // Custom field (not in preset list) → treat as text
   const effectiveMeta = meta || (cond.field ? { t: "text" } : null);
   const isJsonb = meta?.j || (cond.field && cond.field.includes("."));
+  const timestampHint = getTimestampHint(cond.field);
 
   const setField = (f) => {
     const newMeta = fieldMeta(f, scope);
@@ -372,6 +383,18 @@ const ConditionRow = ({
               onChange={(e) => onChange({ ...cond, value: e.target.value })}
             />
           )}
+          {timestampHint && (
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: ".72rem",
+                color: "#6b7280",
+                lineHeight: 1.4,
+              }}
+            >
+              <i className="bi bi-info-circle" /> {timestampHint}
+            </div>
+          )}
         </div>
 
         {showRemove && (
@@ -387,14 +410,13 @@ const ConditionRow = ({
       </div>
       {isJsonb && (
         <div className="rbm-jsonb-badge">
-          <i className="bi bi-check2" /> JSONB — dot-notation traversal aktif
+          <i className="bi bi-check2" /> JSONB - dot-notation traversal aktif
         </div>
       )}
     </div>
   );
 };
 
-// ─── Condition Group (recursive, advanced mode) ───────────────────────────────
 const ConditionGroup = ({ group, scope, onChange, onRemove, depth = 1 }) => {
   const logic = group.AND ? "AND" : "OR";
   const items = group[logic] || [];
@@ -510,16 +532,20 @@ const ConditionGroup = ({ group, scope, onChange, onRemove, depth = 1 }) => {
   );
 };
 
-// ─── Main Modal ───────────────────────────────────────────────────────────────
 const EMPTY_FORM = {
   rule_name: "",
   rule_key: "",
   service_scope: "ALL",
   rule_group: "",
-  action: "REVIEW",
+  action: "FLAG",
   severity: "HIGH",
   priority: 0,
   description: "",
+};
+
+const normalizeMitigationAction = (action) => {
+  const normalized = String(action || "FLAG").toUpperCase();
+  return normalized === "BLOCK" ? "BLOCK" : "FLAG";
 };
 
 const DEFAULT_SIMPLE_LOGIC = "AND";
@@ -541,19 +567,18 @@ const RuleBuilderModal = ({
     { field: "amount", operator: ">=", value: "" },
   ]);
 
-  // Advanced mode: recursive ConditionGroup
+    // Advanced mode - deep-parse values in the group tree
   const [advancedGroup, setAdvancedGroup] = useState({
     AND: [{ field: "amount", operator: ">=", value: "" }],
   });
 
   const [showPreview, setShowPreview] = useState(false);
   const [keyError, setKeyError] = useState(false);
-  const [keyErrorMsg, setKeyErrorMsg] = useState("");
+  const keyErrorMsg = "";
   const [loading, setLoading] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const nameRef = useRef();
 
-  // ─── Reset / populate on open ───────────────────────────────────────────────
   useEffect(() => {
     if (isOpen) {
       setShowPreview(false);
@@ -567,7 +592,7 @@ const RuleBuilderModal = ({
           rule_key: editData.rule_key || "",
           service_scope: editData.service_scope || "ALL",
           rule_group: editData.rule_group || "",
-          action: (editData.action || "review").toUpperCase(),
+          action: normalizeMitigationAction(editData.action),
           severity: editData.severity || "MEDIUM",
           priority: editData.priority ?? 0,
           description: editData.description || "",
@@ -632,7 +657,7 @@ const RuleBuilderModal = ({
 
       setTimeout(() => nameRef.current?.focus(), 50);
     }
-  }, [isOpen, editData]);
+  }, [isOpen, editData, isEdit]);
 
   // Prevent body scroll when open
   useEffect(() => {
@@ -662,6 +687,58 @@ const RuleBuilderModal = ({
     if (k === "rule_name" || k === "rule_key") setKeyError(false);
   };
 
+  const normalizeConditionForScope = useCallback((condition, nextScope) => {
+    const validFields = getFields(nextScope).map((f) => f.f);
+    const fallbackField = validFields[0] || "amount";
+
+    if ("AND" in condition || "OR" in condition) {
+      const logic = condition.AND ? "AND" : "OR";
+      return {
+        [logic]: (condition[logic] || []).map((item) =>
+          normalizeConditionForScope(item, nextScope),
+        ),
+      };
+    }
+
+    const isKnownForScope = validFields.includes(condition.field);
+    const isCustomDotField =
+      condition.field &&
+      condition.field.includes(".") &&
+      !Object.values(FLD)
+        .flat()
+        .some((field) => field.f === condition.field);
+
+    if (isKnownForScope || isCustomDotField) return condition;
+
+    return {
+      ...condition,
+      field: fallbackField,
+      operator: condition.operator || "=",
+      value: "",
+    };
+  }, []);
+
+  const handleServiceScopeChange = (nextScope) => {
+    setForm((prev) => {
+      const allPresetGroups = Object.values(RULE_GROUPS_BY_SCOPE).flat();
+      const nextPresetGroups = getRuleGroups(nextScope);
+      const group = prev.rule_group;
+      const shouldResetGroup =
+        group && allPresetGroups.includes(group) && !nextPresetGroups.includes(group);
+      return {
+        ...prev,
+        service_scope: nextScope,
+        rule_group: shouldResetGroup ? "" : group,
+      };
+    });
+    setSimpleConditions((conditions) =>
+      conditions.map((condition) =>
+        normalizeConditionForScope(condition, nextScope),
+      ),
+    );
+    setAdvancedGroup((group) => normalizeConditionForScope(group, nextScope));
+  };
+
   // Auto-generate rule_key from rule_name
   const handleNameChange = (v) => {
     const key = v
@@ -677,7 +754,6 @@ const RuleBuilderModal = ({
     set("rule_key", clean);
   };
 
-  // ─── Add / remove simple condition rows ─────────────────────────────────────
   const addSimpleCondition = () => {
     setSimpleConditions((p) => [
       ...p,
@@ -697,7 +773,6 @@ const RuleBuilderModal = ({
     });
   };
 
-  // ─── Validation ─────────────────────────────────────────────────────────────
   const conditionsValid = useCallback(() => {
     if (mode === "simple") {
       return (
@@ -726,7 +801,6 @@ const RuleBuilderModal = ({
     conditionsValid() &&
     !keyError;
 
-  // ─── Build rule_config ───────────────────────────────────────────────────────
   // Req 3: smart type parser for value
   // Req 4: wrap array under {AND: [...]} or {OR: [...]} key
   const buildRuleConfig = () => {
@@ -738,14 +812,11 @@ const RuleBuilderModal = ({
       }));
 
       if (mapped.length === 1) {
-        // Single condition — still wrap under chosen operator per req 4
         return { [simpleLogic]: mapped };
       }
-      // Multiple conditions — wrap under chosen logic operator
       return { [simpleLogic]: mapped };
     }
 
-    // Advanced mode — deep-parse values in the group tree
     const parseGroup = (g) => {
       const logic = g.AND ? "AND" : "OR";
       return {
@@ -774,7 +845,6 @@ const RuleBuilderModal = ({
     return p;
   };
 
-  // ─── JSONB dot-fields detection ──────────────────────────────────────────────
   const hasDotFields = () => {
     const fields =
       mode === "simple"
@@ -795,7 +865,6 @@ const RuleBuilderModal = ({
 
   const dotFields = hasDotFields();
 
-  // ─── Save ────────────────────────────────────────────────────────────────────
   const execSave = async () => {
     const p = buildPayload();
     setLoading(true);
@@ -834,6 +903,43 @@ const RuleBuilderModal = ({
     execSave();
   };
 
+  const countConditions = (group) => {
+    const logic = group.AND ? "AND" : "OR";
+    return (group[logic] || []).reduce(
+      (sum, item) =>
+        sum + ("AND" in item || "OR" in item ? countConditions(item) : 1),
+      0,
+    );
+  };
+  const conditionCount =
+    mode === "simple" ? simpleConditions.length : countConditions(advancedGroup);
+  const scopeLabel =
+    form.service_scope === "AGENUSA"
+      ? "AGENUSA"
+      : form.service_scope === "NUSABILL"
+        ? "NUSABILL"
+        : "Universal";
+  const actionSummary =
+    {
+      BLOCK: {
+        icon: "bi-ban",
+        label: "Block transaction",
+        tone: "danger",
+        desc: "Transaksi langsung ditolak saat kondisi match.",
+      },
+      FLAG: {
+        icon: "bi-flag-fill",
+        label: "Flag transaction",
+        tone: "warning",
+        desc: "Transaksi tetap berhasil, alert dibuat untuk Fraud Analyst.",
+      },
+    }[form.action] || {
+      icon: "bi-flag-fill",
+      label: "Flag transaction",
+      tone: "warning",
+      desc: "Transaksi tetap berhasil, alert dibuat untuk Fraud Analyst.",
+    };
+
   if (!isOpen) return null;
 
   return (
@@ -867,7 +973,8 @@ const RuleBuilderModal = ({
         </div>
 
         <div className="rbm-body">
-          {/* ── Section 1 — Identitas ─────────────────────────────────────────── */}
+          <div className="rbm-workspace">
+            <div className="rbm-main">
           <div className="rbm-section-head">
             <div className="rbm-step-badge">1</div>
             <span>Identitas &amp; ruang lingkup aturan</span>
@@ -892,7 +999,7 @@ const RuleBuilderModal = ({
                 <label className="rbm-label">
                   Kode aturan {!isEdit && <span className="rbm-req">*</span>}
                   <span className="rbm-label-meta">
-                    (rule_key — unik, max 100 karakter)
+                    (rule_key - unik, max 100 karakter)
                   </span>
                 </label>
                 <input
@@ -925,15 +1032,16 @@ const RuleBuilderModal = ({
                 <select
                   className="rbm-select rbm-select--full"
                   value={form.service_scope}
-                  onChange={(e) => set("service_scope", e.target.value)}
+                  onChange={(e) => handleServiceScopeChange(e.target.value)}
                 >
-                  <option value="ALL">ALL — universal</option>
-                  <option value="AGENUSA">AGENUSA — Mini ATM &amp; EDC</option>
-                  <option value="NUSABILL">NUSABILL — Tagihan &amp; VA</option>
+                  <option value="ALL">ALL - universal</option>
+                  <option value="AGENUSA">AGENUSA - Mini ATM &amp; EDC</option>
+                  <option value="NUSABILL">NUSABILL - Tagihan &amp; VA</option>
                 </select>
                 <div className="rbm-field-hint">
-                  Sesuai <code>ServiceScopeEnum</code> &amp; filter{" "}
-                  <code>service_source</code> di engine.
+                  Field kondisi akan disaring sesuai layanan. Field teknis
+                  mentah tetap bisa dipakai lewat dot-notation kustom jika
+                  benar-benar dibutuhkan.
                 </div>
               </div>
 
@@ -941,20 +1049,20 @@ const RuleBuilderModal = ({
               <div className="rbm-field">
                 <label className="rbm-label">Grup aturan</label>
                 <Combobox
-                  options={RULE_GROUPS_PRESET}
+                  options={getRuleGroups(form.service_scope)}
                   value={form.rule_group}
                   onChange={(v) => set("rule_group", v)}
                   placeholder="Ketik nama grup baru..."
                 />
                 <div className="rbm-field-hint">
-                  Dipakai <code>seen_groups</code> di engine untuk cegah alarm
-                  beruntun. Pilih preset atau ketik grup baru dari backend.
+                  Preset grup mengikuti cakupan layanan. Dipakai{" "}
+                  <code>seen_groups</code> di engine untuk cegah alarm beruntun.
+                  Tetap bisa ketik grup kustom jika perlu.
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ── Section 2 — Kondisi ───────────────────────────────────────────── */}
           <div className="rbm-section-head">
             <div className="rbm-step-badge">2</div>
             <span>Penyusun kondisi risiko</span>
@@ -970,7 +1078,7 @@ const RuleBuilderModal = ({
                       <code key={f}>{f}</code>
                     ))}
                   </strong>{" "}
-                  membaca JSONB nested — dot-notation traversal sudah aktif di
+                  membaca JSONB nested - dot-notation traversal sudah aktif di
                   engine.
                 </div>
               </div>
@@ -993,7 +1101,6 @@ const RuleBuilderModal = ({
               </button>
             </div>
 
-            {/* ── Req 1: Simple mode with multi-row + global AND/OR toggle ── */}
             {mode === "simple" && (
               <div>
                 {/* Global logic operator toggle above conditions */}
@@ -1051,7 +1158,7 @@ const RuleBuilderModal = ({
                   </button>
                   <span className="rbm-field-hint">
                     Kondisi digabung dengan operator <code>{simpleLogic}</code>{" "}
-                    — valid sebagai <code>rule_config.{simpleLogic}</code>.
+                    - valid sebagai <code>rule_config.{simpleLogic}</code>.
                   </span>
                 </div>
               </div>
@@ -1067,7 +1174,6 @@ const RuleBuilderModal = ({
             )}
           </div>
 
-          {/* ── Section 3 — Konsekuensi ───────────────────────────────────────── */}
           <div className="rbm-section-head">
             <div className="rbm-step-badge">3</div>
             <span>Konsekuensi &amp; mitigasi risiko</span>
@@ -1077,7 +1183,7 @@ const RuleBuilderModal = ({
               <div className="rbm-field rbm-field--full">
                 <label className="rbm-label">
                   Tindakan mitigasi{" "}
-                  <span className="rbm-label-meta">(RuleActionEnum)</span>
+                  <span className="rbm-label-meta">(BLOCK / FLAG)</span>
                 </label>
                 <div className="rbm-action-grid">
                   {[
@@ -1088,16 +1194,10 @@ const RuleBuilderModal = ({
                       desc: "Tolak transaksi otomatis",
                     },
                     {
-                      v: "REVIEW",
-                      icon: "bi-eye",
-                      label: "REVIEW",
-                      desc: "Kirim ke Manual Review",
-                    },
-                    {
                       v: "FLAG",
                       icon: "bi-flag-fill",
                       label: "FLAG",
-                      desc: "Tandai mencurigakan",
+                      desc: "Tetap berhasil, buat alert untuk Fraud Analyst",
                     },
                   ].map((a) => (
                     <button
@@ -1170,26 +1270,26 @@ const RuleBuilderModal = ({
                       className="rbm-priority-pill pp-high"
                       onClick={() => set("priority", 100)}
                     >
-                      Tinggi · 100
+                      Tinggi - 100
                     </button>
                     <button
                       type="button"
                       className="rbm-priority-pill pp-medium"
                       onClick={() => set("priority", 50)}
                     >
-                      Sedang · 50
+                      Sedang - 50
                     </button>
                     <button
                       type="button"
                       className="rbm-priority-pill pp-low"
                       onClick={() => set("priority", 10)}
                     >
-                      Rendah · 10
+                      Rendah - 10
                     </button>
                   </div>
                 </div>
                 <div className="rbm-field-hint">
-                  Nilai lebih tinggi dieksekusi lebih awal —{" "}
+                  Nilai lebih tinggi dieksekusi lebih awal -{" "}
                   <code>order_by(priority.desc())</code>
                 </div>
               </div>
@@ -1209,17 +1309,102 @@ const RuleBuilderModal = ({
             </div>
           </div>
 
-          {/* Preview JSON */}
-          {showPreview && (
-            <div className="rbm-preview-wrap">
-              <label className="rbm-label">
-                Preview payload → <code>POST /rules/builder</code>
-              </label>
-              <pre className="rbm-preview-json">
-                {JSON.stringify(buildPayload(), null, 2)}
-              </pre>
             </div>
-          )}
+
+            <aside className="rbm-side">
+              <div className="rbm-side-card rbm-side-card--summary">
+                <div className="rbm-side-title">
+                  <i className="bi bi-clipboard-check" />
+                  Ringkasan Rule
+                </div>
+                <div className="rbm-summary-name">
+                  {form.rule_name.trim() || "Rule belum diberi nama"}
+                </div>
+                <div className="rbm-summary-key">
+                  {form.rule_key.trim() || "rule_key_otomatis"}
+                </div>
+
+                <div className="rbm-summary-list">
+                  <div className="rbm-summary-item">
+                    <span>Cakupan</span>
+                    <strong>{scopeLabel}</strong>
+                  </div>
+                  <div className="rbm-summary-item">
+                    <span>Kondisi</span>
+                    <strong>
+                      {conditionCount} kondisi -{" "}
+                      {mode === "simple" ? simpleLogic : "Nested"}
+                    </strong>
+                  </div>
+                  <div className="rbm-summary-item">
+                    <span>Severity</span>
+                    <strong>{form.severity}</strong>
+                  </div>
+                  <div className="rbm-summary-item">
+                    <span>Prioritas</span>
+                    <strong>{form.priority || 0}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className={`rbm-side-card rbm-impact rbm-impact--${actionSummary.tone}`}
+              >
+                <div className="rbm-impact-head">
+                  <i className={`bi ${actionSummary.icon}`} />
+                  <span>{actionSummary.label}</span>
+                </div>
+                <p>{actionSummary.desc}</p>
+              </div>
+
+              <div className="rbm-side-card">
+                <div className="rbm-side-title">
+                  <i className="bi bi-list-check" />
+                  Kesiapan Simpan
+                </div>
+                <div className="rbm-check-list">
+                  <div className={`rbm-check ${form.rule_name.trim() ? "ok" : ""}`}>
+                    <i
+                      className={`bi ${form.rule_name.trim() ? "bi-check-circle-fill" : "bi-circle"}`}
+                    />
+                    Nama aturan
+                  </div>
+                  <div className={`rbm-check ${form.rule_key.trim() ? "ok" : ""}`}>
+                    <i
+                      className={`bi ${form.rule_key.trim() ? "bi-check-circle-fill" : "bi-circle"}`}
+                    />
+                    Rule key
+                  </div>
+                  <div className={`rbm-check ${conditionsValid() ? "ok" : ""}`}>
+                    <i
+                      className={`bi ${conditionsValid() ? "bi-check-circle-fill" : "bi-circle"}`}
+                    />
+                    Kondisi valid
+                  </div>
+                </div>
+              </div>
+
+              <div className="rbm-side-card rbm-preview-side">
+                <button
+                  className="rbm-preview-toggle"
+                  onClick={() => setShowPreview((p) => !p)}
+                  type="button"
+                >
+                  <span>
+                    <i className="bi bi-code-slash" /> Preview Payload
+                  </span>
+                  <i
+                    className={`bi ${showPreview ? "bi-chevron-up" : "bi-chevron-down"}`}
+                  />
+                </button>
+                {showPreview && (
+                  <pre className="rbm-preview-json">
+                    {JSON.stringify(buildPayload(), null, 2)}
+                  </pre>
+                )}
+              </div>
+            </aside>
+          </div>
         </div>
 
         {/* Footer */}
@@ -1233,14 +1418,6 @@ const RuleBuilderModal = ({
             Batal
           </button>
           <div className="rbm-footer-right">
-            <button
-              className="rbm-btn-preview"
-              onClick={() => setShowPreview((p) => !p)}
-              type="button"
-            >
-              <i className="bi bi-code-slash" />{" "}
-              {showPreview ? "Tutup" : "Preview JSON"}
-            </button>
             <button
               type="button"
               className={`rbm-btn-save ${form.action === "BLOCK" ? "rbm-btn-save--block" : ""} ${loading ? "rbm-btn-save--loading" : ""}`}
@@ -1270,7 +1447,7 @@ const RuleBuilderModal = ({
               <p className="rbm-confirm-msg">
                 Aturan <strong>BLOCK</strong> menggagalkan transaksi secara
                 real-time. BLOCK rule dieksekusi engine lalu langsung{" "}
-                <code>return</code> — rules sesudahnya tidak dievaluasi.
+                <code>return</code> - rules sesudahnya tidak dievaluasi.
                 Pastikan kondisi sudah benar sebelum menyimpan.
               </p>
               <div className="rbm-confirm-actions">
@@ -1301,3 +1478,4 @@ const RuleBuilderModal = ({
 };
 
 export default RuleBuilderModal;
+

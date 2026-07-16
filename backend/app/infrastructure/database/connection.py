@@ -1,6 +1,12 @@
 from sqlalchemy import create_engine
 from app.core.config import settings
 
+if not settings.DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not configured. Set DATABASE_URL or DB_USER, "
+        "DB_PASSWORD, DB_HOST, DB_PORT, and DB_NAME in backend/.env."
+    )
+
 engine = create_engine(
     settings.DATABASE_URL,
     pool_size=10,       # Koneksi tetap di pool

@@ -1,5 +1,6 @@
 from pydantic import BaseModel, field_validator
 from typing import List, Optional, Union, Literal
+from datetime import datetime
 
 # =========================
 # PATTERN CREATE / UPDATE
@@ -24,11 +25,16 @@ class PatternRules(BaseModel):
         return v
 
 
+def normalize_pattern_action(value):
+    value = str(value or "FLAG").upper()
+    return "BLOCK" if value == "BLOCK" else "FLAG"
+
+
 class PatternCreateRequest(BaseModel):
     pattern_name: str
     pattern_category: Optional[str] = None
     service_source: Literal["ALL", "AGENUSA", "NUSABILL"] = "ALL"
-    action: Literal["FLAG", "REVIEW", "BLOCK"] = "REVIEW"
+    action: Literal["FLAG", "BLOCK"] = "FLAG"
     risk_score: int = 50
     priority: int = 1
     is_active: bool = True
@@ -40,6 +46,11 @@ class PatternCreateRequest(BaseModel):
         if not 1 <= v <= 100:
             raise ValueError("risk_score harus antara 1 dan 100")
         return v
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def action_only_block_or_review(cls, v):
+        return normalize_pattern_action(v)
 
     @field_validator("priority")
     @classmethod
@@ -53,7 +64,7 @@ class PatternUpdateRequest(BaseModel):
     pattern_name: Optional[str] = None
     pattern_category: Optional[str] = None
     service_source: Optional[Literal["ALL", "AGENUSA", "NUSABILL"]] = None
-    action: Optional[Literal["FLAG", "REVIEW", "BLOCK"]] = None
+    action: Optional[Literal["FLAG", "BLOCK"]] = None
     risk_score: Optional[int] = None
     priority: Optional[int] = None
     is_active: Optional[bool] = None
@@ -65,6 +76,13 @@ class PatternUpdateRequest(BaseModel):
         if v is not None and not 1 <= v <= 100:
             raise ValueError("risk_score harus antara 1 dan 100")
         return v
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def action_only_block_or_review(cls, v):
+        if v is None:
+            return v
+        return normalize_pattern_action(v)
 
     @field_validator("priority")
     @classmethod
@@ -83,9 +101,12 @@ class PatternResponse(BaseModel):
     risk_score: int
     priority: int
     is_active: bool
+    is_deleted: bool = False
     hit_count: int
     accuracy_score: Optional[float]
     false_positive_rate: Optional[float]
+    deleted_at: Optional[datetime] = None
+    deleted_by: Optional[int] = None
 
     class Config:
         from_attributes = True

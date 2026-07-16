@@ -1,75 +1,55 @@
+# Fraud Detection System
 
-# Fraud Detection System Using Machine Learning
+Last updated: 2026-07-13
 
-## 📌 Project Overview
-This project focuses on building a **Fraud Detection System** using **Machine Learning** techniques to identify suspicious or fraudulent transactions automatically. Traditional fraud detection methods often rely on manual checks or static rules, which become inefficient and inaccurate when transaction volumes grow.  
-By applying machine learning, this system aims to detect hidden patterns and anomalies in transaction data to improve accuracy and efficiency.
+Fraud Detection System (FDS) is a full-stack application for monitoring suspicious transactions, applying fraud rules and blacklist checks, generating alerts, supporting post-transaction fraud analyst review, producing reports, and integrating with an unsupervised ML anomaly detection module.
 
----
+The current fraud decision concept separates prevention and detection:
 
-## 🎯 Objectives
-- Detect fraudulent transactions automatically
-- Reduce manual fraud checking effort
-- Improve detection accuracy using data-driven models
-- Identify unusual transaction patterns and anomalies
+- `BLOCK`: prevention. The transaction is stopped/rejected.
+- `FLAG`: detection. The transaction still succeeds, but it is marked as suspicious and becomes reviewable by a Fraud Analyst.
 
----
+Manual review is not a transaction-hold action. It is a post-transaction workflow for checking flagged alerts and deciding whether the transaction is truly fraud or safe.
 
-## 🧠 Machine Learning Approach
-The system applies **supervised and/or unsupervised learning** techniques depending on data availability.
+## Main Roles
 
-### Common approaches used:
-- **Unsupervised Learning** (for anomaly detection)
-  - Isolation Forest
-  - K-Means Clustering
-  - Local Outlier Factor (LOF)
+- `SUPER_ADMIN`: manages admin/user accounts and ML retraining schedules.
+- `RISK_MANAGER`: manages rules, blacklist items, fraud patterns, monitoring controls, and reports.
+- `FRAUD_ANALYST`: claims alerts, reviews flagged transactions, records decisions, and provides fraud feedback.
+- `SYSTEM`: internal/background service role.
 
----
+## Tech Stack
 
-## 🗂️ Dataset Description
-The dataset consists of transaction records with features such as:
-- Transaction amount
-- Transaction time
-- User behavior patterns
-- Device or location indicators
-- Transaction frequency
+- Backend: Python, FastAPI, SQLAlchemy, PostgreSQL, JWT auth, APScheduler, ReportLab/OpenPyXL/CSV exporters.
+- Frontend: React, React Router, Chart.js, Bootstrap Icons, Axios/fetch API services.
+- ML integration: Isolation Forest runtime and retraining metadata managed through backend services.
 
-Target label:
-- `0` → Normal Transaction  
-- `1` → Fraudulent Transaction  
+## Run Locally
 
-> Note: Sensitive data is anonymized to ensure privacy and security.
+Backend:
 
----
+```powershell
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
 
-## ⚙️ System Workflow
-1. Data Collection
-2. Data Cleaning & Preprocessing
-3. Feature Engineering
-4. Model Training
-5. Model Evaluation
-6. Fraud Prediction
+Frontend:
 
----
+```powershell
+cd frontend
+npm install
+npm start
+```
 
-## 📊 Model Evaluation Metrics
-To measure model performance, the following metrics are used:
-- Accuracy
-- Precision
-- Recall
-- F1-Score
-- Confusion Matrix
+Local URLs:
 
-These metrics are important due to class imbalance commonly found in fraud datasets.
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000`
 
----
+## Main Documentation
 
-## 🛠️ Technologies Used
-- Programming Language: **Python**
-- Libraries:
-  - NumPy
-  - Pandas
-  - Scikit-learn
-  - Matplotlib / Seaborn
-- Development Environment:
-  - Jupyter Notebook / VS Code
+- `docs/FDS_PROJECT_CONTEXT.md`: complete project context.
+- `docs/BACKEND_INDIVIDUAL_REPORT.md`: backend-focused individual report, including database and API details.
+- `docs/BUSINESS_PROPOSAL_DIAGRAM.md`: editable Mermaid recreation of the business proposal diagram and implementation mapping.
+- `backend/app/infrastructure/database/schema.sql`: database schema reference.

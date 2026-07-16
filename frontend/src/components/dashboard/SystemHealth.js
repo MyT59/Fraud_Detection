@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import "./SystemHealth.css";
 
 const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
@@ -73,6 +73,7 @@ const SystemHealth = () => {
   const [lastUpdate, setLastUpdate] = useState(new Date().toLocaleTimeString());
   const [uptime] = useState("99.98%");
   const [isChecking, setIsChecking] = useState(false);
+  const isCheckingRef = useRef(false);
 
   const pingEndpoint = async (endpoint) => {
     const start = performance.now();
@@ -106,7 +107,8 @@ const SystemHealth = () => {
   };
 
   const checkAll = useCallback(async () => {
-    if (isChecking) return;
+    if (isCheckingRef.current) return;
+    isCheckingRef.current = true;
     setIsChecking(true);
 
     setServices((prev) => prev.map((s) => ({ ...s, status: "checking" })));
@@ -134,14 +136,15 @@ const SystemHealth = () => {
     );
 
     setLastUpdate(new Date().toLocaleTimeString());
+    isCheckingRef.current = false;
     setIsChecking(false);
-  }, [isChecking]);
+  }, []);
 
   useEffect(() => {
     checkAll();
     const interval = setInterval(checkAll, PING_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, []);
+  }, [checkAll]);
 
   const operational = services.filter((s) => s.status === "operational").length;
   const degraded = services.filter((s) => s.status === "degraded").length;

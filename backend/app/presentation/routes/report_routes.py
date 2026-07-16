@@ -1,5 +1,6 @@
 from pathlib import Path
 from uuid import UUID
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -15,8 +16,11 @@ from app.infrastructure.database.enums import (
     SeverityLevelEnum,
     EventSourceEnum,
 )
+from app.infrastructure.database.models.admin_model import Admin
+from app.infrastructure.database.models.role_model import Role
 from app.core.rbac import require_roles
 from app.presentation.schemas.report_schema import (
+    FraudAnalystOptionResponse,
     ReportGenerateRequest,
     ReportPaginatedResponse,
     ReportResponse,
@@ -33,7 +37,7 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 def generate_report(
     payload: ReportGenerateRequest,
     db: Session = Depends(get_db),
-    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST")),
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")),
 ):
     try:
         service = ReportService(db)
@@ -62,6 +66,7 @@ def generate_report(
             service_scope=payload.service_scope,
             is_active=payload.is_active,
             source=payload.source,
+            reviewer_id=payload.reviewer_id,
         )
 
         log_activity(
@@ -86,8 +91,32 @@ def generate_report(
 
         return report
 
+    except HTTPException:
+        raise
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==========================================
+# REPORT HISTORY
+# ==========================================
+@router.get("/fraud-analysts", response_model=list[FraudAnalystOptionResponse])
+def get_fraud_analysts_for_report(
+    db: Session = Depends(get_db),
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")),
+):
+    return (
+        db.query(Admin)
+        .join(Role, Admin.role_id == Role.id)
+        .filter(
+            Role.role_name == "FRAUD_ANALYST",
+            Admin.is_active == True,
+            Admin.is_deleted == False,
+        )
+        .order_by(Admin.full_name.asc())
+        .all()
+    )
 
 
 # ==========================================
@@ -100,7 +129,7 @@ def get_reports(
     page: int = 1,
     limit: int = 20,
     db: Session = Depends(get_db),
-    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST")),
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")),
 ):
     repo = ReportRepository(db)
 
@@ -126,7 +155,7 @@ def get_reports(
 def get_report_detail(
     report_id: UUID,
     db: Session = Depends(get_db),
-    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST")),
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")),
 ):
     repo = ReportRepository(db)
     report = repo.get_by_id(report_id)
@@ -144,7 +173,7 @@ def get_report_detail(
 def download_report(
     report_id: UUID,
     db: Session = Depends(get_db),
-    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST")),
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")),
 ):
     repo = ReportRepository(db)
     report = repo.get_by_id(report_id)
@@ -196,7 +225,7 @@ def download_report(
 def download_report_raw(
     report_id: UUID,
     db: Session = Depends(get_db),
-    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST")),
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")),
 ):
     """Serve file lokal langsung — hanya dipakai saat Supabase tidak aktif (fallback)."""
     repo = ReportRepository(db)
@@ -221,3 +250,40 @@ def download_report_raw(
         filename=f"{report.report_name}.{extension}",
         media_type=media_type_map.get(extension, "application/octet-stream"),
     )
+
+
+# ==========================================
+# SOFT DELETE REPORT
+# ==========================================
+@router.delete("/{report_id}")
+def delete_report(
+    report_id: UUID,
+    db: Session = Depends(get_db),
+    current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER")),
+):
+    repo = ReportRepository(db)
+    report = repo.get_by_id(report_id)
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    report.is_deleted = True
+    report.deleted_at = datetime.now(timezone.utc)
+    report.deleted_by = current_admin.id
+
+    log_activity(
+        db=db,
+        admin=current_admin,
+        action_type=ActivityActionEnum.REPORT_DELETED,
+        module_source=EventSourceEnum.REPORTS,
+        severity=SeverityLevelEnum.WARNING,
+        target_type="REPORT",
+        target_id=str(report.id),
+        details={
+            "report_name": report.report_name,
+            "reason": "Soft deleted by administrator",
+        },
+    )
+
+    db.commit()
+    return {"message": "Report soft deleted"}

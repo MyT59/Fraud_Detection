@@ -15,6 +15,11 @@ from app.core.logging import get_logger, log_performance
 logger = get_logger(__name__)
 
 
+def normalize_rule_action(action):
+    action = str(action or "FLAG").upper()
+    return "BLOCK" if action == "BLOCK" else "FLAG"
+
+
 # =========================
 # SIMPLE RULE (LEGACY)
 # =========================
@@ -96,7 +101,8 @@ def evaluate_json_rule(config, trx):
 
 def calculate_rule_score(rule):
     base_score = {"CRITICAL": 35, "HIGH": 22, "MEDIUM": 15, "LOW": 6}.get(rule.severity, 15)
-    action_multiplier = {"BLOCK": 1.5, "REVIEW": 1.2, "FLAG": 1.0}.get(rule.action, 1.0)
+    action = normalize_rule_action(rule.action)
+    action_multiplier = {"BLOCK": 1.5, "FLAG": 1.2}.get(action, 1.0)
     return int(base_score * action_multiplier)
 
 
@@ -143,8 +149,9 @@ def run_rule_engine(db, trx):
         seen_groups.add(group)
         rule.hit_count = (rule.hit_count or 0) + 1
 
+        action = normalize_rule_action(rule.action)
         violations.append({"type": "RULE", "name": rule.rule_name, "rule_id": rule.id})
-        rule_actions.append(rule.action)
+        rule_actions.append(action)
         rule_hit_count += 1
         rule_groups.add(group)
 
@@ -167,7 +174,7 @@ def run_rule_engine(db, trx):
             details={
                 "rule_id":      rule.id,
                 "rule_name":    rule.rule_name,
-                "action_taken": rule.action,
+                "action_taken": action,
                 "amount":       float(trx.amount) if hasattr(trx, "amount") else None
             }
         )
@@ -177,7 +184,7 @@ def run_rule_engine(db, trx):
         risk_score    += weighted_score
 
         # BLOCK: return langsung, commit di process_transaction()
-        if rule.action == "BLOCK":
+        if action == "BLOCK":
             return violations, risk_score, rule_actions
 
     if rule_hit_count >= 2: risk_score += 10

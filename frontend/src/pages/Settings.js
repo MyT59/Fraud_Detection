@@ -9,12 +9,7 @@ import "./Settings.css";
 import PageLoader from "../components/common/PageLoader";
 import api, { storage } from "../services/apiService";
 import { authService } from "../services/AuthService"; // 2705 FIX
-
-const ROLE_LABEL = {
-  SUPER_ADMIN: "Super Admin",
-  RISK_MANAGER: "Risk Manager",
-  FRAUD_ANALYST: "Fraud Analyst",
-};
+import { getRoleLabel } from "../utils/roleUi";
 
 const Settings = () => {
   const [loading, setLoading] = useState(true);
@@ -27,7 +22,7 @@ const Settings = () => {
     return {
       name: u?.full_name || "Admin User",
       email: u?.email || "",
-      role: ROLE_LABEL[u?.role] || u?.role || "Administrator",
+      role: getRoleLabel(u?.role),
       department: u?.department || "",
       phone: u?.phone_number || "",
       avatar: null,
@@ -56,7 +51,7 @@ const Settings = () => {
         const updated = {
           name: data.full_name || "",
           email: data.email || "",
-          role: ROLE_LABEL[data.role] || data.role || "Administrator",
+          role: getRoleLabel(data.role),
           department: data.department || "",
           phone: data.phone_number || "",
           avatar: null,
@@ -84,7 +79,7 @@ const Settings = () => {
       const updated = {
         name: data.full_name || formData.name,
         email: data.email || formData.email,
-        role: ROLE_LABEL[data.role] || data.role || formData.role,
+        role: getRoleLabel(data.role) || formData.role,
         department: data.department || formData.department,
         phone: data.phone_number || formData.phone,
         avatar: null,

@@ -234,7 +234,7 @@ async def manual_input_agenusa(payload: dict, db: Session) -> dict:
         "amount":          float(trx.amount),
         "risk_score":      trx.risk_score,
         "risk_level":      trx.risk_level,
-        "final_status":    trx.final_status.value if trx.final_status else "PENDING",
+        "final_status":    trx.final_status.value if trx.final_status else "FLAGGED",
         "anomaly_injected": anomaly,
         "ml_triggered":    True,
     }
@@ -277,7 +277,7 @@ async def manual_input_nusabill(payload: dict, db: Session) -> dict:
         "amount":          float(trx.amount),
         "risk_score":      trx.risk_score,
         "risk_level":      trx.risk_level,
-        "final_status":    trx.final_status.value if trx.final_status else "PENDING",
+        "final_status":    trx.final_status.value if trx.final_status else "FLAGGED",
         "anomaly_injected": anomaly,
         "ml_triggered":    True,
     }

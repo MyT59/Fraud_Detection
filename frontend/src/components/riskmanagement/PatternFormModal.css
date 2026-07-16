@@ -71,13 +71,13 @@
 .pfm-header-icon {
   width: 42px;
   height: 42px;
-  background: #f0fdf4;
+  background: #fef2f2;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.25rem;
-  color: #16a34a;
+  color: #dc2626;
 }
 
 .pfm-header-title {
@@ -191,8 +191,8 @@
 
 .pfm-input:focus,
 .pfm-select:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.09);
 }
 
 .pfm-field-hint {
@@ -230,9 +230,9 @@
 }
 
 .pfm-logic-tab--or.active {
-  border-color: #ec4899;
-  background: #fdf2f8;
-  color: #be185d;
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .pfm-logic-desc {
@@ -357,7 +357,7 @@
 
 .pfm-range {
   flex: 1;
-  accent-color: #3b82f6;
+  accent-color: #dc2626;
   cursor: pointer;
 }
 
@@ -457,8 +457,9 @@
 }
 
 .pfm-cond-row {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) 78px minmax(140px, 1.3fr) minmax(130px, 0.9fr) 34px;
+  align-items: start;
   gap: 10px;
   background: #f8fafc;
   padding: 12px;
@@ -468,21 +469,17 @@
 
 /* 1. Alokasi Dropdown Pilihan Indikator/Field */
 .pfm-cond-row > select.pfm-select:first-child {
-  flex: 2; /* Mengambil 2 bagian ruang */
-  min-width: 220px; /* Batas aman teks judul metrik */
+  min-width: 0;
 }
 
 /* 2. Alokasi Dropdown Operator (==, >=, dll) */
 .pfm-cond-row .pfm-select--op {
-  flex: 0 0 75px; /* Lebar statis kaku, tidak boleh mengecil */
   text-align: center;
   font-weight: 700;
 }
 
 /* 3. Alokasi Pembungkus Input Nilai (Value) - DI-BOOST AGAR LUAS */
 .pfm-cond-row .pfm-val-wrap {
-  flex: 1.5; /* Di-boost ruangnya agar melebar otomatis */
-  min-width: 140px; /* Jaminan ruang agar angka nominal puluhan juta muat & kelihatan */
   display: flex;
 }
 
@@ -496,7 +493,6 @@
 
 /* 4. Alokasi Tombol Hapus */
 .pfm-cond-row .pfm-remove-btn {
-  flex: 0 0 34px; /* Ukuran tetap di ujung kanan */
   background: #fef2f2;
   border: 1px solid #fee2e2;
   color: #ef4444;
@@ -508,6 +504,33 @@
   cursor: pointer;
   font-size: 1.2rem;
   transition: all 0.15s ease;
+}
+
+.pfm-cond-meta {
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.pfm-cond-meta span {
+  color: #6b7280;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.pfm-cond-meta code {
+  color: #b91c1c;
+  font-size: 0.68rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pfm-remove-btn:hover {
@@ -525,7 +548,7 @@
 .pfm-add-btn {
   background: #fff;
   border: 1px dashed #cbd5e1;
-  color: #2563eb;
+  color: #dc2626;
   padding: 8px 14px;
   border-radius: 8px;
   font-size: 0.8rem;
@@ -538,8 +561,8 @@
 }
 
 .pfm-add-btn:hover {
-  background: #eff6ff;
-  border-color: #3b82f6;
+  background: #fef2f2;
+  border-color: #dc2626;
 }
 
 /* ─── Live JSON Payload Preview Box (NEW) ───────────────────────────────────── */
@@ -617,7 +640,7 @@
 }
 
 .pfm-btn-save {
-  background: #2563eb;
+  background: #dc2626;
   border: none;
   color: #fff;
   padding: 9px 20px;
@@ -629,7 +652,7 @@
 }
 
 .pfm-btn-save:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: #b91c1c;
 }
 
 .pfm-btn-save:disabled {
@@ -707,4 +730,26 @@
 .pfm-confirm-actions .pfm-btn-save {
   flex: 1;
   justify-content: center;
+}
+
+@media (max-width: 760px) {
+  .pfm-box {
+    max-width: 100%;
+  }
+
+  .pfm-grid,
+  .pfm-action-grid,
+  .pfm-cond-row {
+    grid-template-columns: 1fr;
+  }
+
+  .pfm-field--full {
+    grid-column: 1;
+  }
+
+  .pfm-footer,
+  .pfm-footer-right {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }

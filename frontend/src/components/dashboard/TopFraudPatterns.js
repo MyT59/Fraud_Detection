@@ -14,68 +14,10 @@ const TREND_MAP = {
   stable: { class: "trend-stable", icon: "bi-dash", label: "0%" },
 };
 
-const DEFAULT_PATTERNS = [
-  {
-    id: 1,
-    pattern: "Multiple Failed Logins",
-    description: "Brute force credential attempts detected",
-    examples: ["5+ attempts", "Same IP", "Short interval"],
-    occurrences: 156,
-    riskLevel: "high",
-    trend: "up",
-  },
-  {
-    id: 2,
-    pattern: "Unusual Transaction Amount",
-    description: "Transaction significantly above user average",
-    examples: [">3x avg", "New merchant", "Single session"],
-    occurrences: 98,
-    riskLevel: "high",
-    trend: "up",
-  },
-  {
-    id: 3,
-    pattern: "Location Mismatch",
-    description: "Different from user's registered profile location",
-    examples: ["New city", "Foreign IP", "VPN detected"],
-    occurrences: 87,
-    riskLevel: "medium",
-    trend: "stable",
-  },
-  {
-    id: 4,
-    pattern: "Rapid Successive Transactions",
-    description: "Multiple transactions within a short time window",
-    examples: ["<2 min gap", "Same merchant", "Velocity breach"],
-    occurrences: 65,
-    riskLevel: "medium",
-    trend: "down",
-  },
-  {
-    id: 5,
-    pattern: "New Device Detected",
-    description: "Transaction from a previously unseen device",
-    examples: ["Unknown UA", "New fingerprint", "No history"],
-    occurrences: 54,
-    riskLevel: "low",
-    trend: "stable",
-  },
-  {
-    id: 6,
-    pattern: "Unusual Time of Day",
-    description: "Activity during abnormal hours for this user",
-    examples: ["2AM–4AM", "Outside pattern", "Dormant account"],
-    occurrences: 43,
-    riskLevel: "low",
-    trend: "down",
-  },
-];
-
 const TopFraudPatterns = ({ patterns }) => {
   const navigate = useNavigate();
 
-  const fraudPatterns =
-    patterns && patterns.length > 0 ? patterns : DEFAULT_PATTERNS;
+  const fraudPatterns = Array.isArray(patterns) ? patterns : [];
 
   return (
     <div className="fraud-patterns-card">
@@ -118,7 +60,25 @@ const TopFraudPatterns = ({ patterns }) => {
         className="patterns-list"
         style={{ maxHeight: 420, overflowY: "auto", flex: "none" }}
       >
-        {fraudPatterns.map((p, i) => {
+        {fraudPatterns.length === 0 ? (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "40px 24px",
+              color: "#9ca3af",
+              gap: 8,
+            }}
+          >
+            <i className="bi bi-bug" style={{ fontSize: "2rem", opacity: 0.4 }}></i>
+            <p style={{ margin: 0, fontSize: "0.875rem" }}>
+              No fraud patterns detected yet
+            </p>
+          </div>
+        ) : (
+          fraudPatterns.map((p, i) => {
           const iconCfg = ICON_MAP[p.riskLevel] || ICON_MAP.low;
           const trendCfg = TREND_MAP[p.trend] || TREND_MAP.stable;
 
@@ -171,7 +131,8 @@ const TopFraudPatterns = ({ patterns }) => {
               </div>
             </div>
           );
-        })}
+          })
+        )}
       </div>
 
       <div className="patterns-footer">
@@ -186,7 +147,7 @@ const TopFraudPatterns = ({ patterns }) => {
           </span>
           <span className="legend-item">
             <i className="bi bi-circle-fill severity-low"></i>
-            Low Risk
+            Safe
           </span>
         </div>
       </div>

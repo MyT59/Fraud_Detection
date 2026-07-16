@@ -310,7 +310,7 @@ const ReviewFilter = ({ transactions = [], children }) => {
         }}
       >
         <span className="section-title">
-          <i className="bi bi-table"></i>Flagged Transactions
+          <i className="bi bi-table"></i>Flagged for Review
         </span>
         <span className="section-count-badge">
           {filtered.length} / {transactions.length}

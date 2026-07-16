@@ -21,10 +21,14 @@ class BlacklistResponse(BaseModel):
     reason: str
     review_note: str | None = None
     is_active: bool
+    is_deleted: bool = False
     source: str        
     status: str 
     hit_count: int
     created_at: datetime
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
+    deleted_by: int | None = None
     added_by: int | None = None
     added_by_name: str | None = None   # nama admin yang menambahkan
     added_by_role: str | None = None   # role admin yang menambahkan

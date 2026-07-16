@@ -5,8 +5,8 @@ import pandas as pd
 import json
 import shutil
 import uuid
-import os
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 from sqlalchemy.orm import Session
@@ -127,13 +127,21 @@ class RetrainService:
     # ==========================================
     @log_performance
     def get_all_schedules(self) -> List[RetrainSchedule]:
-        return self.db.query(RetrainSchedule).order_by(RetrainSchedule.created_at.desc()).all()
+        return (
+            self.db.query(RetrainSchedule)
+            .filter(RetrainSchedule.is_deleted == False)
+            .order_by(RetrainSchedule.created_at.desc())
+            .all()
+        )
     
     @log_performance
     def get_schedule_by_id(self, schedule_id: uuid.UUID) -> Optional[RetrainSchedule]:
         return (
             self.db.query(RetrainSchedule)
-            .filter(RetrainSchedule.id == schedule_id)
+            .filter(
+                RetrainSchedule.id == schedule_id,
+                RetrainSchedule.is_deleted == False,
+            )
             .first()
         )
 
@@ -163,7 +171,7 @@ class RetrainService:
 
     @log_performance
     def update_schedule(self, schedule_id: uuid.UUID, data: Dict[str, Any], admin_id: int) -> Optional[RetrainSchedule]:
-        schedule = self.db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
+        schedule = self.get_schedule_by_id(schedule_id)
         if not schedule:
             return None
 
@@ -185,7 +193,7 @@ class RetrainService:
 
     @log_performance
     def toggle_schedule_status(self, schedule_id: uuid.UUID, is_active: bool, admin_id: int) -> Optional[RetrainSchedule]:
-        schedule = self.db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
+        schedule = self.get_schedule_by_id(schedule_id)
         if not schedule:
             return None
 
@@ -205,19 +213,22 @@ class RetrainService:
 
     @log_performance
     def delete_schedule(self, schedule_id: uuid.UUID, admin_id: int) -> bool:
-        schedule = self.db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
+        schedule = self.get_schedule_by_id(schedule_id)
         if not schedule:
             return False
 
         name_copy = schedule.name
-        self.db.delete(schedule)
+        schedule.is_active = False
+        schedule.is_deleted = True
+        schedule.deleted_at = datetime.now(timezone.utc)
+        schedule.deleted_by = admin_id
 
         self._log_activity(
             admin_id=admin_id,
             action="DELETE_RETRAIN_SCHEDULE",
             target_type="RETRAIN_SCHEDULE",
             target_id=schedule_id,
-            details=f"Menghapus jadwal retrain: {name_copy}"
+            details=f"Soft delete jadwal retrain: {name_copy}"
         )
 
         self.db.commit()

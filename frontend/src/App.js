@@ -27,6 +27,7 @@ import RetrainSchedule from "./pages/RetrainSchedule";
 import ChangePassword from "./pages/ChangePassword";
 import Login from "./pages/Login";
 import PageLoader from "./components/common/PageLoader";
+import { getRoleLabel } from "./utils/roleUi";
 import "./App.css";
 
 // ─── Token Validator ──────────────────────────────────────────────
@@ -98,6 +99,8 @@ const ChangePasswordGuard = () => {
 const RoleGuard = ({ allowedRoles, children }) => {
   const user = storage.getUser();
   const role = user?.role || null;
+  const allowedRoleLabels = allowedRoles.map(getRoleLabel).join(", ");
+  const currentRoleLabel = role ? getRoleLabel(role) : "tidak diketahui";
 
   if (!allowedRoles.includes(role)) {
     return (
@@ -143,25 +146,45 @@ const RoleGuard = ({ allowedRoles, children }) => {
         </h2>
         <p style={{ fontSize: ".9rem", maxWidth: 360, margin: 0 }}>
           Halaman ini hanya dapat diakses oleh:{" "}
-          <strong>{allowedRoles.join(", ")}</strong>.<br />
-          Role Anda saat ini: <strong>{role || "tidak diketahui"}</strong>.
+          <strong>{allowedRoleLabels}</strong>.<br />
+          Role Anda saat ini: <strong>{currentRoleLabel}</strong>.
         </p>
-        <button
-          onClick={() => window.history.back()}
-          style={{
-            padding: ".5rem 1.25rem",
-            border: "1px solid #e5e7eb",
-            borderRadius: "8px",
-            background: "#fff",
-            color: "#374151",
-            fontWeight: 600,
-            fontSize: ".875rem",
-            cursor: "pointer",
-          }}
-        >
-          <i className="bi bi-arrow-left" style={{ marginRight: 6 }} />
-          Kembali
-        </button>
+        <div style={{ display: "flex", gap: ".6rem", flexWrap: "wrap" }}>
+          <button
+            onClick={() => window.history.back()}
+            style={{
+              padding: ".5rem 1.25rem",
+              border: "1px solid #e5e7eb",
+              borderRadius: "8px",
+              background: "#fff",
+              color: "#374151",
+              fontWeight: 600,
+              fontSize: ".875rem",
+              cursor: "pointer",
+            }}
+          >
+            <i className="bi bi-arrow-left" style={{ marginRight: 6 }} />
+            Kembali
+          </button>
+          <button
+            onClick={() => {
+              window.location.href = "/dashboard";
+            }}
+            style={{
+              padding: ".5rem 1.25rem",
+              border: "1px solid #fecaca",
+              borderRadius: "8px",
+              background: "#dc2626",
+              color: "#fff",
+              fontWeight: 600,
+              fontSize: ".875rem",
+              cursor: "pointer",
+            }}
+          >
+            <i className="bi bi-speedometer2" style={{ marginRight: 6 }} />
+            Ke Dashboard
+          </button>
+        </div>
       </div>
     );
   }
@@ -221,7 +244,16 @@ function App() {
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/transactions" element={<Transactions />} />
                       <Route path="/analytics" element={<Analytics />} />
-                      <Route path="/reports" element={<Reports />} />
+                      <Route
+                        path="/reports"
+                        element={
+                          <RoleGuard
+                            allowedRoles={["SUPER_ADMIN", "RISK_MANAGER"]}
+                          >
+                            <Reports />
+                          </RoleGuard>
+                        }
+                      />
                       <Route path="/settings" element={<Settings />} />
                       <Route path="/alerts" element={<AlertsLog />} />
                       <Route

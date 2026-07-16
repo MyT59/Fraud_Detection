@@ -359,9 +359,19 @@ class TransactionRepository:
             )
 
         if final_status:
-            query = query.filter(
-                Transaction.final_status == final_status
-            )
+            final_status_value = getattr(final_status, "value", final_status)
+            if str(final_status_value).upper() == "FLAGGED":
+                query = query.filter(
+                    Transaction.final_status.in_([
+                        TransactionStatusEnum.FLAGGED,
+                        TransactionStatusEnum.PENDING,
+                        TransactionStatusEnum.UNDER_REVIEW,
+                    ])
+                )
+            else:
+                query = query.filter(
+                    Transaction.final_status == final_status
+                )
 
         if risk_level:
             query = query.filter(
@@ -434,11 +444,14 @@ class TransactionRepository:
             or 0
         )
 
-        under_review = (
+        flagged = (
             self.db.query(func.count(Transaction.id))
             .filter(
-                Transaction.final_status ==
-                TransactionStatusEnum.UNDER_REVIEW
+                Transaction.final_status.in_([
+                    TransactionStatusEnum.FLAGGED,
+                    TransactionStatusEnum.PENDING,
+                    TransactionStatusEnum.UNDER_REVIEW,
+                ])
             )
             .scalar()
             or 0
@@ -457,6 +470,7 @@ class TransactionRepository:
         return {
             "total_transactions": total,
             "fraud": fraud,
-            "under_review": under_review,
+            "flagged": flagged,
+            "under_review": flagged,
             "safe": safe,
         }

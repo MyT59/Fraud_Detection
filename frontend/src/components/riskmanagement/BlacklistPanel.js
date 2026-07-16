@@ -56,9 +56,9 @@ const TYPE_CONFIG = {
 };
 
 const STATUS_CONFIG = {
-  active: { label: "Aktif Blokir", cls: "st-active" },
-  pending: { label: "Pending", cls: "st-pending" },
-  inactive: { label: "Nonaktif", cls: "st-inactive" },
+  active: { label: "Active", cls: "st-active" },
+  pending: { label: "Needs Review", cls: "st-pending" },
+  inactive: { label: "Inactive", cls: "st-inactive" },
 };
 
 const ColumnDropdown = ({ options, value, onChange, label, anchor }) => {
@@ -195,8 +195,8 @@ const DeleteConfirmModal = ({ item, onCancel, onConfirm }) => {
           <strong className="blp-del-acct">{item.accountNumber}</strong> atas
           dengan identifier{" "}
           <strong className="blp-mono">{item.accountNumber}</strong> akan{" "}
-          <strong>terhapus secara permanen</strong> dan tidak dapat
-          dikembalikan.
+          <strong>dihapus dari daftar blacklist aktif</strong>. Data tetap
+          disimpan sebagai arsip sistem.
         </p>
         <div className="blp-del-warning">
           <i className="bi bi-shield-exclamation" />
@@ -207,7 +207,7 @@ const DeleteConfirmModal = ({ item, onCancel, onConfirm }) => {
             <i className="bi bi-arrow-left" /> Batal
           </button>
           <button className="blp-del-btn-confirm" onClick={onConfirm}>
-            <i className="bi bi-trash3-fill" /> Ya, Hapus Permanen
+            <i className="bi bi-trash3-fill" /> Ya, Hapus dari Daftar Aktif
           </button>
         </div>
       </div>
@@ -241,9 +241,17 @@ const BlacklistPanel = ({
 
   const STATUS_OPTIONS = [
     { value: "all", label: "Semua Status", icon: "bi-funnel" },
-    { value: "active", label: "Aktif Blokir", icon: "bi-record-circle-fill" },
-    { value: "pending", label: "Pending", icon: "bi-clock-fill" },
-    { value: "inactive", label: "Nonaktif", icon: "bi-dash-circle" },
+    {
+      value: "active",
+      label: "Active",
+      icon: "bi-record-circle-fill",
+    },
+    { value: "pending", label: "Needs Review", icon: "bi-clock-fill" },
+    {
+      value: "inactive",
+      label: "Inactive",
+      icon: "bi-dash-circle",
+    },
   ];
 
   const filtered = useMemo(() => {
@@ -447,7 +455,7 @@ const BlacklistPanel = ({
                   <td colSpan={8}>
                     <div className="blp-empty">
                       <i className="bi bi-shield-slash" />
-                      <p>Tidak ada data blacklist ditemukan.</p>
+                      <p>Belum ada data blacklist sesuai filter.</p>
                     </div>
                   </td>
                 </tr>
@@ -592,7 +600,7 @@ const BlacklistPanel = ({
         <div className="blp-pagination">
           <span>
             {filtered.length === 0
-              ? "Tidak ada data"
+              ? "Belum ada data"
               : `${Math.min((safePage - 1) * PAGE_SIZE + 1, filtered.length)}–${Math.min(safePage * PAGE_SIZE, filtered.length)} dari ${filtered.length}`}
           </span>
           <div className="blp-pg-btns">

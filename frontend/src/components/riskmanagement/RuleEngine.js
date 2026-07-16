@@ -18,14 +18,9 @@ const ACTION_CONFIG = {
     condCls: "cond-flag",
     order: 2,
   },
-  review: {
-    label: "REVIEW",
-    cls: "act-review",
-    icon: "bi-clipboard-check",
-    condCls: "cond-review",
-    order: 3,
-  },
 };
+
+const normalizeAction = (action) => (action === "block" ? "block" : "flag");
 
 const getPriorityCls = (p) => (p <= 3 ? "p-high" : p <= 6 ? "p-med" : "p-low");
 
@@ -234,7 +229,7 @@ const RuleEngine = ({
         (!q ||
           r.name.toLowerCase().includes(q) ||
           (r.description || "").toLowerCase().includes(q)) &&
-        (!filterAction || r.action === filterAction),
+        (!filterAction || normalizeAction(r.action) === filterAction),
     );
     if (sortKey === "priority" && sortPDir) {
       result = [...result].sort((a, b) =>
@@ -273,8 +268,8 @@ const RuleEngine = ({
             </span>
           </span>
           <span className="re-subtitle">
-            Transaksi yang cocok akan otomatis diblokir, diflag, atau dikirim ke
-            Manual Review
+            Transaksi yang cocok akan otomatis diblokir atau ditandai untuk
+            review post-transaction
           </span>
         </div>
         <div className="re-toolbar-right">
@@ -404,11 +399,6 @@ const RuleEngine = ({
                   {[
                     { val: "block", label: "Blokir", icon: "bi-ban" },
                     { val: "flag", label: "Flag", icon: "bi-flag-fill" },
-                    {
-                      val: "review",
-                      label: "Review",
-                      icon: "bi-clipboard-check",
-                    },
                   ].map((o) => (
                     <button
                       key={o.val}
@@ -522,7 +512,7 @@ const RuleEngine = ({
                     ) : (
                       <>
                         <i className="bi bi-gear" />
-                        <p>Belum ada rule. Tambah rule pertama kamu.</p>
+                        <p>Belum ada rule. Tambahkan rule pertama untuk layanan ini.</p>
                       </>
                     )}
                   </div>
@@ -530,7 +520,7 @@ const RuleEngine = ({
               </tr>
             ) : (
               rows.map((rule) => {
-                const act = ACTION_CONFIG[rule.action] || ACTION_CONFIG.flag;
+                const act = ACTION_CONFIG[normalizeAction(rule.action)];
                 const displayHit = getHit(rule, hitField);
                 return (
                   <tr
@@ -634,7 +624,7 @@ const RuleEngine = ({
       <div className="re-pagination">
         <span>
           {processed.length === 0
-            ? "Tidak ada data"
+            ? "Belum ada data"
             : `${Math.min((safePage - 1) * PAGE_SIZE + 1, processed.length)}–${Math.min(
                 safePage * PAGE_SIZE,
                 processed.length,

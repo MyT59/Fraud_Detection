@@ -10,8 +10,16 @@ import React from "react";
 // Sesuai enum BE: SAFE | FRAUD
 
 const DECISION_META = {
-  SAFE: { icon: "bi-check-circle-fill", label: "SAFE", cls: "approved" },
-  FRAUD: { icon: "bi-x-circle-fill", label: "FRAUD", cls: "rejected" },
+  SAFE: {
+    icon: "bi-check-circle-fill",
+    label: "Transaction Success",
+    cls: "approved",
+  },
+  FRAUD: {
+    icon: "bi-x-circle-fill",
+    label: "Transaction Rejected",
+    cls: "rejected",
+  },
 };
 
 export const DecisionBadge = ({ decision }) => {
@@ -67,7 +75,7 @@ export const OverridableIndicator = ({ onClick }) => (
       e.stopPropagation();
       onClick();
     }}
-    title="Kelola di Manual Review (Override / Delete)"
+    title="Kelola di Reviewer Operations (Override / Delete)"
     style={{
       display: "inline-flex",
       alignItems: "center",

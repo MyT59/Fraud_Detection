@@ -29,8 +29,11 @@ class ScheduleResponse(BaseModel):
     cron_expr: str
     domain: str
     is_active: bool
+    is_deleted: bool = False
     created_at: datetime
     updated_at: datetime
+    deleted_at: Optional[datetime] = None
+    deleted_by: Optional[int] = None
     
     # 🔥 TAMBAHAN BARU: Kirim status terakhir ke Frontend
     last_run_at: Optional[datetime] = None

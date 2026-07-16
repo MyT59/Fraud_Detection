@@ -164,7 +164,7 @@ def generate_patterns_from_reviews(db):
                 "pattern_category": "VELOCITY",
                 "pattern_rules": {"logic": "AND", "time_window_minutes": TIME_WINDOW,
                     "conditions": [{"field": "tx_count", "operator": ">=", "value": threshold}]},
-                "risk_score": 40, "action": "REVIEW", "service_source": srv
+                "risk_score": 40, "action": "FLAG", "service_source": srv
             })
 
     for (srv, threshold, _), count in amount_counter.items():
@@ -174,7 +174,7 @@ def generate_patterns_from_reviews(db):
                 "pattern_category": "AMOUNT",
                 "pattern_rules": {"logic": "AND",
                     "conditions": [{"field": "amount", "operator": ">=", "value": threshold}]},
-                "risk_score": 50, "action": "REVIEW", "service_source": srv
+                "risk_score": 50, "action": "FLAG", "service_source": srv
             })
 
     for (ptype, srv, threshold), count in network_counter.items():
@@ -260,7 +260,7 @@ def save_generated_patterns(db, patterns, source=PatternSourceEnum.MANUAL_CREATE
             pattern_rules    = rules,
             rules_hash       = rules_hash,
             risk_score       = risk,
-            action           = p.get("action", "REVIEW"),
+            action           = "BLOCK" if str(p.get("action", "FLAG")).upper() == "BLOCK" else "FLAG",
             service_source   = service,
             priority         = auto_priority,
             pattern_source   = source,

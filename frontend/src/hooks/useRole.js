@@ -16,7 +16,7 @@ const useRole = () => {
       isFraudAnalyst: role === "FRAUD_ANALYST",
       isRiskManager: role === "RISK_MANAGER",
       isSuperAdmin: role === "SUPER_ADMIN",
-      canReview: role === "FRAUD_ANALYST" || role === "SUPER_ADMIN",
+      canReview: role === "FRAUD_ANALYST",
       canManage: role === "RISK_MANAGER" || role === "SUPER_ADMIN",
       canViewAnalytics: role === "RISK_MANAGER" || role === "SUPER_ADMIN",
       canOverride: role === "RISK_MANAGER" || role === "SUPER_ADMIN",

@@ -8,13 +8,21 @@ const SOURCE_CONFIG = {
 };
 
 const STATUS_CONFIG = {
-  active: { label: "Aktif Blokir", cls: "st-active", icon: "bi-shield-fill-x" },
+  active: {
+    label: "Active",
+    cls: "st-active",
+    icon: "bi-shield-fill-x",
+  },
   pending: {
-    label: "Menunggu Verifikasi",
+    label: "Needs Review",
     cls: "st-pending",
     icon: "bi-hourglass-split",
   },
-  inactive: { label: "Nonaktif", cls: "st-inactive", icon: "bi-shield-slash" },
+  inactive: {
+    label: "Inactive",
+    cls: "st-inactive",
+    icon: "bi-shield-slash",
+  },
 };
 
 const REASON_ICON = {
@@ -320,8 +328,8 @@ const BlacklistDetailModal = ({
                   {item.accountNumber}
                 </strong>{" "}
                 atas nama <strong>{item.accountName || "—"}</strong> akan{" "}
-                <strong>terhapus secara permanen</strong> dari daftar blacklist
-                dan tidak dapat dikembalikan.
+                <strong>dihapus dari daftar blacklist aktif</strong>. Data
+                tetap disimpan sebagai arsip sistem.
               </p>
               <div className="bdm-confirm-warning">
                 <i className="bi bi-shield-exclamation" />
@@ -343,7 +351,7 @@ const BlacklistDetailModal = ({
                   }}
                 >
                   <i className="bi bi-trash3-fill" />
-                  Ya, Hapus Permanen
+                  Ya, Hapus dari Daftar Aktif
                 </button>
               </div>
             </div>

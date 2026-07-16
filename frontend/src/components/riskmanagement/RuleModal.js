@@ -13,15 +13,8 @@ const ACTIONS = [
     value: "flag",
     label: "FLAG",
     icon: "bi-flag-fill",
-    desc: "Tandai sebagai mencurigakan",
+    desc: "Transaksi tetap berhasil dan masuk alert review",
     cls: "sel-flag",
-  },
-  {
-    value: "review",
-    label: "REVIEW",
-    icon: "bi-clipboard-check",
-    desc: "Kirim ke Manual Review",
-    cls: "sel-review",
   },
 ];
 
@@ -31,7 +24,7 @@ const FIELDS = [
   "Frekuensi (per hari)",
   "Usia Akun (hari)",
   "Jumlah Kumulatif (hari ini)",
-  "Jam Transaksi",
+  "Transaction Timestamp (jam transaksi)",
   "Jarak Lokasi (km)",
   "Tipe Merchant",
   "Kode Negara Tujuan",
@@ -66,6 +59,16 @@ const formatNumber = (val) => {
 
 const unformatNumber = (val) => String(val).replace(/\./g, "");
 
+const getConditionHint = (field) => {
+  if (
+    field === "Transaction Timestamp (jam transaksi)" ||
+    field === "Jam Transaksi"
+  ) {
+    return "Ini adalah waktu transaksi. Bisa jam saja, tapi lebih jelas bila ada tanggal dan jam, mis. 14:32 atau 2026-07-06 14:32.";
+  }
+  return null;
+};
+
 const Field = ({ label, req, opt, err, children }) => (
   <div className="rum-field">
     <label className="rum-label">
@@ -92,14 +95,22 @@ const RuleModal = ({ isOpen, onClose, onSubmit, editData }) => {
 
   useEffect(() => {
     if (isOpen) {
-      setForm(isEdit ? { ...EMPTY, ...editData } : EMPTY);
+      setForm(
+        isEdit
+          ? {
+              ...EMPTY,
+              ...editData,
+              action: editData?.action === "block" ? "block" : "flag",
+            }
+          : EMPTY,
+      );
       setErrors({});
       setLoading(false);
       setTimeout(() => {
         firstInputRef.current?.focus();
       }, 50);
     }
-  }, [isOpen, editData]);
+  }, [isOpen, editData, isEdit]);
 
   useEffect(() => {
     if (isOpen) {
@@ -165,6 +176,7 @@ const RuleModal = ({ isOpen, onClose, onSubmit, editData }) => {
   };
 
   const previewText = buildConditionText(form);
+  const conditionHint = getConditionHint(form.condField);
 
   return (
     <div
@@ -223,7 +235,10 @@ const RuleModal = ({ isOpen, onClose, onSubmit, editData }) => {
                 onChange={(e) =>
                   set(
                     "rule_key",
-                    e.target.value.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
+                    e.target.value
+                      .toLowerCase()
+                      .replace(/\s+/g, "_")
+                      .replace(/[^a-z0-9_]/g, ""),
                   )
                 }
               />
@@ -334,7 +349,7 @@ const RuleModal = ({ isOpen, onClose, onSubmit, editData }) => {
                     "Frekuensi (per hari)",
                     "Usia Akun (hari)",
                     "Jumlah Kumulatif (hari ini)",
-                    "Jam Transaksi",
+                    "Transaction Timestamp (jam transaksi)",
                     "Jarak Lokasi (km)",
                   ].includes(form.condField);
                   const formatted =
@@ -345,6 +360,18 @@ const RuleModal = ({ isOpen, onClose, onSubmit, editData }) => {
                 }}
                 style={{ flex: 1, width: "auto" }}
               />
+              {conditionHint && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: ".72rem",
+                    color: "#6b7280",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <i className="bi bi-info-circle" /> {conditionHint}
+                </div>
+              )}
               {errors.condValue && (
                 <span style={{ fontSize: ".72rem", color: "#dc2626" }}>
                   Wajib diisi

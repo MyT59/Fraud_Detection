@@ -61,6 +61,7 @@ const refreshAccessToken = async () => {
 const request = async (method, endpoint, body = null, options = {}) => {
   const url = `${API_BASE}${endpoint}`;
   const token = storage.getAccessToken();
+  const isAuthEndpoint = endpoint === "/login" || endpoint === "/refresh";
 
   const headers = {
     "Content-Type": "application/json",
@@ -77,7 +78,7 @@ const request = async (method, endpoint, body = null, options = {}) => {
 
   let res = await fetch(url, config);
 
-  if (res.status === 401 && !options._retry) {
+  if (res.status === 401 && !options._retry && !isAuthEndpoint) {
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         refreshQueue.push({ resolve, reject });
@@ -107,6 +108,35 @@ const request = async (method, endpoint, body = null, options = {}) => {
   return handleResponse(res);
 };
 
+const formatApiErrorMessage = (data, fallback) => {
+  const detail = data?.detail ?? data?.message ?? data?.error;
+
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item?.msg) {
+          const field = Array.isArray(item.loc)
+            ? item.loc.filter((part) => part !== "body").join(".")
+            : "";
+          return field ? `${field}: ${item.msg}` : item.msg;
+        }
+        return null;
+      })
+      .filter(Boolean);
+    if (messages.length) return messages.join(" ");
+  }
+
+  if (detail && typeof detail === "object") {
+    if (detail.message) return String(detail.message);
+    if (detail.msg) return String(detail.msg);
+  }
+
+  return fallback;
+};
+
 const handleResponse = async (res) => {
   if (res.status === 204) return null;
 
@@ -115,10 +145,9 @@ const handleResponse = async (res) => {
   const data = isJson ? await res.json() : await res.text();
 
   if (!res.ok) {
-    const message =
-      (isJson && data?.detail) ||
-      (isJson && data?.message) ||
-      `HTTP ${res.status}`;
+    const message = isJson
+      ? formatApiErrorMessage(data, `HTTP ${res.status}`)
+      : data || `HTTP ${res.status}`;
     const error = new Error(message);
     error.status = res.status;
     error.data = data;

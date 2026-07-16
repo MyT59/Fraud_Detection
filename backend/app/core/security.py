@@ -104,7 +104,7 @@ def get_current_user(
 
     admin = db.query(Admin).filter(Admin.id == int(payload["sub"])).first()
 
-    if not admin or not admin.is_active:
+    if not admin or not admin.is_active or getattr(admin, "is_deleted", False):
         raise HTTPException(status_code=401, detail="Invalid user")
 
     return admin

@@ -18,6 +18,7 @@ import {
   resolveAlert,
   claimAlert,
 } from "../services/AlertsService";
+import { storage } from "../services/apiService";
 
 // ─── Konstanta ────────────────────────────────────────────────────
 
@@ -69,11 +70,21 @@ const normalizeAlert = (raw) => ({
   priority: raw.priority ?? 0,
   priority_label: raw.priority_label || "",
   service: raw.service || "",
+  transaction_final_status:
+    raw.transaction_final_status ||
+    raw.transactionFinalStatus ||
+    raw.final_status ||
+    raw.transaction?.final_status ||
+    null,
 });
 
 // ─── Komponen Utama ───────────────────────────────────────────────
 
 const AlertsLog = () => {
+  const currentUser = storage.getUser();
+  const currentRole = String(currentUser?.role || "").toUpperCase();
+  const canClaimAlerts = currentRole === "FRAUD_ANALYST";
+
   // Tab: "all" | "open"
   // My Queue DIHAPUS dari halaman ini — pindah ke ManualReview
   const [activeTab, setActiveTab] = useState("all");
@@ -128,8 +139,9 @@ const AlertsLog = () => {
             page,
             limit: LIMIT,
             signal,
-            priority:
+            severity:
               openFilters.severity !== "all" ? openFilters.severity : undefined,
+            type: openFilters.type !== "all" ? openFilters.type : undefined,
           });
         } else {
           // All Alerts: semua alert dengan filter
@@ -180,6 +192,7 @@ const AlertsLog = () => {
       filters.status,
       filters.type,
       openFilters.severity,
+      openFilters.type,
     ],
   );
 
@@ -305,6 +318,8 @@ const AlertsLog = () => {
 
   const handleClaim = useCallback(
     async (id) => {
+      if (!canClaimAlerts) return;
+
       const target = apiAlerts?.find(
         (a) => a.id === String(id) || a._backendId === id,
       );
@@ -344,7 +359,7 @@ const AlertsLog = () => {
         if (modalOpen) setModalPendingOp(null);
       }
     },
-    [apiAlerts, modalOpen, modalDetail, activeTab],
+    [apiAlerts, modalOpen, modalDetail, activeTab, canClaimAlerts],
   );
 
   // ─── Pemrosesan Data untuk Render ────────────────────────────────
@@ -443,106 +458,54 @@ const AlertsLog = () => {
 
       {/* Banner Error API */}
       {apiError && (
-        <div
-          style={{
-            backgroundColor: "#fef2f2",
-            border: "1px solid #fca5a5",
-            padding: "12px 16px",
-            borderRadius: "8px",
-            color: "#b91c1c",
-            marginBottom: "20px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
+        <div className="alerts-error-banner">
           <div>
-            <i
-              className="bi bi-exclamation-triangle-fill"
-              style={{ marginRight: 8 }}
-            />
+            <i className="bi bi-exclamation-triangle-fill" />
             <strong>Gagal memuat data.</strong> Tidak dapat terhubung ke server.
           </div>
-          <button
-            onClick={handleRetry}
-            style={{
-              background: "#dc2626",
-              color: "#fff",
-              border: "none",
-              padding: "6px 12px",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            <i className="bi bi-arrow-clockwise" style={{ marginRight: 6 }} />
+          <button onClick={handleRetry}>
+            <i className="bi bi-arrow-clockwise" />
             Coba Lagi
           </button>
         </div>
       )}
 
       {/* Navigasi Tab — hanya All Alerts & Open Queue */}
-      <div
-        style={{
-          display: "flex",
-          gap: "12px",
-          marginBottom: "20px",
-          borderBottom: "2px solid #e5e7eb",
-          paddingBottom: "10px",
-        }}
-      >
+      <div className="alerts-mode-tabs">
         <button
+          className={`alerts-mode-card ${activeTab === "all" ? "active" : ""}`}
           onClick={() => {
             setActiveTab("all");
             setPage(1);
           }}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: activeTab === "all" ? "bold" : "normal",
-            color: activeTab === "all" ? "#2563eb" : "#6b7280",
-            borderBottom: activeTab === "all" ? "2px solid #2563eb" : "none",
-            padding: "8px 4px",
-            fontSize: "0.9rem",
-          }}
         >
-          <i className="bi bi-list-ul" style={{ marginRight: 6 }} />
-          All Alerts
+          <span className="alerts-mode-icon blue">
+            <i className="bi bi-list-ul" />
+          </span>
+          <span>
+            <strong>All Alerts</strong>
+            <small>Monitor seluruh status alert</small>
+          </span>
         </button>
 
         <button
+          className={`alerts-mode-card ${activeTab === "open" ? "active orange" : ""}`}
           onClick={() => {
             setActiveTab("open");
             setPage(1);
             setLocalOverride({});
           }}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: activeTab === "open" ? "bold" : "normal",
-            color: activeTab === "open" ? "#d97706" : "#6b7280",
-            borderBottom: activeTab === "open" ? "2px solid #d97706" : "none",
-            padding: "8px 4px",
-            fontSize: "0.9rem",
-          }}
         >
-          <i className="bi bi-inbox-fill" style={{ marginRight: 6 }} />
-          Open Queue
-          <span
-            style={{
-              marginLeft: 6,
-              fontSize: "0.7rem",
-              background: "#fef3c7",
-              color: "#d97706",
-              border: "1px solid #fde68a",
-              borderRadius: 10,
-              padding: "1px 7px",
-              fontWeight: 700,
-            }}
-          >
-            Claim di sini
+          <span className="alerts-mode-icon orange">
+            <i className="bi bi-inbox-fill" />
+          </span>
+          <span>
+            <strong>Open Queue</strong>
+            <small>
+              {canClaimAlerts
+                ? "Claim alert untuk review"
+                : "Monitor alert yang belum diklaim"}
+            </small>
           </span>
         </button>
       </div>
@@ -640,7 +603,9 @@ const AlertsLog = () => {
 
           <div className="alerts-filter-meta">
             Menampilkan <strong>{sortedAlerts.length}</strong> alert tersedia
-            untuk di-claim
+            {canClaimAlerts
+              ? " untuk di-claim"
+              : " yang belum diklaim analis"}
           </div>
         </div>
       )}
@@ -657,8 +622,10 @@ const AlertsLog = () => {
           alerts={sortedAlerts}
           pendingOps={pendingOps}
           onResolve={handleResolve}
-          onClaim={activeTab === "open" ? handleClaim : null}
+          onClaim={activeTab === "open" && canClaimAlerts ? handleClaim : null}
           onViewDetail={handleOpenDetail}
+          mode={activeTab}
+          canClaim={canClaimAlerts}
         />
       )}
 
@@ -724,7 +691,7 @@ const AlertsLog = () => {
         error={modalError}
         onClose={handleCloseModal}
         onResolve={handleResolve}
-        onClaim={handleClaim}
+        onClaim={canClaimAlerts ? handleClaim : null}
         pendingOp={modalPendingOp}
         onStatusUpdated={(alertId, newStatus) => {
           const target = apiAlerts?.find(

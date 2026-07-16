@@ -66,6 +66,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 0.5rem;
+  scrollbar-gutter: stable;
 }
 
 .alerts-list::-webkit-scrollbar {
@@ -86,26 +87,31 @@
   background: #a3a3a3;
 }
 
-.alert-item {
-  display: flex;
+.recent-alert-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 128px;
   gap: 1rem;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 0.5rem;
+  align-items: start;
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
+  margin-bottom: 0.75rem;
   transition: all 0.2s ease;
-  border: 1px solid transparent;
+  border: 1px solid #e5edf7;
+  border-left: 4px solid #cbd5e1;
+  background: #ffffff;
 }
 
-.alert-item:hover {
+.recent-alert-item:hover {
   background: #fafafa;
-  border-color: #e5e5e5;
+  border-color: #dbe5f2;
+  border-left-color: #94a3b8;
 }
 
-.alert-item:last-child {
+.recent-alert-item:last-child {
   margin-bottom: 0;
 }
 
-.alert-indicator {
+.recent-alert-indicator {
   width: 40px;
   height: 40px;
   border-radius: 8px;
@@ -116,40 +122,33 @@
   font-size: 1.25rem;
 }
 
-.alert-indicator.severity-high {
+.recent-alert-indicator.severity-high {
   background: #fef2f2;
   color: #dc2626;
 }
 
-.alert-indicator.severity-medium {
+.recent-alert-indicator.severity-medium {
   background: #fefce8;
   color: #ca8a04;
 }
 
-.alert-indicator.severity-low {
+.recent-alert-indicator.severity-low {
   background: #eff6ff;
   color: #2563eb;
 }
 
-.alert-content {
+.recent-alert-content {
   flex: 1;
   min-width: 0;
 }
 
-.alert-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.alert-title {
+.recent-alert-title {
   font-size: 0.95rem;
   font-weight: 600;
   color: #262626;
-  margin: 0;
+  margin: 0 0 0.35rem;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .severity-badge {
@@ -181,14 +180,15 @@
   border: 1px solid #bfdbfe;
 }
 
-.alert-description {
+.recent-alert-description {
   font-size: 0.875rem;
   color: #525252;
   margin: 0 0 0.75rem;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
-.alert-meta {
+.recent-alert-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
@@ -196,25 +196,64 @@
   color: #737373;
 }
 
-.meta-item {
+.recent-meta-item {
   display: flex;
   align-items: center;
   gap: 0.35rem;
 }
 
-.meta-item i {
+.recent-meta-item i {
   font-size: 0.75rem;
 }
 
-.meta-item.time {
+.recent-meta-item.time {
   color: #a3a3a3;
 }
 
-.alert-actions {
+.recent-alert-actions {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   flex-shrink: 0;
+  align-items: flex-end;
+}
+
+.recent-alerts-modal {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 100%;
+}
+
+.recent-alerts-modal .alerts-header {
+  padding: 1.5rem 2rem;
+}
+
+.recent-alerts-modal .alerts-list {
+  padding: 0.75rem 1.5rem;
+}
+
+.recent-alerts-modal .recent-alert-item {
+  grid-template-columns: 40px minmax(0, 1fr) 118px;
+  gap: 0.9rem;
+  min-height: 0;
+  padding: 1rem 1.1rem;
+}
+
+.recent-alerts-modal .recent-alert-title {
+  font-size: 0.95rem;
+}
+
+.recent-alerts-modal .recent-alert-description {
+  font-size: 0.84rem;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.recent-alerts-modal .recent-alert-actions {
+  align-items: flex-end;
 }
 
 .btn-action {
@@ -298,22 +337,38 @@
     justify-content: center;
   }
 
-  .alert-item {
+  .recent-alert-item {
+    grid-template-columns: 40px minmax(0, 1fr);
     padding: 0.75rem;
   }
 
-  .alert-indicator {
+  .recent-alert-indicator {
     width: 36px;
     height: 36px;
     font-size: 1.1rem;
   }
 
-  .alert-actions {
+  .recent-alert-actions {
+    grid-column: 2;
     flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
-  .alert-meta {
+  .recent-alert-meta {
     gap: 0.75rem;
+  }
+
+  .recent-alerts-modal .recent-alert-item {
+    grid-template-columns: 40px minmax(0, 1fr) 112px;
+    padding: 0.9rem 1rem;
+  }
+
+  .recent-alerts-modal .recent-alert-actions {
+    grid-column: auto;
+    flex-direction: column;
+    align-items: flex-end;
   }
 
   .alert-summary {
@@ -331,14 +386,19 @@
     padding: 0.25rem;
   }
 
-  .alert-header-row {
-    flex-direction: column;
-    gap: 0.5rem;
-    align-items: flex-start;
-  }
-
   .severity-badge {
     align-self: flex-start;
+  }
+
+  .recent-alerts-modal .recent-alert-item {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .recent-alerts-modal .recent-alert-actions {
+    grid-column: 2;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
   }
 
   .alerts-footer {

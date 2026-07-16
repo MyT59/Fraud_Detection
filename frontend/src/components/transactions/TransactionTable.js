@@ -32,13 +32,24 @@ const RiskCell = ({ score, level }) => {
     MEDIUM: "#d97706",
     LOW: "#16a34a",
   };
+  const labelMap = {
+    CRITICAL: "Critical Risk",
+    HIGH: "High Risk",
+    MEDIUM: "Medium Risk",
+    LOW: "Low Risk",
+  };
   const color = colorMap[level] || "#6b7280";
+  const label = labelMap[level] || level || "—";
   return (
-    <span className="txn3-risk" style={{ color }}>
+    <span
+      className="txn3-risk"
+      style={{ color }}
+      title="Risk score range: 0-30 Low Risk | 31-70 Medium Risk | 71-100 High/Critical Risk"
+    >
       <span className="txn3-risk-num">{score ?? 0}</span>
       <span className="txn3-risk-max">/100</span>
       <span className="txn3-risk-lbl" style={{ color }}>
-        {level || "—"}
+        {label}
       </span>
     </span>
   );
@@ -46,15 +57,20 @@ const RiskCell = ({ score, level }) => {
 
 const StatusTag = ({ status }) => {
   const MAP = {
+    FLAGGED: {
+      icon: "bi-flag-fill",
+      label: "Flagged",
+      cls: "st-pending",
+    },
     PENDING: {
-      icon: "bi-hourglass-split",
-      label: "Pending",
+      icon: "bi-flag-fill",
+      label: "Flagged",
       cls: "st-pending",
     },
     UNDER_REVIEW: {
-      icon: "bi-search",
-      label: "Under Review",
-      cls: "st-review",
+      icon: "bi-flag-fill",
+      label: "Flagged",
+      cls: "st-pending",
     },
     SAFE: {
       icon: "bi-check-circle-fill",
@@ -62,12 +78,15 @@ const StatusTag = ({ status }) => {
       cls: "st-approved",
     },
     FRAUD: {
-      icon: "bi-exclamation-circle-fill",
-      label: "Fraud",
+      icon: "bi-x-circle-fill",
+      label: "Blocked",
       cls: "st-fraud",
     },
   };
-  const meta = MAP[status] || MAP.PENDING;
+  const normalizedStatus = String(status || "PENDING")
+    .replace("TransactionStatusEnum.", "")
+    .toUpperCase();
+  const meta = MAP[normalizedStatus] || MAP.PENDING;
   return (
     <span className={`txn3-status-tag ${meta.cls}`}>
       <i className={`bi ${meta.icon}`}></i>
@@ -351,10 +370,9 @@ const TransactionTable = ({
             <div className="colf-title">Filter Status</div>
             {[
               ["all", "Semua Status", null],
-              ["PENDING", "Pending", "dot-pending"],
-              ["UNDER_REVIEW", "Under Review", "dot-review"],
+              ["FLAGGED", "Flagged", "dot-pending"],
               ["SAFE", "Safe", "dot-approved"],
-              ["FRAUD", "Fraud", "dot-fraud"],
+              ["FRAUD", "Blocked", "dot-fraud"],
             ].map(([v, l, dot]) => (
               <button
                 key={v}
@@ -427,8 +445,11 @@ const TransactionTable = ({
               <td colSpan={10}>
                 <div className="txn3-empty-state">
                   <i className="bi bi-inbox"></i>
-                  <p>Tidak ada transaksi ditemukan</p>
-                  <span>Coba ubah filter atau kriteria pencarian</span>
+                  <p>Belum ada transaksi sesuai filter</p>
+                  <span>
+                    Coba ubah filter, cari ID transaksi lain, atau reset semua
+                    filter.
+                  </span>
                 </div>
               </td>
             </tr>

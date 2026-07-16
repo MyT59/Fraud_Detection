@@ -202,7 +202,7 @@ class PatternDiscoveryService:
                         "pattern_rules": pattern_rules,
                         "service_source": domain.upper(),
                         "risk_score": config["risk_score"],
-                        "action": "FLAG"  # Default aman, biarkan analis yang ubah ke BLOCK
+                        "action": "FLAG"  # Detection: transaksi tetap berhasil dan dibuatkan alert
                     })
 
         # Kirim ke fungsi save yang sudah ada (akan di-hash dan di-insert otomatis ke DB)

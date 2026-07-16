@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import StatCard from "../components/dashboard/StatCard";
 import TransactionChart from "../components/dashboard/TransactionChart";
 import FraudChart from "../components/dashboard/FraudChart";
@@ -166,22 +165,19 @@ const normalizeApiResponse = (data) => {
 
 const FALLBACK = normalizeApiResponse({
   kpi: {
-    total_agenusa: 720,
-    total_nusabill: 570,
-    fraud_agenusa: 31,
-    fraud_nusabill: 25,
-    fraud_rate: 4.34,
+    total_agenusa: 0,
+    total_nusabill: 0,
+    fraud_agenusa: 0,
+    fraud_nusabill: 0,
+    fraud_rate: 0,
     anomaly_rate: null,
   },
   transaction_trend: Array.from({ length: 24 }, (_, h) => ({
     hour: h,
-    total:
-      h >= 8 && h <= 21
-        ? Math.round(80 + Math.random() * 60)
-        : Math.round(5 + Math.random() * 15),
-    fraud: Math.round(Math.random() * 3),
+    total: 0,
+    fraud: 0,
   })),
-  fraud_distribution: { total: 1290, fraud: 56, legit: 1234 },
+  fraud_distribution: { total: 0, fraud: 0, legit: 0 },
   recent_alerts: [],
   top_patterns: [],
   activity: [],
@@ -219,22 +215,11 @@ const PANEL_CARDS = [
 ];
 
 const Dashboard = () => {
-  const navigate = useNavigate();
-
   const [dashData, setDashData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dataSource, setDataSource] = useState("api");
   const [apiError, setApiError] = useState(null);
   const [activeModal, setActiveModal] = useState(null);
-  const [rangeData, setRangeData] = useState(null);
-
-  const handleRangeChange = useCallback((range, payload) => {
-    if (range === "custom" && payload?.data) {
-      setRangeData(payload.data);
-    } else {
-      setRangeData(null);
-    }
-  }, []);
 
   const loadData = useCallback(async (signal) => {
     setLoading(true);
@@ -403,21 +388,17 @@ const Dashboard = () => {
       </div>
 
       <div className="charts-grid">
-        <TransactionChart
-          data={transactions_daily}
-          onRangeChange={handleRangeChange}
-        />
+        <TransactionChart data={transactions_daily} />
         <FraudChart
           total={fraudTotal}
           fraudCount={fraudCount}
-          rangeData={rangeData}
         />
       </div>
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
           gap: 16,
           marginBottom: 32,
         }}
@@ -643,7 +624,11 @@ const Dashboard = () => {
                 <TopFraudPatterns patterns={top_patterns} />
               )}
               {activeModal === "alerts" && (
-                <RecentAlerts alerts={recent_alerts} summary={alerts_summary} />
+                <RecentAlerts
+                  alerts={recent_alerts}
+                  summary={alerts_summary}
+                  variant="modal"
+                />
               )}
               {activeModal === "timeline" && (
                 <ActivityTimeline activities={activity_preview} />

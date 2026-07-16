@@ -28,55 +28,28 @@ ChartJS.register(
   Filler,
 );
 
-const genToday = () => {
-  const now = new Date();
-  const currentHour = now.getHours();
-  return Array.from({ length: 24 }, (_, h) => {
-    const isPast = h < currentHour;
-    const isCurrent = h === currentHour;
-    const base =
-      h >= 8 && h <= 21
-        ? 12 + Math.round(Math.sin(((h - 8) / 13) * Math.PI) * 12)
-        : h >= 5 && h < 8
-          ? 4
-          : h >= 22
-            ? 3
-            : 1;
-    const txn = isPast
-      ? Math.round(base + Math.random() * 8)
-      : isCurrent
-        ? Math.round((base + Math.random() * 8) * (now.getMinutes() / 60))
-        : 0;
-    const fraud = txn > 0 ? Math.round(Math.random() * Math.min(2, txn)) : 0;
-    return {
-      label: `${String(h).padStart(2, "0")}:00`,
-      transactions: txn,
-      fraud,
-    };
-  });
-};
+const emptyToday = () =>
+  Array.from({ length: 24 }, (_, h) => ({
+    label: `${String(h).padStart(2, "0")}:00`,
+    transactions: 0,
+    fraud: 0,
+  }));
 
-const genLastNDays = (n) => {
+const emptyLastNDays = (n) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return Array.from({ length: n }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() - (n - 1 - i));
-    const isToday = i === n - 1;
-    const base = Math.round(140 + Math.sin(i / 4) * 40 + Math.random() * 35);
-    const txn = isToday
-      ? Math.round(base * (new Date().getHours() / 24))
-      : base;
-    const fraud = txn > 0 ? Math.round(6 + Math.random() * 8) : 0;
     return {
       label: `${d.getDate()}/${d.getMonth() + 1}`,
-      transactions: txn,
-      fraud,
+      transactions: 0,
+      fraud: 0,
     };
   });
 };
 
-const genLast12Months = () => {
+const emptyLast12Months = () => {
   const MONTHS = [
     "Jan",
     "Feb",
@@ -94,30 +67,19 @@ const genLast12Months = () => {
   const now = new Date();
   return Array.from({ length: 12 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-    const isCurrentMonth = i === 11;
-    const base = Math.round(3800 + i * 220 + Math.random() * 400);
-    const daysInMonth = new Date(
-      d.getFullYear(),
-      d.getMonth() + 1,
-      0,
-    ).getDate();
-    const txn = isCurrentMonth
-      ? Math.round(base * (now.getDate() / daysInMonth))
-      : base;
-    const fraud = Math.round(txn * (0.04 + Math.random() * 0.01));
     return {
       label: MONTHS[d.getMonth()],
-      transactions: txn,
-      fraud,
+      transactions: 0,
+      fraud: 0,
     };
   });
 };
 
-const buildStaticData = () => ({
-  today: genToday(),
-  "7d": genLastNDays(7),
-  "30d": genLastNDays(30),
-  "1y": genLast12Months(),
+const buildEmptyData = () => ({
+  today: emptyToday(),
+  "7d": emptyLastNDays(7),
+  "30d": emptyLastNDays(30),
+  "1y": emptyLast12Months(),
 });
 
 const mapTrendResponse = (raw, range) => {
@@ -183,6 +145,7 @@ const RANGE_TO_API = {
   today: "today",
   "7d": "weekly",
   "30d": "monthly",
+  "1y": "yearly",
 };
 
 const CARD_TITLES = {
@@ -221,14 +184,7 @@ const TransactionChart = ({ data, onRangeChange }) => {
   const [expanded, setExpanded] = useState(false);
   const [isFetchingRange, setIsFetchingRange] = useState(false);
 
-  const [staticData, setStaticData] = useState(() => buildStaticData());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setStaticData((prev) => ({ ...prev, today: genToday() }));
-    }, 60_000);
-    return () => clearInterval(timer);
-  }, []);
+  const emptyData = useMemo(() => buildEmptyData(), []);
 
   useEffect(() => {
     if (!expanded) return;
@@ -260,32 +216,35 @@ const TransactionChart = ({ data, onRangeChange }) => {
         const mapped = mapTrendResponse(raw, range);
         if (mapped && mapped.length > 0) {
           setApiData((prev) => ({ ...prev, [range]: mapped }));
+          if (onRangeChange) onRangeChange(range, { data: mapped });
+        } else if (onRangeChange) {
+          onRangeChange(range, { data: emptyData[range] || [] });
         }
       } catch (err) {
         console.warn(
           `[TransactionChart] Gagal fetch range "${range}":`,
           err.message,
         );
+        if (onRangeChange) onRangeChange(range, { data: emptyData[range] || [] });
       } finally {
         setIsFetchingRange(false);
       }
     },
-    [apiData],
+    [apiData, emptyData, onRangeChange],
   );
 
   const chartData = useMemo(() => {
     if (activeRange === "today") {
-      return data && data.length > 0 ? data : staticData.today;
+      return data && data.length > 0 ? data : emptyData.today;
     }
     if (activeRange === "custom" && customData) return customData;
-    if (activeRange === "1y") return staticData["1y"];
 
     return (
       apiData[activeRange] ||
-      staticData[activeRange] ||
-      staticData[DEFAULT_RANGE]
+      emptyData[activeRange] ||
+      emptyData[DEFAULT_RANGE]
     );
-  }, [activeRange, customData, data, staticData, apiData]);
+  }, [activeRange, customData, data, emptyData, apiData]);
 
   const handleRangeClick = (key) => {
     if (key === "custom") {
@@ -294,7 +253,13 @@ const TransactionChart = ({ data, onRangeChange }) => {
     }
     setShowDatePicker(false);
     setActiveRange(key);
-    if (onRangeChange) onRangeChange(key, null);
+    if (key === "today") {
+      if (onRangeChange) onRangeChange(key, { data: data || emptyData.today });
+    } else if (apiData[key]) {
+      if (onRangeChange) onRangeChange(key, { data: apiData[key] });
+    } else if (onRangeChange) {
+      onRangeChange(key, { data: emptyData[key] || [] });
+    }
 
     fetchRangeData(key);
   };
@@ -307,7 +272,7 @@ const TransactionChart = ({ data, onRangeChange }) => {
     d.setDate(d.getDate() - 7);
     setDateFrom(d.toISOString().split("T")[0]);
     setDateTo(new Date().toISOString().split("T")[0]);
-    if (onRangeChange) onRangeChange(DEFAULT_RANGE, null);
+    if (onRangeChange) onRangeChange(DEFAULT_RANGE, { data: data || emptyData.today });
   };
 
   const handleApplyCustom = async () => {
@@ -327,29 +292,21 @@ const TransactionChart = ({ data, onRangeChange }) => {
           onRangeChange("custom", { from: dateFrom, to: dateTo, data: mapped });
         return;
       }
+      setCustomData([]);
+      setActiveRange("custom");
+      setShowDatePicker(false);
+      if (onRangeChange)
+        onRangeChange("custom", { from: dateFrom, to: dateTo, data: [] });
     } catch (err) {
       console.warn("[TransactionChart] Gagal fetch custom range:", err.message);
+      setCustomData([]);
+      setActiveRange("custom");
+      setShowDatePicker(false);
+      if (onRangeChange)
+        onRangeChange("custom", { from: dateFrom, to: dateTo, data: [] });
     } finally {
       setIsFetchingRange(false);
     }
-
-    const d1 = new Date(dateFrom);
-    const d2 = new Date(dateTo);
-    const days = Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
-    const generated = Array.from({ length: days }, (_, i) => {
-      const d = new Date(d1);
-      d.setDate(d.getDate() + i);
-      return {
-        label: `${d.getDate()}/${d.getMonth() + 1}`,
-        transactions: Math.round(150 + Math.random() * 80),
-        fraud: Math.round(6 + Math.random() * 10),
-      };
-    });
-    setCustomData(generated);
-    setActiveRange("custom");
-    setShowDatePicker(false);
-    if (onRangeChange)
-      onRangeChange("custom", { from: dateFrom, to: dateTo, data: generated });
   };
 
   const buildChart = (fullLabels = false) => {
@@ -734,6 +691,9 @@ const TransactionChart = ({ data, onRangeChange }) => {
 
         <div className="chart-container">
           <Component data={cData} options={cOptions} />
+          {chartData.every((d) => (d.transactions || 0) === 0 && (d.fraud || 0) === 0) && (
+            <div className="txn-empty-overlay">No transaction data for this range</div>
+          )}
         </div>
 
         <LegendRow />

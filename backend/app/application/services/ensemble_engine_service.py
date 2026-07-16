@@ -67,23 +67,12 @@ def run_ensemble_engine(
     # =========================================================================
     # ENSEMBLE DECISION LOGIC
     # =========================================================================
-    # Tentukan status dasar dari total akumulasi skor risiko murni
-    if total_score >= 80:
-        status = "FRAUD"
-    elif total_score >= 50:
-        status = TransactionStatusEnum.UNDER_REVIEW.value
+    # Non-BLOCK detections must not stop the transaction. High scores without
+    # an explicit BLOCK action are flagged for post-transaction review.
+    if total_score >= 50 or "FLAG" in actions or "REVIEW" in actions:
+        status = TransactionStatusEnum.FLAGGED.value
     else:
         status = "SAFE"
-
-    # Business Logic Adjustment: 
-    # Jika skor tinggi (terdeteksi anomali/pattern berat) tapi rule tidak melakukan BLOCK,
-    # alihkan status menjadi UNDER_REVIEW agar ditinjau analis, tanpa merusak nilai skor aslinya.
-    if total_score > 85 and "BLOCK" not in actions:
-        logger.info(
-            f"[ENSEMBLE] tx_id={transaction_id} Adjustment — total_score={total_score} > 85 "
-            f"tanpa BLOCK action, status dialihkan ke UNDER_REVIEW"
-        )
-        status = TransactionStatusEnum.UNDER_REVIEW.value
 
     logger.info(
         f"[ENSEMBLE] tx_id={transaction_id} final_score={total_score} final_status={status} "

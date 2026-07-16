@@ -10,6 +10,13 @@ const reportService = {
   },
 
   /**
+   * GET /reports/fraud-analysts
+   */
+  getFraudAnalysts: async () => {
+    return api.get("/reports/fraud-analysts");
+  },
+
+  /**
    * GET /reports
    */
   getReports: async ({ report_type, status, page = 1, limit = 20 } = {}) => {
@@ -26,6 +33,13 @@ const reportService = {
    */
   getReportById: async (id) => {
     return api.get(`/reports/${id}`);
+  },
+
+  /**
+   * DELETE /reports/{id}
+   */
+  deleteReport: async (id) => {
+    return api.delete(`/reports/${id}`);
   },
 
   /**

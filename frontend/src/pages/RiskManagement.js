@@ -11,6 +11,11 @@ import PageLoader from "../components/common/PageLoader";
 import { api } from "../services/apiService";
 import "./RiskManagement.css";
 
+const normalizeMitigationAction = (action) => {
+  const normalized = String(action || "FLAG").toUpperCase();
+  return normalized === "BLOCK" ? "block" : "flag";
+};
+
 const ruleFromApi = (r) => {
   console.log("[ruleFromApi] raw:", JSON.stringify(r, null, 2));
   return {
@@ -18,7 +23,7 @@ const ruleFromApi = (r) => {
     name: r.rule_name || "Rule Tanpa Nama",
     description: r.description || "",
     priority: r.priority ?? 0,
-    action: (r.action || "FLAG").toLowerCase(),
+    action: normalizeMitigationAction(r.action),
     enabled: r.is_active ?? true,
     condition: buildConditionText(r),
     condField: r.condition_field || "",
@@ -77,33 +82,6 @@ function buildConditionText(r) {
 
   return "—";
 }
-
-const ruleToCreatePayload = (form) => ({
-  rule_name: form.name,
-  rule_key: form.rule_key,
-  service_scope: form.service_scope || "ALL",
-  condition_field: form.condField || null,
-  operator: form.condOp || null,
-  threshold_value: form.condValue || null,
-  action: (form.action || "flag").toUpperCase(),
-  severity: form.severity || "MEDIUM",
-  priority: form.priority || 5,
-  rule_group: form.rule_group || null,
-  description: form.description || null,
-});
-
-const ruleToUpdatePayload = (form) => ({
-  rule_name: form.name,
-  service_scope: form.service_scope || "ALL",
-  condition_field: form.condField || null,
-  operator: form.condOp || null,
-  threshold_value: form.condValue || null,
-  action: (form.action || "flag").toUpperCase(),
-  severity: form.severity || "MEDIUM",
-  priority: form.priority || 5,
-  rule_group: form.rule_group || null,
-  description: form.description || null,
-});
 
 const resolveBlStatus = (item) => {
   if (item.status === "PENDING") return "pending";
@@ -299,30 +277,6 @@ const RiskManagement = () => {
     init();
   }, [fetchRules, fetchBlacklist, fetchPatterns]);
 
-  const handleRuleSubmit = async (formData) => {
-    const isEdit = Boolean(
-      formData.id && rules.find((r) => r.id === formData.id),
-    );
-    const payload = isEdit
-      ? ruleToUpdatePayload(formData)
-      : ruleToCreatePayload(formData);
-    try {
-      if (isEdit) {
-        const updated = await api.put(`/rules/${formData.id}`, payload);
-        setRules((p) =>
-          p.map((r) => (r.id === formData.id ? ruleFromApi(updated) : r)),
-        );
-        push(`Rule "${formData.name}" berhasil diperbarui.`, "info");
-      } else {
-        const created = await api.post("/rules/", payload);
-        setRules((p) => [ruleFromApi(created), ...p]);
-        push(`Rule "${formData.name}" berhasil dibuat.`, "success");
-      }
-    } catch (err) {
-      push(`Gagal menyimpan rule: ${err.message}`, "error");
-    }
-  };
-
   const handleRuleDelete = async (id) => {
     const rule = rules.find((r) => r.id === id);
     try {
@@ -444,7 +398,7 @@ const RiskManagement = () => {
         await api.put(`/blacklist/${item.id}`, blToApiPayload(item));
         await fetchBlacklist();
         push(
-          `Rekening ${item.accountNumber} diperbarui. Status kembali ke Pending verifikasi.`,
+          `Rekening ${item.accountNumber} diperbarui. Status kembali ke Needs Review.`,
           "info",
         );
       } catch (err) {
@@ -459,7 +413,7 @@ const RiskManagement = () => {
         const created = await api.post("/blacklist/", blToApiPayload(item));
         setBlacklist((p) => [blFromApi(created), ...p]);
         push(
-          `Rekening ${item.accountNumber} ditambahkan, menunggu verifikasi.`,
+          `Rekening ${item.accountNumber} ditambahkan dan menunggu validasi reviewer.`,
           "success",
         );
       } catch (err) {
@@ -489,7 +443,7 @@ const RiskManagement = () => {
       await fetchBlacklist();
       if (failed === 0) {
         push(
-          `${success} rekening berhasil diimport, menunggu verifikasi.`,
+          `${success} rekening berhasil diimport dan menunggu validasi reviewer.`,
           "success",
         );
       } else {
@@ -506,7 +460,7 @@ const RiskManagement = () => {
     setBlacklist((p) => p.filter((b) => b.id !== id));
     try {
       await api.del(`/blacklist/${id}`);
-      push(`Rekening ${item?.accountNumber} dihapus permanen.`, "error");
+      push(`Rekening ${item?.accountNumber} dihapus dari daftar aktif.`, "warn");
     } catch (err) {
       if (item) setBlacklist((p) => [item, ...p]);
       push(`Gagal menghapus: ${err.message}`, "error");
@@ -526,10 +480,7 @@ const RiskManagement = () => {
       await api.patch(`/blacklist/${id}/approve`, {
         review_note: "Disetujui melalui dashboard",
       });
-      push(
-        `Rekening ${item?.accountNumber} disetujui dan aktif diblokir.`,
-        "success",
-      );
+      push(`Rekening ${item?.accountNumber} diaktifkan di blacklist.`, "success");
     } catch (err) {
       setBlacklist((p) =>
         p.map((b) =>
@@ -558,7 +509,7 @@ const RiskManagement = () => {
       await api.patch(`/blacklist/${id}/reject`, {
         review_note: reviewNote || "Ditolak melalui dashboard",
       });
-      push(`Rekening ${item?.accountNumber} ditolak.`, "warn");
+      push(`Rekening ${item?.accountNumber} ditolak dari blacklist.`, "warn");
     } catch (err) {
       setBlacklist((p) =>
         p.map((b) =>
@@ -627,7 +578,7 @@ const RiskManagement = () => {
             <h1 className="rm-page-title">Risk Management</h1>
             <p className="rm-page-subtitle">
               Blacklist rekening penipu &amp; konfigurasi rule otomatis sebelum
-              transaksi masuk ke Manual Review
+              transaksi ditandai untuk review atau diblokir
             </p>
           </div>
         </div>
@@ -674,6 +625,7 @@ const RiskManagement = () => {
         blacklist={blacklist}
         rules={rules}
         patterns={patterns}
+        patternCandidates={patternCandidates}
         activeTab={activeTab}
       />
 
@@ -707,9 +659,9 @@ const RiskManagement = () => {
         >
           <i className="bi bi-shield-shaded" />
           Pattern Management
-          {patterns.filter((p) => !p.is_active).length > 0 && (
+          {patternCandidates.length > 0 && (
             <span className="rm-tab-badge rm-tab-badge--pink">
-              {patterns.filter((p) => !p.is_active).length}
+              {patternCandidates.length}
             </span>
           )}
         </button>

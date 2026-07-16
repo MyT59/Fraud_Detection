@@ -54,7 +54,7 @@ def login(db: Session, email: str, password: str, ip: str = None, user_agent: st
         db.commit()
         raise HTTPException(401, "Invalid credentials")
 
-    if not admin.is_active:
+    if not admin.is_active or getattr(admin, "is_deleted", False):
         raise HTTPException(403, "Account suspended")
 
     # GAGAL LOGIN: PASSWORD SALAH
@@ -148,7 +148,7 @@ def refresh_access_token(db: Session, refresh_token: str, ip: str = None, user_a
     repo = AdminRepository(db)
     admin = repo.get_by_id(int(payload["sub"]))
 
-    if not admin or not admin.is_active:
+    if not admin or not admin.is_active or getattr(admin, "is_deleted", False):
         raise HTTPException(status_code=401, detail="Invalid user")
 
     # ✅ FIX: filter pakai is_active (konsisten)

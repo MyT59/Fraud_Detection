@@ -202,8 +202,10 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
                             detail="Internal Server Error")
 
 @log_performance(label="ReviewService.get_review_history")
-def get_review_history(db, page: int = 1, limit: int = 10):
+def get_review_history(db, page: int = 1, limit: int = 10, reviewed_by: int | None = None):
     query = db.query(ManualReview).join(Transaction).filter(ManualReview.is_deleted == False)
+    if reviewed_by is not None:
+        query = query.filter(ManualReview.reviewer_id == reviewed_by)
     total = query.count()
 
     reviews = query.order_by(ManualReview.created_at.desc()) \
@@ -301,10 +303,10 @@ def get_my_review_metrics_service(db, reviewer_id: int):
     confirmation_rate  = round((fraud_cnt / total_rev * 100), 2) if total_rev > 0 else 0.0
     avg_duration_min   = round((avg_duration_sec / 60), 2)
 
-    # Alert yang sedang di-klaim oleh analis ini
-    in_progress_alerts = db.query(ManualReview).filter(
-        ManualReview.reviewer_id == reviewer_id,
-        ManualReview.is_deleted == False
+    # Alert yang sedang di-claim oleh analis ini, bukan jumlah history review.
+    in_progress_alerts = db.query(FraudAlert).filter(
+        FraudAlert.claimed_by == reviewer_id,
+        FraudAlert.status == "IN_PROGRESS",
     ).count()
 
     return {

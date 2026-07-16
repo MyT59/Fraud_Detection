@@ -16,14 +16,9 @@ const ACTION_CONFIG = {
     headerCls: "rdm-header--flag",
     avatarIcon: "bi-flag-fill",
   },
-  review: {
-    label: "REVIEW",
-    cls: "act-review",
-    icon: "bi-clipboard-check",
-    headerCls: "rdm-header--review",
-    avatarIcon: "bi-clipboard-check",
-  },
 };
+
+const normalizeAction = (action) => (action === "block" ? "block" : "flag");
 
 const getPriorityCls = (p) =>
   p >= 75 ? "p-high" : p >= 30 ? "p-med" : "p-low";
@@ -69,7 +64,7 @@ const RuleDetailModal = ({
 
   if (!isOpen || !rule) return null;
 
-  const act = ACTION_CONFIG[rule.action] || ACTION_CONFIG.flag;
+  const act = ACTION_CONFIG[normalizeAction(rule.action)];
   const prioCls = getPriorityCls(rule.priority);
 
   return (

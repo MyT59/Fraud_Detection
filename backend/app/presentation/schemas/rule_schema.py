@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from typing import List, Union, Optional
 from pydantic import BaseModel, model_validator
@@ -10,6 +10,12 @@ from app.infrastructure.database.enums import (
     RuleActionEnum,
     RuleSeverityEnum,
 )
+
+
+def normalize_rule_action(value):
+    raw = value.value if isinstance(value, RuleActionEnum) else value
+    raw = str(raw or "FLAG").upper()
+    return RuleActionEnum.BLOCK if raw == "BLOCK" else RuleActionEnum.FLAG
 
 
 class RuleBase(BaseModel):
@@ -27,6 +33,11 @@ class RuleBase(BaseModel):
     rule_group: Optional[str] = None
 
     description: Optional[str] = None
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def action_only_block_or_flag(cls, v):
+        return normalize_rule_action(v)
 
 
 class RuleCreate(RuleBase):
@@ -49,17 +60,27 @@ class RuleUpdate(BaseModel):
     description: Optional[str] = None
     is_active: Optional[bool] = None
 
+    @field_validator("action", mode="before")
+    @classmethod
+    def action_only_block_or_flag(cls, v):
+        if v is None:
+            return v
+        return normalize_rule_action(v)
+
 from datetime import datetime
 from typing import Optional
 
 class RuleResponse(RuleBase):
     id: int
     is_active: bool
+    is_deleted: bool = False
     hit_count: int = 0
     rule_config: Optional[dict] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
     created_by: Optional[int] = None
+    deleted_by: Optional[int] = None
     created_by_name: Optional[str] = None
     created_by_role: Optional[str] = None
 
@@ -98,3 +119,8 @@ class RuleBuilderRequest(BaseModel):
     priority: int = 0
     rule_group: Optional[str] = None
     description: Optional[str] = None
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def action_only_block_or_flag(cls, v):
+        return normalize_rule_action(v)

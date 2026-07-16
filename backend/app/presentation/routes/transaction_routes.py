@@ -20,6 +20,19 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
+
+def _normalize_status(value):
+    if value is None:
+        return "FLAGGED"
+
+    raw = getattr(value, "value", value)
+    raw = str(raw).replace("TransactionStatusEnum.", "")
+
+    if raw in {"", "PENDING"}:
+        return "FLAGGED"
+
+    return raw
+
 @router.get(
     "",
     response_model=TransactionListResponse
@@ -44,6 +57,7 @@ def get_transactions(
     db: Session = Depends(get_db)
 ):
     repo = TransactionRepository(db)
+    final_status = _normalize_status(final_status) if final_status else None
 
     items, total = repo.get_transactions(
         search=search,
@@ -80,7 +94,7 @@ def get_transactions(
                 "amount": float(trx.amount),
                 "risk_score": trx.risk_score,
                 "risk_level": trx.risk_level,
-                "final_status": trx.final_status,
+                "final_status": _normalize_status(trx.final_status),
                 "transaction_time": trx.transaction_time,
                 "city": trx.city,
                 "country": trx.country,
@@ -89,6 +103,22 @@ def get_transactions(
             for trx in items
         ]
     }
+
+@router.get("/debug/suppressed_example")
+def get_suppressed_example():
+    """Smoke endpoint for frontend QA: returns an example suppressed_patterns
+    payload so analysts can verify UI rendering without needing backend
+    suppression logic to be triggered in production.
+    """
+    example = {
+        "suppressed_patterns": [
+            {"id": 101, "name": "Low Confidence Pattern A", "reason": "manual_suppress"},
+            {"id": 202, "name": "Historical Pattern B", "reason": "auto_disable"},
+            {"pattern_name": "Weird Channel Spike", "notes": "meta info here"},
+        ],
+        "suppressed_pattern_ids": [101, 202]
+    }
+    return example
 
 @router.get(
     "/{transaction_id}",
@@ -121,7 +151,7 @@ def get_transaction_detail(
         "transaction_time": trx.transaction_time,
 
         "transaction_status": trx.transaction_status,
-        "final_status": trx.final_status,
+        "final_status": _normalize_status(trx.final_status),
 
         "risk_score": trx.risk_score,
         "risk_level": trx.risk_level,
@@ -166,9 +196,9 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
 
             "risk_score": trx.risk_score,
             "risk_level": trx.risk_level,
-            "final_status": trx.final_status,
+            "final_status": _normalize_status(trx.final_status),
 
-            "alert_created": trx.final_status in ["REVIEW", "FRAUD"],
+            "alert_created": _normalize_status(trx.final_status) in ["FLAGGED", "FRAUD"],
             "violation_reason": trx.violation_reason,
 
             "created_at": trx.created_at
@@ -177,22 +207,9 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    except HTTPException:
+        raise
+
     except Exception:
         raise HTTPException(status_code=500, detail="Internal server error")
 
-
-@router.get("/debug/suppressed_example")
-def get_suppressed_example():
-    """Smoke endpoint for frontend QA: returns an example suppressed_patterns
-    payload so analysts can verify UI rendering without needing backend
-    suppression logic to be triggered in production.
-    """
-    example = {
-        "suppressed_patterns": [
-            {"id": 101, "name": "Low Confidence Pattern A", "reason": "manual_suppress"},
-            {"id": 202, "name": "Historical Pattern B", "reason": "auto_disable"},
-            {"pattern_name": "Weird Channel Spike", "notes": "meta info here"},
-        ],
-        "suppressed_pattern_ids": [101, 202]
-    }
-    return example

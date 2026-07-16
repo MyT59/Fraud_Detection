@@ -35,19 +35,19 @@ const HistoryStats = ({ metrics = null, metricsLoading = false }) => {
     },
     {
       id: "safe",
-      label: "Safe (Approved)",
+      label: "Transaction Success",
       value: metrics?.safe_count ?? "—",
       icon: "bi-check-circle-fill",
       color: "success",
-      sub: `${approvalRate} approval rate`,
+      sub: `${approvalRate} transaction success rate`,
     },
     {
       id: "fraud",
-      label: "Fraud (Rejected)",
+      label: "Transaction Rejected",
       value: metrics?.fraud_count ?? "—",
       icon: "bi-x-circle-fill",
       color: "danger",
-      sub: `${fraudRate} fraud confirmation`,
+      sub: `${fraudRate} rejection rate`,
     },
   ];
 

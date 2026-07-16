@@ -229,6 +229,11 @@ def get_all_alerts(db, status=None, severity=None, service=None, priority=None,
                 "title_raw": a.title, "message_raw": a.message,
                 "title": format_title(a), "description": a.message,
                 "badge": format_badge(a.severity), "trx_id": format_trx_id(a),
+                "transaction_final_status": (
+                    a.transaction.final_status.value
+                    if a.transaction and a.transaction.final_status
+                    else None
+                ),
                 "time": format_time(a.created_at),
                 "type": getattr(a, "alert_type", "UNKNOWN"),
                 "icon": "fraud" if a.severity == "HIGH" else "warning"
@@ -431,10 +436,6 @@ def claim_alert_service(db, alert_id, admin_id, background_tasks: BackgroundTask
     alert.claimed_at = datetime.now(timezone.utc)
     alert.status     = "IN_PROGRESS"
 
-    trx_repo = TransactionRepository(db)
-    trx      = trx_repo.get_by_id(alert.transaction_id)
-    if trx: trx.final_status = TransactionStatusEnum.UNDER_REVIEW
-
     actor_admin = db.query(Admin).filter(Admin.id == admin_id).first()
     log_activity(
         db=db, admin=actor_admin,
@@ -469,7 +470,7 @@ def release_alert_service(db, alert_id, admin_id, user_role="FRAUD_ANALYST"):
 
     trx_repo = TransactionRepository(db)
     trx      = trx_repo.get_by_id(alert.transaction_id)
-    if trx: trx.final_status = TransactionStatusEnum.PENDING
+    if trx: trx.final_status = TransactionStatusEnum.FLAGGED
 
     actor_admin = db.query(Admin).filter(Admin.id == admin_id).first()
     log_activity(
@@ -506,6 +507,11 @@ def get_my_queue_service(db, user_id: int, page: int = 1, limit: int = 10):
             "status": a.status, "created_at": a.created_at,
             "title": format_title(a), "message": a.message,
             "badge": format_badge(a.severity), "trx_id": format_trx_id(a),
+            "transaction_final_status": (
+                a.transaction.final_status.value
+                if a.transaction and a.transaction.final_status
+                else None
+            ),
             "type": getattr(a, "alert_type", "UNKNOWN")
         }
         for a in paginated
@@ -514,8 +520,21 @@ def get_my_queue_service(db, user_id: int, page: int = 1, limit: int = 10):
 
 
 @log_performance(label="AlertService.get_open_queue_service")
-def get_open_queue_service(db, priority_label: str = None, page: int = 1, limit: int = 50):
+def get_open_queue_service(
+    db,
+    priority_label: str = None,
+    severity: str = None,
+    alert_type: str = None,
+    page: int = 1,
+    limit: int = 50,
+):
     query = db.query(FraudAlert).filter(FraudAlert.status == "OPEN")
+
+    if severity:
+        query = query.filter(FraudAlert.severity == severity.upper())
+
+    if alert_type:
+        query = query.filter(FraudAlert.alert_type == alert_type.upper())
 
     if priority_label:
         label = priority_label.upper()
@@ -539,6 +558,11 @@ def get_open_queue_service(db, priority_label: str = None, page: int = 1, limit:
             "status": a.status, "created_at": a.created_at,
             "title": format_title(a), "message": a.message,
             "badge": format_badge(a.severity), "trx_id": format_trx_id(a),
+            "transaction_final_status": (
+                a.transaction.final_status.value
+                if a.transaction and a.transaction.final_status
+                else None
+            ),
             "type": getattr(a, "alert_type", "UNKNOWN")
         }
         for a in alerts

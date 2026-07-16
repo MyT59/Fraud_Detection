@@ -35,7 +35,7 @@ const PatternStats = ({ patterns, totalFlagged = 0 }) => {
     },
     {
       id: 2,
-      label: "High Risk Events",
+      label: "Flagged Events",
       value: highRisk.toLocaleString(),
       icon: "bi-exclamation-triangle-fill",
       color: "danger",

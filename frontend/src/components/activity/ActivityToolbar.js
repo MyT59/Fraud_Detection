@@ -19,49 +19,64 @@ const ActivityToolbar = ({
 }) => {
   return (
     <div className="activity-toolbar">
-      <div className="toolbar-search">
-        <i className="bi bi-search"></i>
-        <input
-          type="text"
-          placeholder="Search activities..."
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
+      <div className="toolbar-top-row">
+        <div className="toolbar-search">
+          <i className="bi bi-search" />
+          <input
+            type="text"
+            placeholder="Cari activity, target, admin, atau reason..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+          {searchQuery && (
+            <button type="button" onClick={() => onSearchChange("")}>
+              <i className="bi bi-x" />
+            </button>
+          )}
+        </div>
+
+        <p className="toolbar-count">
+          <strong>{totalCount}</strong> activities
+        </p>
       </div>
 
-      <div className="toolbar-divider"></div>
+      <div className="toolbar-control-row">
+        <div className="toolbar-group">
+          <span className="toolbar-group-label">Periode</span>
+          <div className="toolbar-time-filters">
+            {TIME_FILTERS.map((time) => (
+              <button
+                key={time.value}
+                className={`time-chip ${
+                  timeFilter === time.value ? "time-chip-active" : ""
+                }`}
+                onClick={() => onTimeFilterChange(time.value)}
+              >
+                <i className={`bi ${time.icon}`} />
+                {time.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      <div className="toolbar-time-filters">
-        {TIME_FILTERS.map((t) => (
-          <button
-            key={t.value}
-            className={`time-chip ${timeFilter === t.value ? "time-chip-active" : ""}`}
-            onClick={() => onTimeFilterChange(t.value)}
-          >
-            <i className={`bi ${t.icon}`}></i>
-            {t.label}
-          </button>
-        ))}
+        <div className="toolbar-group toolbar-group-wide">
+          <span className="toolbar-group-label">Kategori</span>
+          <div className="toolbar-filters">
+            {FILTER_CONFIG.map((filter) => (
+              <button
+                key={filter.value}
+                className={`filter-chip ${
+                  activeFilter === filter.value ? `active-${filter.color}` : ""
+                }`}
+                onClick={() => onFilterChange(filter.value)}
+              >
+                <i className={`bi ${filter.icon}`} />
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
-
-      <div className="toolbar-divider"></div>
-
-      <div className="toolbar-filters">
-        {FILTER_CONFIG.map((f) => (
-          <button
-            key={f.value}
-            className={`filter-chip ${activeFilter === f.value ? `active-${f.color}` : ""}`}
-            onClick={() => onFilterChange(f.value)}
-          >
-            <i className={`bi ${f.icon}`}></i>
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      <p className="toolbar-count">
-        Showing <strong>{totalCount}</strong> activities
-      </p>
     </div>
   );
 };
