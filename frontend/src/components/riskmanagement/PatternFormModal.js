@@ -73,12 +73,17 @@ const EMPTY_FORM = {
   pattern_name: "",
   service_source: "ALL",
   pattern_category: "",
-  action: "REVIEW",
+  action: "FLAG",
   risk_score: 50,
   priority: 1,
   is_active: true,
   logic: "AND",
   time_window_minutes: "",
+};
+
+const normalizeMitigationAction = (action) => {
+  const normalized = String(action || "FLAG").toUpperCase();
+  return normalized === "BLOCK" ? "BLOCK" : "FLAG";
 };
 
 // ─── Komponen Row Kondisi Dinamis ─────────────────────────────────────────────
@@ -149,6 +154,13 @@ const CondRow = ({ cond, currentService, onChange, onRemove, showRemove }) => {
         )}
       </div>
 
+      {meta && (
+        <div className="pfm-cond-meta">
+          <span>{meta.w ? "Window metric" : "Static field"}</span>
+          <code>{meta.f}</code>
+        </div>
+      )}
+
       {showRemove && (
         <button
           className="pfm-remove-btn"
@@ -217,7 +229,7 @@ const PatternFormModal = ({
         pattern_name: editData.pattern_name || "",
         service_source: editData.service_source || "ALL",
         pattern_category: editData.pattern_category || "",
-        action: editData.action || "REVIEW",
+        action: normalizeMitigationAction(editData.action),
         risk_score: editData.risk_score ?? 50,
         priority: editData.priority ?? 1,
         is_active: editData.is_active ?? true,
@@ -349,11 +361,10 @@ const PatternFormModal = ({
             </div>
             <div>
               <div className="pfm-header-title">
-                {isEdit ? "Edit Fraud Pattern" : "Tambah Universal Pattern"}
+                {isEdit ? "Edit Fraud Pattern" : "Tambah Fraud Pattern"}
               </div>
               <div className="pfm-header-sub">
-                Rancang kombinasi parameter fraud yang tersinkronisasi otomatis
-                per layanan
+                Susun pola risiko berbasis indikator transaksi per layanan
               </div>
             </div>
           </div>
@@ -435,17 +446,12 @@ const PatternFormModal = ({
                     {
                       v: "BLOCK",
                       icon: "bi-ban",
-                      desc: "Tolak transaksi seketika",
-                    },
-                    {
-                      v: "REVIEW",
-                      icon: "bi-eye",
-                      desc: "Kirim Antrean Manual Review",
+                      desc: "Langsung fraud/block",
                     },
                     {
                       v: "FLAG",
                       icon: "bi-flag-fill",
-                      desc: "Tandai log mencurigakan",
+                      desc: "Tetap berhasil, buat alert",
                     },
                   ].map((a) => (
                     <button
@@ -641,7 +647,7 @@ const PatternFormModal = ({
                 ? "Menyimpan..."
                 : isEdit
                   ? "Perbarui Pattern"
-                  : "Injeksi Pattern Baru"}
+                  : "Simpan Pattern"}
             </button>
           </div>
         </div>

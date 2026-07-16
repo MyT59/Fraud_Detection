@@ -38,7 +38,7 @@ class Transaction(Base):
     violation_pattern_ids = Column(JSONB)
     final_status = Column(
         Enum(TransactionStatusEnum, name="transaction_status_enum"),
-        server_default="PENDING"
+        server_default="FLAGGED"
     )
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)) 
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

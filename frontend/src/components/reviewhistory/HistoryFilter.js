@@ -8,13 +8,13 @@ const FILTER_DEFS = {
     options: [
       {
         value: "approved",
-        label: "Approved",
+        label: "Transaction Success",
         icon: "bi-check-circle-fill",
         color: { bg: "#ecfdf5", color: "#059669", border: "#6ee7b7" },
       },
       {
         value: "rejected",
-        label: "Rejected",
+        label: "Transaction Rejected",
         icon: "bi-x-circle-fill",
         color: { bg: "#fef2f2", color: "#dc2626", border: "#fca5a5" },
       },

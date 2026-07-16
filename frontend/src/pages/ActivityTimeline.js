@@ -7,6 +7,7 @@ import ActivityFeed from "../components/activity/ActivityFeed";
 import ActivitySidePanel from "../components/activity/ActivitySidePanel";
 import PageLoader from "../components/common/PageLoader";
 import activityLogService from "../services/activityLogService";
+import { storage } from "../services/apiService";
 import "./ActivityTimeline.css";
 
 const PAGE_LIMIT = 30;
@@ -35,6 +36,9 @@ const getPeriodStartDate = (period) => {
 };
 
 const ActivityTimeline = () => {
+  const role = storage.getUser()?.role;
+  const canAccessReports = role === "SUPER_ADMIN" || role === "RISK_MANAGER";
+
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [apiError, setApiError] = useState(false);
@@ -215,18 +219,20 @@ const ActivityTimeline = () => {
             </span>
           )}
 
-          <a
-            href="/reports"
-            className="btn-outline-indigo"
-            title="Export via Reports"
-          >
-            <i className="bi bi-download"></i>
-            Export Log
-            <i
-              className="bi bi-box-arrow-up-right ms-1"
-              style={{ fontSize: ".7rem" }}
-            ></i>
-          </a>
+          {canAccessReports && (
+            <a
+              href="/reports"
+              className="btn-outline-indigo"
+              title="Export via Reports"
+            >
+              <i className="bi bi-download"></i>
+              Export Log
+              <i
+                className="bi bi-box-arrow-up-right ms-1"
+                style={{ fontSize: ".7rem" }}
+              ></i>
+            </a>
+          )}
         </div>
       </div>
 
@@ -246,7 +252,12 @@ const ActivityTimeline = () => {
         {/* Feed dengan sentinel untuk infinite scroll */}
         <div className="timeline-feed-card">
           <div className="feed-header">
-            <h3 className="feed-header-title">Activity Feed</h3>
+            <div>
+              <h3 className="feed-header-title">System Activity Feed</h3>
+              <p className="feed-header-subtitle">
+                Event terbaru berdasarkan filter dan periode yang dipilih.
+              </p>
+            </div>
             <span className="feed-count-badge">
               {items.length} / {total.toLocaleString()} events
             </span>

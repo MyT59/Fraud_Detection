@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime, timezone
 
 from app.infrastructure.database.session import get_db
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
@@ -16,6 +17,7 @@ from app.application.services.pattern_analytics_service import (
     get_pattern_statistics
 )
 from app.application.services.activity_log_service import log_activity 
+from app.application.cache.fraud_cache import invalidate_pattern_cache
 from app.core.rbac import is_risk_manager, require_roles
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 from app.domain.entities.target_type import TargetType
@@ -69,7 +71,8 @@ def generate_patterns(
 @log_performance(label="PatternRoutes.get_active_patterns")
 def get_active_patterns(db: Session = Depends(get_db)):
     patterns = db.query(FraudPattern).filter(
-        FraudPattern.is_active == True
+        FraudPattern.is_active == True,
+        FraudPattern.is_deleted == False,
     ).all()
 
     return [
@@ -91,6 +94,7 @@ def get_active_patterns(db: Session = Depends(get_db)):
             "priority": p.priority,
             "pattern_rules": p.pattern_rules,
             "is_active": p.is_active,
+            "is_deleted": p.is_deleted,
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "updated_at": p.updated_at.isoformat() if p.updated_at else None,
             "disabled_at": p.disabled_at.isoformat() if p.disabled_at else None,
@@ -107,6 +111,7 @@ def get_candidates(db: Session = Depends(get_db)):
     """Get pattern candidates from manual reviews and retrain ML (inactive only)"""
     patterns = db.query(FraudPattern).filter(
         FraudPattern.is_active == False,
+        FraudPattern.is_deleted == False,
         FraudPattern.pattern_source.in_([PatternSourceEnum.MANUAL_REVIEW, PatternSourceEnum.RETRAIN_ML])
     ).all()
 
@@ -129,6 +134,7 @@ def get_candidates(db: Session = Depends(get_db)):
             "priority": p.priority,
             "pattern_rules": p.pattern_rules,
             "is_active": p.is_active,
+            "is_deleted": p.is_deleted,
             "pattern_source": p.pattern_source.value if p.pattern_source else "MANUAL_CREATE",
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "updated_at": p.updated_at.isoformat() if p.updated_at else None,
@@ -162,14 +168,17 @@ def activate_pattern(
     current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     pattern = db.query(FraudPattern).filter(
-        FraudPattern.id == pattern_id
+        FraudPattern.id == pattern_id,
+        FraudPattern.is_deleted == False,
     ).first()
 
     if not pattern:
         raise HTTPException(status_code=404, detail="Pattern not found")
 
     pattern.is_active = True
+    pattern.disabled_at = None
     db.commit()
+    invalidate_pattern_cache()
 
     log_activity(
         db=db,
@@ -205,10 +214,12 @@ def create_pattern_manual(
             is_active=payload.is_active,
             priority=payload.priority
         )
+        new_pattern.created_by = current_admin.id
 
         db.add(new_pattern)
         db.commit()
         db.refresh(new_pattern)
+        invalidate_pattern_cache()
 
         log_activity(
             db=db,
@@ -246,7 +257,8 @@ def update_pattern(
     current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     pattern = db.query(FraudPattern).filter(
-        FraudPattern.id == pattern_id
+        FraudPattern.id == pattern_id,
+        FraudPattern.is_deleted == False,
     ).first()
 
     if not pattern:
@@ -272,6 +284,7 @@ def update_pattern(
 
     db.commit()
     db.refresh(pattern)
+    invalidate_pattern_cache()
 
     snapshot_after = {
         "pattern_name": pattern.pattern_name,
@@ -317,14 +330,20 @@ def delete_pattern(
     current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     pattern = db.query(FraudPattern).filter(
-        FraudPattern.id == pattern_id
+        FraudPattern.id == pattern_id,
+        FraudPattern.is_deleted == False,
     ).first()
 
     if not pattern:
         raise HTTPException(status_code=404, detail="Pattern not found")
 
     pattern.is_active = False
+    pattern.is_deleted = True
+    pattern.disabled_at = datetime.now(timezone.utc)
+    pattern.deleted_at = pattern.disabled_at
+    pattern.deleted_by = current_admin.id
     db.commit()
+    invalidate_pattern_cache()
 
     # Opted to use PATTERN_DEACTIVATED log here as requested for deactivation
     log_activity(
@@ -338,7 +357,7 @@ def delete_pattern(
         details={"pattern_name": pattern.pattern_name, "reason": "Soft delete via dashboard"}
     )
 
-    return {"message": "Pattern deactivated (soft delete)"}
+    return {"message": "Pattern soft deleted"}
 
 # =========================
 # DEACTIVATE PATTERN
@@ -350,14 +369,17 @@ def deactivate_pattern(
     current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     pattern = db.query(FraudPattern).filter(
-        FraudPattern.id == pattern_id
+        FraudPattern.id == pattern_id,
+        FraudPattern.is_deleted == False,
     ).first()
 
     if not pattern:
         raise HTTPException(status_code=404, detail="Pattern not found")
 
     pattern.is_active = False
+    pattern.disabled_at = datetime.now(timezone.utc)
     db.commit()
+    invalidate_pattern_cache()
 
     log_activity(
         db=db,

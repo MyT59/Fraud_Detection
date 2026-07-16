@@ -27,9 +27,6 @@ class SupabaseStorage:
             supabase_url = settings.SUPABASE_URL
             supabase_key = settings.SUPABASE_SERVICE_KEY
 
-            print("DEBUG URL =", supabase_url)
-            print("DEBUG KEY =", supabase_key)
-
             if not supabase_url:
                 raise ValueError(
                     "SUPABASE_URL tidak ditemukan di environment"

@@ -52,6 +52,9 @@ class ReportGenerateRequest(BaseModel):
     is_active: Optional[bool] = None
     source: Optional[str] = None
 
+    # filters - manual review
+    reviewer_id: Optional[int] = None
+
 
 # ==========================================
 # RESPONSES
@@ -84,6 +87,9 @@ class ReportResponse(BaseModel):
     error_message: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
+    deleted_by: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -104,6 +110,9 @@ class ReportListItem(BaseModel):
 
     created_at: datetime
     completed_at: Optional[datetime] = None
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
+    deleted_by: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -120,3 +129,12 @@ class ReportDownloadResponse(BaseModel):
     report_name: str
     format: ReportFormatEnum
     download_url: str
+
+
+class FraudAnalystOptionResponse(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    is_active: bool = True
+
+    model_config = ConfigDict(from_attributes=True)

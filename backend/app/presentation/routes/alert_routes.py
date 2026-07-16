@@ -57,6 +57,8 @@ def get_priority_distribution(
 @router.get("/open-queue")
 def get_open_queue(
     priority: str = None,
+    severity: str = None,
+    alert_type: str = None,
     page: int = 1,
     limit: int = 10,
     db: Session = Depends(get_db),
@@ -66,6 +68,8 @@ def get_open_queue(
     return get_open_queue_service(
         db,
         priority_label=priority,
+        severity=severity,
+        alert_type=alert_type,
         page=page,
         limit=limit
     )

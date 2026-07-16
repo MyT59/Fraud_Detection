@@ -43,7 +43,10 @@ def get_cached_patterns(db) -> list:
             return _pattern_cache
 
         from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
-        patterns = db.query(FraudPattern).filter(FraudPattern.is_active == True).all()
+        patterns = db.query(FraudPattern).filter(
+            FraudPattern.is_active == True,
+            FraudPattern.is_deleted == False,
+        ).all()
         
         # JURUS SAKTI CACHING: Lepaskan objek dari ikatan Session
         for p in patterns:
@@ -76,7 +79,10 @@ def get_cached_rules(db) -> list:
             return _rule_cache
 
         from app.infrastructure.database.models.global_rule_model import GlobalRule
-        rules = db.query(GlobalRule).filter(GlobalRule.is_active == True).all()
+        rules = db.query(GlobalRule).filter(
+            GlobalRule.is_active == True,
+            GlobalRule.is_deleted == False,
+        ).all()
         
         # JURUS SAKTI CACHING: Lepaskan objek dari ikatan Session
         for r in rules:

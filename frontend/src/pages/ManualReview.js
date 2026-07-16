@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import useRole from "../hooks/useRole";
 import ReviewStatsBar from "../components/review/ReviewStatsBar";
 import TabMyQueue from "../components/review/TabMyQueue";
@@ -9,21 +10,23 @@ import {
   fetchReviewMetrics,
   fetchMyReviewMetrics,
 } from "../services/reviewApiService";
+import { getRoleCopy, getRoleLabel } from "../utils/roleUi";
 import "./ManualReview.css";
 
 /**
  * ManualReview.js — Orchestrator
  * Menentukan tab mana yang tampil berdasarkan role user.
  *
- * FRAUD_ANALYST  : My Assigned Cases
+ * FRAUD_ANALYST  : My Review Queue
  * RISK_MANAGER   : Analyst Performance + Timeline + Review Management
- * SUPER_ADMIN    : Semua tab
+ * SUPER_ADMIN    : Analyst Performance + Timeline + Review Management
  */
 
 const TAB_CONFIG = [
   {
     id: "my-queue",
-    label: "My Assigned Cases",
+    label: "My Review Queue",
+    desc: "Kasus yang sudah Anda klaim",
     icon: "bi-person-check-fill",
     color: "#2563eb",
     roles: ["canReview"],
@@ -31,20 +34,23 @@ const TAB_CONFIG = [
   {
     id: "performance",
     label: "Analyst Performance",
+    desc: "Kinerja dan beban kerja fraud analyst",
     icon: "bi-people-fill",
     color: "#7c3aed",
     roles: ["canViewAnalytics"],
   },
   {
     id: "timeline",
-    label: "Timeline Analytics",
+    label: "Review Timeline",
+    desc: "Tren review, fraud, dan pertumbuhan queue",
     icon: "bi-graph-up-arrow",
     color: "#2563eb",
     roles: ["canViewAnalytics"],
   },
   {
     id: "management",
-    label: "Review Management",
+    label: "Reviewer Operations",
+    desc: "Override, audit control, dan false negative",
     icon: "bi-shield-fill-exclamation",
     color: "#dc2626",
     roles: ["canManage"],
@@ -52,7 +58,10 @@ const TAB_CONFIG = [
 ];
 
 const ManualReview = () => {
-  const { canReview, canManage, canViewAnalytics } = useRole();
+  const { role, canReview, canManage, canViewAnalytics, isFraudAnalyst } =
+    useRole();
+  const roleCopy = getRoleCopy(role);
+  const roleLabel = getRoleLabel(role);
 
   const roleFlags = { canReview, canManage, canViewAnalytics };
 
@@ -62,7 +71,7 @@ const ManualReview = () => {
   );
 
   // Default tab berdasarkan role
-  const defaultTab = canReview ? "my-queue" : "performance";
+  const defaultTab = canManage ? "performance" : "my-queue";
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [metrics, setMetrics] = useState(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
@@ -87,66 +96,88 @@ const ManualReview = () => {
     load();
   }, [metricsKey, canReview, canManage]);
 
+  useEffect(() => {
+    if (!availableTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(defaultTab);
+    }
+  }, [activeTab, availableTabs, defaultTab]);
+
+  const activeTabMeta =
+    availableTabs.find((tab) => tab.id === activeTab) || availableTabs[0];
+
   return (
     <div className="manual-review-page">
       {/* Header */}
-      <div className="review-header">
+      <div className="review-header review-header--workspace">
         <div className="header-content">
-          <h1>Manual Review</h1>
-          <p className="subtitle">
-            {canReview && canManage
-              ? "Dashboard review lengkap"
-              : canReview
-                ? "Alert yang sudah Anda klaim — siap untuk direview"
-                : "Analytics & manajemen proses review"}
+          <div className="review-role-pill">
+            <i className="bi bi-person-badge" />
+            {roleLabel}
+          </div>
+          <h1>{roleCopy.reviewTitle}</h1>
+          <p className="subtitle">{roleCopy.reviewSubtitle}</p>
+        </div>
+        <div className="review-workspace-card">
+          <span className="review-workspace-eyebrow">
+            {isFraudAnalyst ? "Today Focus" : "Operations Focus"}
+          </span>
+          <strong>
+            {isFraudAnalyst
+              ? "Selesaikan kasus yang sudah diklaim"
+              : "Pantau performa dan kualitas keputusan review"}
+          </strong>
+          <p>
+            {isFraudAnalyst
+              ? "Flagged transaction tetap berhasil, lalu Anda validasi sebagai safe atau fraud."
+              : "Super Admin dan Risk Manager tidak memiliki queue personal, tetapi mengelola performa, timeline, dan kontrol review."}
           </p>
+          <div className="review-workspace-actions">
+            <Link to="/alerts">
+              <i className="bi bi-bell" />
+              {isFraudAnalyst ? "My Alerts" : "Alert Center"}
+            </Link>
+            <Link to="/review-history">
+              <i className="bi bi-clock-history" />
+              Review History
+            </Link>
+          </div>
         </div>
       </div>
 
       {/* Stats Bar */}
-      <ReviewStatsBar metrics={metrics} loading={metricsLoading} />
+      <ReviewStatsBar
+        metrics={metrics}
+        loading={metricsLoading}
+        isPersonal={isFraudAnalyst}
+      />
 
       {/* Tab Navigation */}
-      <div
-        style={{
-          display: "flex",
-          gap: "4px",
-          marginBottom: "20px",
-          borderBottom: "2px solid #e5e7eb",
-          flexWrap: "wrap",
-        }}
-      >
+      <div className="review-tabs-shell">
         {availableTabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: "10px 16px",
-              whiteSpace: "nowrap",
-              fontWeight: activeTab === tab.id ? 700 : 500,
-              fontSize: ".875rem",
-              color: activeTab === tab.id ? tab.color : "#6b7280",
-              borderBottom:
-                activeTab === tab.id
-                  ? `2px solid ${tab.color}`
-                  : "2px solid transparent",
-              marginBottom: "-2px",
-              display: "flex",
-              alignItems: "center",
-              gap: ".4rem",
-              transition: "all .15s",
-            }}
+            className={`review-tab-card ${activeTab === tab.id ? "active" : ""}`}
+            style={{ "--tab-color": tab.color }}
           >
-            <i className={`bi ${tab.icon}`} />
-            {tab.label}
+            <span className="review-tab-icon">
+              <i className={`bi ${tab.icon}`} />
+            </span>
+            <span className="review-tab-copy">
+              <strong>{tab.label}</strong>
+              <small>{tab.desc}</small>
+            </span>
           </button>
         ))}
       </div>
 
       {/* Tab Content */}
+      {activeTabMeta && (
+        <div className="review-active-context">
+          <i className={`bi ${activeTabMeta.icon}`} />
+          <span>{activeTabMeta.desc}</span>
+        </div>
+      )}
       <div className="review-section">
         {activeTab === "my-queue" && (
           <TabMyQueue onRefreshMetrics={() => setMetricsKey((k) => k + 1)} />

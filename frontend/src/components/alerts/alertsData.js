@@ -37,9 +37,9 @@ export const SEED_ALERTS = [
     type: "review",
     severity: "high",
     status: "unread",
-    title: "Manual Review - Antrian Menumpuk",
+    title: "Reviewer Queue - Antrian Menumpuk",
     message:
-      "8 transaksi menunggu review lebih dari 2 jam. Segera tinjau antrian Manual Review.",
+      "8 transaksi flagged for review sudah menunggu lebih dari 2 jam. Segera tinjau antrian reviewer.",
     txnId: null,
     time: "2026-02-20 08:00:00",
   },
@@ -125,7 +125,7 @@ export const SEED_ALERTS = [
     type: "review",
     severity: "low",
     status: "resolved",
-    title: "Manual Review - Semua Diselesaikan",
+    title: "Reviewer Queue - Semua Diselesaikan",
     message:
       "Reviewer Sari Dewi berhasil menyelesaikan 12 transaksi pending dalam satu sesi.",
     txnId: null,

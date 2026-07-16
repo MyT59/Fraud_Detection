@@ -3,14 +3,14 @@ import "./PatternDetailModal.css";
 
 const RISK_META = {
   high: { label: "High Risk", color: "#dc2626", bg: "#fef2f2" },
-  medium: { label: "Medium Risk", color: "#d97706", bg: "#fffbeb" },
-  low: { label: "Low Risk", color: "#0284c7", bg: "#f0f9ff" },
+  medium: { label: "Flagged for Review", color: "#d97706", bg: "#fffbeb" },
+  low: { label: "Safe", color: "#0284c7", bg: "#f0f9ff" },
 };
 
 const STATUS_META = {
   active: { label: "Active", bg: "#dcfce7", color: "#16a34a" },
   inactive: { label: "Inactive", bg: "#f1f5f9", color: "#64748b" },
-  review: { label: "Under Review", bg: "#fef3c7", color: "#92400e" },
+  review: { label: "Needs Review", bg: "#fef3c7", color: "#92400e" },
 };
 
 // [FIX] Export sederhana untuk satu pattern sebagai JSON.

@@ -1,16 +1,18 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import "./PatternPanel.css";
 import PatternDetailModal from "./PatternDetailModal";
 
 const ACTION_CFG = {
   BLOCK: { cls: "act-block", icon: "bi-ban", label: "BLOCK" },
-  REVIEW: { cls: "act-review", icon: "bi-eye", label: "REVIEW" },
   FLAG: { cls: "act-flag", icon: "bi-flag-fill", label: "FLAG" },
 };
 
+const normalizeMitigationAction = (action) =>
+  String(action || "FLAG").toUpperCase() === "BLOCK" ? "BLOCK" : "FLAG";
+
 const STATUS_CFG = {
   active: { cls: "st-active", dot: "#16a34a", label: "Aktif" },
-  inactive: { cls: "st-inactive", dot: "#9ca3af", label: "Nonaktif" },
+  inactive: { cls: "st-inactive", dot: "#9ca3af", label: "Kandidat" },
 };
 
 const LIFECYCLE = {
@@ -114,6 +116,28 @@ const PatternPanel = ({
   const paged = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
   const candidateCount = filteredCandidates.length;
   const hasCandidates = candidateCount > 0;
+  const combinedRows = useMemo(
+    () => [...enriched, ...enrichedCandidates],
+    [enriched, enrichedCandidates],
+  );
+  const avgAccuracy = useMemo(() => {
+    const values = combinedRows
+      .map((p) => p.accuracy_score ?? p._eff?.accuracy_score)
+      .filter((v) => typeof v === "number");
+    if (values.length === 0) return null;
+    return values.reduce((sum, v) => sum + v, 0) / values.length;
+  }, [combinedRows]);
+  const highRiskCount = combinedRows.filter(
+    (p) => (p.risk_score ?? 0) >= 70,
+  ).length;
+  const blockCount = data.filter((p) => p.action === "BLOCK").length;
+  const topCandidate = useMemo(() => {
+    return [...filteredCandidates].sort((a, b) => {
+      const bAcc = b.accuracy_score ?? b._eff?.accuracy_score ?? 0;
+      const aAcc = a.accuracy_score ?? a._eff?.accuracy_score ?? 0;
+      return (b.risk_score ?? 0) + bAcc * 100 - ((a.risk_score ?? 0) + aAcc * 100);
+    })[0];
+  }, [filteredCandidates]);
 
   useEffect(() => {
     setPage(1);
@@ -143,12 +167,43 @@ const PatternPanel = ({
         : v >= 0.6
           ? "#d97706"
           : "#dc2626";
-  const accLabel = (v) => (v == null ? "—" : `${Math.round(v * 100)}%`);
+  const accLabel = (v) => (v == null ? "â€”" : `${Math.round(v * 100)}%`);
   const scoreColor = (s) =>
     s >= 70 ? "#dc2626" : s >= 40 ? "#d97706" : "#16a34a";
 
+  const summaryCards = [
+    {
+      icon: "bi-shield-check",
+      label: "Pattern Aktif",
+      value: data.length,
+      meta: `${blockCount} auto-block`,
+      tone: "green",
+    },
+    {
+      icon: "bi-hourglass-split",
+      label: "Antrian Review",
+      value: candidates.length,
+      meta: hasCandidates ? "Perlu keputusan" : "Tidak ada kandidat",
+      tone: "amber",
+    },
+    {
+      icon: "bi-speedometer2",
+      label: "Rata-rata Akurasi",
+      value: accLabel(avgAccuracy),
+      meta: "TP/FP + score historis",
+      tone: "blue",
+    },
+    {
+      icon: "bi-exclamation-octagon",
+      label: "High Risk",
+      value: highRiskCount,
+      meta: "Risk score >= 70",
+      tone: "red",
+    },
+  ];
+
   const renderPatternRow = (p) => {
-    const act = ACTION_CFG[p.action] || ACTION_CFG.FLAG;
+    const act = ACTION_CFG[normalizeMitigationAction(p.action)];
     const st = p.is_active ? STATUS_CFG.active : STATUS_CFG.inactive;
     const eff = p._eff;
     const acc = p.accuracy_score ?? eff?.accuracy_score ?? null;
@@ -164,18 +219,18 @@ const PatternPanel = ({
           <div className="ptp-pattern-prio">prioritas {p.priority}</div>
         </td>
         <td>
-          {p.pattern_category ? (
-            <span className="ptp-cat-pill">{p.pattern_category}</span>
-          ) : (
-            <span className="ptp-muted">—</span>
-          )}
-        </td>
-        <td>
-          <span
-            className={`ptp-svc ptp-svc--${(p.service_source || "all").toLowerCase()}`}
-          >
-            {p.service_source || "ALL"}
-          </span>
+          <div className="ptp-scope-cell">
+            {p.pattern_category ? (
+              <span className="ptp-cat-pill">{p.pattern_category}</span>
+            ) : (
+              <span className="ptp-muted">-</span>
+            )}
+            <span
+              className={`ptp-svc ptp-svc--${(p.service_source || "all").toLowerCase()}`}
+            >
+              {p.service_source || "ALL"}
+            </span>
+          </div>
         </td>
         <td>
           <span className={`ptp-action ${act.cls}`}>
@@ -192,18 +247,18 @@ const PatternPanel = ({
           </span>
         </td>
         <td>
-          <span className="ptp-acc" style={{ color: accColor(acc) }}>
-            {accLabel(acc)}
-          </span>
-        </td>
-        <td>
-          <div className="ptp-tpfp">
-            <span className="ptp-tp">
-              TP {eff?.true_positive ?? p.true_positive ?? 0}
+          <div className="ptp-performance">
+            <span className="ptp-acc" style={{ color: accColor(acc) }}>
+              {accLabel(acc)}
             </span>
-            <span className="ptp-fp">
-              FP {eff?.false_positive ?? p.false_positive ?? 0}
-            </span>
+            <div className="ptp-tpfp">
+              <span className="ptp-tp">
+                TP {eff?.true_positive ?? p.true_positive ?? 0}
+              </span>
+              <span className="ptp-fp">
+                FP {eff?.false_positive ?? p.false_positive ?? 0}
+              </span>
+            </div>
           </div>
         </td>
         <td>
@@ -228,7 +283,6 @@ const PatternPanel = ({
             >
               <i className="bi bi-pencil" />
             </button>
-
             {p.is_active ? (
               <button
                 className="ptp-action-btn deactivate"
@@ -248,7 +302,6 @@ const PatternPanel = ({
                 />
               </button>
             )}
-
             <button
               className="ptp-action-btn del"
               title="Hapus"
@@ -261,18 +314,51 @@ const PatternPanel = ({
       </tr>
     );
   };
-
   return (
     <div className="ptp-wrap">
-      {/* Toolbar */}
+      {/* Header */}
       <div className="ptp-toolbar">
         <div className="ptp-toolbar-left">
-          <span className="ptp-title">Pattern Management</span>
+          <span className="ptp-title">
+            <i className="bi bi-shield-shaded" /> Pattern Management
+          </span>
           <span className="ptp-subtitle">
-            {data.length} aktif / {candidates.length} kandidat
+            Kelola pattern aktif, kandidat hasil review, dan lifecycle engine.
           </span>
         </div>
         <div className="ptp-toolbar-right">
+          <button
+            className="ptp-btn ghost"
+            onClick={() => setShowLifecycle(true)}
+            title="Info lifecycle engine"
+          >
+            <i className="bi bi-info-circle" /> Lifecycle
+          </button>
+          <button className="ptp-btn primary" onClick={onAdd}>
+            <i className="bi bi-plus-lg" /> Tambah Pattern
+          </button>
+        </div>
+      </div>
+
+      <div className="ptp-filter-panel">
+        <div className="ptp-filter-left">
+          <div className="ptp-view-toggle" aria-label="Filter status pattern">
+            {[
+              ["all", "Semua"],
+              ["active", "Aktif"],
+              ["inactive", "Kandidat"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                className={filterStatus === value ? "active" : ""}
+                onClick={() => setFilterStatus(value)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div className="ptp-search">
             <i className="bi bi-search" />
             <input
@@ -280,22 +366,20 @@ const PatternPanel = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            {search && (
+              <button
+                className="ptp-search-clear"
+                type="button"
+                onClick={() => setSearch("")}
+                title="Bersihkan pencarian"
+              >
+                <i className="bi bi-x" />
+              </button>
+            )}
           </div>
+        </div>
 
-          {/* Filter status */}
-          <div className="ptp-select-wrap">
-            <select
-              className="ptp-select"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              <option value="all">Semua status</option>
-              <option value="active">Aktif</option>
-              <option value="inactive">Kandidat</option>
-            </select>
-          </div>
-
-          {/* Filter kategori */}
+        <div className="ptp-filter-right">
           <div className="ptp-select-wrap">
             <select
               className="ptp-select"
@@ -311,7 +395,6 @@ const PatternPanel = ({
             </select>
           </div>
 
-          {/* Filter service */}
           <div className="ptp-select-wrap">
             <select
               className="ptp-select"
@@ -324,30 +407,49 @@ const PatternPanel = ({
               <option value="NUSABILL">NUSABILL</option>
             </select>
           </div>
-
-          <button
-            className="ptp-btn secondary"
-            onClick={() => setShowLifecycle(true)}
-            title="Info lifecycle engine"
-          >
-            <i className="bi bi-info-circle" /> Lifecycle
-          </button>
-
-          <button
-            className={`ptp-btn secondary ${generating ? "ptp-btn--loading" : ""}`}
-            onClick={onGenerate}
-            disabled={generating}
-            title="Generate pola kandidat dari review manual dan retraining"
-          >
-            {!generating && <i className="bi bi-stars" />}
-            {generating ? "Generating..." : "Generate kandidat"}
-          </button>
-
-          <button className="ptp-btn primary" onClick={onAdd}>
-            <i className="bi bi-plus-lg" /> Tambah Pattern
-          </button>
         </div>
       </div>
+      <div className="ptp-insight-grid">
+        {summaryCards.map((card) => (
+          <div className="ptp-insight-card" key={card.label}>
+            <div className={`ptp-insight-icon ${card.tone}`}>
+              <i className={`bi ${card.icon}`} />
+            </div>
+            <div>
+              <span className="ptp-insight-value">{card.value}</span>
+              <span className="ptp-insight-label">{card.label}</span>
+              <span className="ptp-insight-meta">{card.meta}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {hasCandidates && filterStatus !== "active" && (
+        <div className="ptp-review-callout">
+          <div className="ptp-review-main">
+            <div className="ptp-review-icon">
+              <i className="bi bi-lightbulb" />
+            </div>
+            <div>
+              <strong>{candidateCount} kandidat menunggu review.</strong>
+              <span>
+                Prioritaskan kandidat dengan risk score dan akurasi tertinggi
+                sebelum diaktifkan ke engine.
+              </span>
+            </div>
+          </div>
+          {topCandidate && (
+            <button
+              className="ptp-review-btn"
+              type="button"
+              onClick={() => setDetailPattern(topCandidate)}
+            >
+              Review kandidat teratas
+              <i className="bi bi-arrow-right" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Active filters */}
       {activeFilters.length > 0 && (
@@ -386,12 +488,10 @@ const PatternPanel = ({
               <thead>
                 <tr>
                   <th>Pattern</th>
-                  <th>Kategori</th>
-                  <th>Service</th>
-                  <th>Action</th>
+                  <th>Scope</th>
+                  <th>Decision</th>
                   <th>Risk Score</th>
-                  <th>Akurasi</th>
-                  <th>TP / FP</th>
+                  <th>Performance</th>
                   <th>Status</th>
                   <th>Aksi</th>
                 </tr>
@@ -399,7 +499,7 @@ const PatternPanel = ({
               <tbody>
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={9}>
+                    <td colSpan={7}>
                       <div className="ptp-empty">
                         <i className="bi bi-shield-slash" />
                         <p>Tidak ada pattern ditemukan.</p>
@@ -417,7 +517,7 @@ const PatternPanel = ({
           {totalPages > 1 && (
             <div className="ptp-pagination">
               <span>
-                {(safePage - 1) * PER_PAGE + 1}–
+                {(safePage - 1) * PER_PAGE + 1}â€“
                 {Math.min(safePage * PER_PAGE, filtered.length)} dari{" "}
                 {filtered.length}
               </span>
@@ -437,14 +537,14 @@ const PatternPanel = ({
                       Math.abs(p - safePage) <= 1,
                   )
                   .reduce((acc, p, idx, arr) => {
-                    if (idx > 0 && p - arr[idx - 1] > 1) acc.push("…");
+                    if (idx > 0 && p - arr[idx - 1] > 1) acc.push("â€¦");
                     acc.push(p);
                     return acc;
                   }, [])
                   .map((p, i) =>
-                    p === "…" ? (
+                    p === "â€¦" ? (
                       <span key={`e${i}`} className="ptp-pg-ellipsis">
-                        …
+                        â€¦
                       </span>
                     ) : (
                       <button
@@ -476,23 +576,32 @@ const PatternPanel = ({
               <span className="ptp-section-title">Pattern Kandidat</span>
               <p className="ptp-section-note">
                 Pattern ini berasal dari review manual, proses retraining, atau
-                status nonaktif. Aktifkan untuk menambahkannya ke daftar pattern
-                aktif.
+                pattern yang sedang nonaktif. Cek akurasi, TP/FP, dan risk score
+                sebelum diaktifkan ke engine.
               </p>
             </div>
-            <span className="ptp-section-badge">{candidateCount}</span>
+            <div className="ptp-section-actions">
+              <span className="ptp-section-badge">{candidateCount}</span>
+              <button
+                className={`ptp-btn secondary ${generating ? "ptp-btn--loading" : ""}`}
+                onClick={onGenerate}
+                disabled={generating}
+                title="Generate pola kandidat dari review manual dan retraining"
+              >
+                {!generating && <i className="bi bi-stars" />}
+                {generating ? "Generating..." : "Generate kandidat"}
+              </button>
+            </div>
           </div>
           <div className="ptp-table-scroll">
             <table className="ptp-table">
               <thead>
                 <tr>
                   <th>Pattern</th>
-                  <th>Kategori</th>
-                  <th>Service</th>
-                  <th>Action</th>
+                  <th>Scope</th>
+                  <th>Decision</th>
                   <th>Risk Score</th>
-                  <th>Akurasi</th>
-                  <th>TP / FP</th>
+                  <th>Performance</th>
                   <th>Status</th>
                   <th>Aksi</th>
                 </tr>
@@ -500,7 +609,7 @@ const PatternPanel = ({
               <tbody>
                 {candidateCount === 0 ? (
                   <tr>
-                    <td colSpan={9}>
+                    <td colSpan={7}>
                       <div className="ptp-empty">
                         <i className="bi bi-shield-slash" />
                         <p>Tidak ada pattern kandidat.</p>
@@ -512,56 +621,6 @@ const PatternPanel = ({
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
-      {totalPages > 1 && (
-        <div className="ptp-pagination">
-          <span>
-            {(safePage - 1) * PER_PAGE + 1}–
-            {Math.min(safePage * PER_PAGE, filtered.length)} dari{" "}
-            {filtered.length}
-          </span>
-          <div className="ptp-pg-btns">
-            <button
-              className="ptp-pg-btn"
-              disabled={safePage === 1}
-              onClick={() => setPage(safePage - 1)}
-            >
-              <i className="bi bi-chevron-left" />
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter(
-                (p) =>
-                  p === 1 || p === totalPages || Math.abs(p - safePage) <= 1,
-              )
-              .reduce((acc, p, idx, arr) => {
-                if (idx > 0 && p - arr[idx - 1] > 1) acc.push("…");
-                acc.push(p);
-                return acc;
-              }, [])
-              .map((p, i) =>
-                p === "…" ? (
-                  <span key={`e${i}`} className="ptp-pg-ellipsis">
-                    …
-                  </span>
-                ) : (
-                  <button
-                    key={p}
-                    className={`ptp-pg-btn ${p === safePage ? "active" : ""}`}
-                    onClick={() => setPage(p)}
-                  >
-                    {p}
-                  </button>
-                ),
-              )}
-            <button
-              className="ptp-pg-btn"
-              disabled={safePage === totalPages}
-              onClick={() => setPage(safePage + 1)}
-            >
-              <i className="bi bi-chevron-right" />
-            </button>
           </div>
         </div>
       )}
@@ -627,13 +686,13 @@ const PatternPanel = ({
                 {
                   icon: "bi-shield-check",
                   color: "#16a34a",
-                  label: "Auto-Promote → BLOCK",
-                  desc: `Akurasi ≥ ${LIFECYCLE.PROMOTE_THRESHOLD * 100}% dengan min ${LIFECYCLE.PROMOTE_MIN_SAMPLE} sample`,
+                  label: "Auto-Promote â†’ BLOCK",
+                  desc: `Akurasi â‰¥ ${LIFECYCLE.PROMOTE_THRESHOLD * 100}% dengan min ${LIFECYCLE.PROMOTE_MIN_SAMPLE} sample`,
                 },
                 {
                   icon: "bi-shield-exclamation",
                   color: "#dc2626",
-                  label: "Auto-Disable → FLAG",
+                  label: "Auto-Disable -> FLAG",
                   desc: `Akurasi < ${LIFECYCLE.DISABLE_THRESHOLD * 100}% dengan min ${LIFECYCLE.DISABLE_MIN_SAMPLE} sample`,
                 },
                 {
@@ -646,7 +705,7 @@ const PatternPanel = ({
                   icon: "bi-graph-down",
                   color: "#d97706",
                   label: "Decay TP/FP",
-                  desc: `Tiap lifecycle × ${LIFECYCLE.DECAY_RATE ?? 0.98} — mencegah data lama terlalu mendominasi`,
+                  desc: `Tiap lifecycle Ã— ${LIFECYCLE.DECAY_RATE ?? 0.98} â€” mencegah data lama terlalu mendominasi`,
                 },
                 {
                   icon: "bi-database",

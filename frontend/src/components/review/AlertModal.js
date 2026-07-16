@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { SeverityBadge, ServiceBadge } from "./ReviewBadges";
-import { fmtDate } from "./reviewHelpers";
+import { getAlertCaseType } from "./reviewHelpers";
 import "./AlertModal.css";
 import { fetchAlertDetail } from "../../services/AlertsService";
 
@@ -117,6 +117,7 @@ const Skeleton = () => (
 // ─── Decision Panel ───────────────────────────────────────────────
 
 const DecisionPanel = ({
+  caseType,
   decision,
   setDecision,
   confidence,
@@ -136,14 +137,16 @@ const DecisionPanel = ({
   return (
     <div className="am-decision-panel">
       <div className="am-decision-panel__title">
-        <i className="bi bi-shield-check" />
-        Keputusan Review
+        <i className={`bi ${caseType.icon}`} />
+        {caseType.key === "BLOCKED" ? "Keputusan Investigasi" : "Keputusan Review"}
       </div>
 
       {/* Info hint */}
-      <div className="am-hint am-hint--info">
+      <div
+        className={`am-hint ${caseType.key === "BLOCKED" ? "am-hint--block" : "am-hint--info"}`}
+      >
         <i className="bi bi-info-circle-fill" />
-        Alert sudah diklaim. Submit keputusan untuk menyelesaikan.
+        {caseType.description}
       </div>
 
       {!isDecided ? (
@@ -158,7 +161,11 @@ const DecisionPanel = ({
           >
             <i className="bi bi-check-circle-fill" />
             <span>SAFE</span>
-            <small>Transaksi aman</small>
+            <small>
+              {caseType.key === "BLOCKED"
+                ? "Block false positive"
+                : "Transaksi aman"}
+            </small>
           </button>
           <button
             className="am-decide-btn am-decide-btn--fraud"
@@ -169,7 +176,11 @@ const DecisionPanel = ({
           >
             <i className="bi bi-x-circle-fill" />
             <span>FRAUD</span>
-            <small>Laporkan penipuan</small>
+            <small>
+              {caseType.key === "BLOCKED"
+                ? "Block sudah tepat"
+                : "Laporkan penipuan"}
+            </small>
           </button>
         </div>
       ) : (
@@ -187,7 +198,12 @@ const DecisionPanel = ({
             <i
               className={`bi ${isSafe ? "bi-check-circle-fill" : "bi-x-circle-fill"}`}
             />
-            Konfirmasi: Transaksi {isSafe ? "AMAN (SAFE)" : "PENIPUAN (FRAUD)"}
+            Konfirmasi:{" "}
+            {caseType.key === "BLOCKED"
+              ? isSafe
+                ? "BLOCK FALSE POSITIVE"
+                : "BLOCK VALID FRAUD"
+              : `Transaksi ${isSafe ? "AMAN (SAFE)" : "PENIPUAN (FRAUD)"}`}
           </div>
 
           {/* Confidence picker */}
@@ -370,6 +386,11 @@ const AlertModal = ({ alert, onClose, onReview }) => {
   const riskMeta = RISK_LEVEL_META[riskKey] || RISK_LEVEL_META.LOW;
   const prioKey = (alert.priorityLabel || "LOW").toUpperCase();
   const prioMeta = PRIORITY_META[prioKey] || PRIORITY_META.LOW;
+  const caseType = getAlertCaseType({
+    ...alert,
+    transactionFinalStatus: trx?.final_status || alert.transactionFinalStatus,
+    transaction: trx,
+  });
 
   const violations = (trx?.violation_reason || "").split(" | ").filter(Boolean);
 
@@ -394,6 +415,10 @@ const AlertModal = ({ alert, onClose, onReview }) => {
                 {alert.alertType && (
                   <span className="am-type-chip">{alert.alertType}</span>
                 )}
+                <span className={`am-case-chip ${caseType.tone}`}>
+                  <i className={`bi ${caseType.icon}`} />
+                  {caseType.label}
+                </span>
               </div>
               <div className="am-header-meta">
                 {alert.service && <ServiceBadge service={alert.service} />}
@@ -779,6 +804,7 @@ const AlertModal = ({ alert, onClose, onReview }) => {
           {/* ── Right: decision panel (sticky) ── */}
           <div className="am-right">
             <DecisionPanel
+              caseType={caseType}
               decision={decision}
               setDecision={setDecision}
               confidence={confidence}

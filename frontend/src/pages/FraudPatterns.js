@@ -7,6 +7,7 @@ import PatternTrendChart from "../components/fraudpatterns/PatternTrendChart";
 import PatternDiagnostics from "../components/fraudpatterns/PatternDiagnostics";
 import PageLoader from "../components/common/PageLoader";
 import api from "../services/apiService";
+import { storage } from "../services/apiService";
 import "./FraudPatterns.css";
 
 const CATEGORY_MAP = {
@@ -169,6 +170,9 @@ function generateActions(bp, category) {
 }
 
 const FraudPatterns = () => {
+  const role = storage.getUser()?.role;
+  const canAccessReports = role === "SUPER_ADMIN" || role === "RISK_MANAGER";
+
   const [loading, setLoading] = useState(true);
   const [patterns, setPatterns] = useState([]);
   const [totalFlagged, setTotalFlagged] = useState(0); // [NEW] dari BE /stats
@@ -309,19 +313,21 @@ const FraudPatterns = () => {
             <i className="bi bi-arrow-clockwise"></i>
           </button>
 
-          <a
-            href="/reports"
-            className="fp-export-btn"
-            title="Export via Reports"
-            style={{ textDecoration: "none" }}
-          >
-            <i className="bi bi-download"></i>
-            Export Patterns List
-            <i
-              className="bi bi-box-arrow-up-right ms-1"
-              style={{ fontSize: ".7rem" }}
-            ></i>
-          </a>
+          {canAccessReports && (
+            <a
+              href="/reports"
+              className="fp-export-btn"
+              title="Export via Reports"
+              style={{ textDecoration: "none" }}
+            >
+              <i className="bi bi-download"></i>
+              Export Patterns List
+              <i
+                className="bi bi-box-arrow-up-right ms-1"
+                style={{ fontSize: ".7rem" }}
+              ></i>
+            </a>
+          )}
         </div>
       </div>
 

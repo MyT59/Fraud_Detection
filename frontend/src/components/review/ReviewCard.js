@@ -38,15 +38,19 @@ const ReviewCard = ({
 
   const getStatusBadge = (status) => {
     const badges = {
-      pending: { icon: "bi-clock-history", text: "Pending", class: "pending" },
+      pending: {
+        icon: "bi-flag-fill",
+        text: "Flagged for Review",
+        class: "pending",
+      },
       approved: {
         icon: "bi-check-circle-fill",
-        text: "Approved",
+        text: "Transaction Success",
         class: "approved",
       },
       rejected: {
         icon: "bi-x-circle-fill",
-        text: "Rejected",
+        text: "Transaction Rejected",
         class: "rejected",
       },
     };

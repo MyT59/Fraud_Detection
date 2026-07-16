@@ -4,7 +4,7 @@
   border-radius: 8px;
   padding: 16px;
   transition: all 0.3s ease;
-  height: 100%;
+  height: auto;
   display: flex;
   flex-direction: column;
 }
@@ -48,9 +48,11 @@
 }
 
 .chart-container {
-  flex: 1;
+  flex: 0 0 220px;
   position: relative;
-  min-height: 200px;
+  height: 220px;
+  min-height: 220px;
+  max-height: 220px;
 }
 
 .doughnut-chart {

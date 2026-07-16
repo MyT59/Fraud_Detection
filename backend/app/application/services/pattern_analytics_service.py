@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 @log_performance(label="PatternAnalytics.get_pattern_statistics")
 def get_pattern_statistics(db: Session):
-    patterns = db.query(FraudPattern).all()
+    patterns = db.query(FraudPattern).filter(FraudPattern.is_deleted == False).all()
 
     results = []
 
@@ -66,6 +66,7 @@ def get_pattern_statistics(db: Session):
             "action": pattern.action,
             "service_source": pattern.service_source,
             "is_active": pattern.is_active,
+            "is_deleted": pattern.is_deleted,
 
             "occurrences": tx_count,
             "avg_amount": agg["avg_amount"],

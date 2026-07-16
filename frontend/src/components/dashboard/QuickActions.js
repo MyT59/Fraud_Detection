@@ -1,21 +1,32 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { storage } from "../../services/apiService";
+import { getRoleCopy } from "../../utils/roleUi";
 import "./QuickActions.css";
 
 const QuickActions = () => {
   const navigate = useNavigate();
+  const role = storage.getUser()?.role;
+  const canManage = role === "SUPER_ADMIN" || role === "RISK_MANAGER";
+  const isSuperAdmin = role === "SUPER_ADMIN";
+  const roleCopy = getRoleCopy(role);
 
   const actions = [
-    {
-      id: 1,
-      title: "Risk Management",
-      icon: "bi-shield-fill-exclamation",
-      color: "danger",
-      route: "/risk-management",
-    },
+    ...(canManage
+      ? [
+          {
+            id: 1,
+            title: "Risk Management",
+            icon: "bi-shield-fill-exclamation",
+            color: "danger",
+            route: "/risk-management",
+          },
+        ]
+      : []),
     {
       id: 2,
-      title: "Manual Review",
+      title: roleCopy.quickReview,
+      hint: roleCopy.quickReviewHint,
       icon: "bi-clipboard-check",
       color: "warning",
       route: "/manual-review",
@@ -48,27 +59,39 @@ const QuickActions = () => {
       color: "purple",
       route: "/activity-timeline",
     },
-    {
-      id: 5,
-      title: "Reports",
-      icon: "bi-file-earmark-text",
-      color: "success",
-      route: "/reports",
-    },
-    {
-      id: 6,
-      title: "Account Management",
-      icon: "bi-shield-lock-fill",
-      color: "secondary",
-      route: "/account-management",
-    },
-    {
-      id: 7,
-      title: "Audit Log",
-      icon: "bi-clock-history",
-      color: "purple",
-      route: "/audit-log",
-    },
+    ...(canManage
+      ? [
+          {
+            id: 5,
+            title: "Reports",
+            icon: "bi-file-earmark-text",
+            color: "success",
+            route: "/reports",
+          },
+        ]
+      : []),
+    ...(isSuperAdmin
+      ? [
+          {
+            id: 6,
+            title: "Admin Control",
+            icon: "bi-shield-lock-fill",
+            color: "secondary",
+            route: "/super-admin",
+          },
+        ]
+      : []),
+    ...(canManage
+      ? [
+          {
+            id: 7,
+            title: "Audit Log",
+            icon: "bi-clock-history",
+            color: "purple",
+            route: "/audit-log",
+          },
+        ]
+      : []),
     {
       id: 12,
       title: "Fraud Patterns",
@@ -76,13 +99,17 @@ const QuickActions = () => {
       color: "danger",
       route: "/fraud-patterns",
     },
-    {
-      id: 13,
-      title: "Retrain Schedule",
-      icon: "bi-cpu",
-      color: "info",
-      route: "/retrain-schedule",
-    },
+    ...(isSuperAdmin
+      ? [
+          {
+            id: 13,
+            title: "Retrain Schedule",
+            icon: "bi-cpu",
+            color: "info",
+            route: "/retrain-schedule",
+          },
+        ]
+      : []),
     {
       id: 8,
       title: "Alerts Log",
@@ -112,6 +139,7 @@ const QuickActions = () => {
             <button
               className={`action-icon-btn action-icon-btn--${action.color}`}
               onClick={() => navigate(action.route)}
+              title={action.hint || action.title}
             >
               <i className={`bi ${action.icon}`}></i>
               {action.count && (

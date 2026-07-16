@@ -2,62 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./RecentAlerts.css";
 
-const STATIC_ALERTS = [
-  {
-    id: "static-1",
-    type: "high",
-    title: "Fraud Terdeteksi — Blacklist Hit",
-    description:
-      "Rekening ACCT100114 terdeteksi pola brute force PIN di terminal T1023.",
-    time: "2 minutes ago",
-    userId: "AGN-001783",
-    amount: null,
-    icon: "bi-ban",
-  },
-  {
-    id: "static-2",
-    type: "high",
-    title: "Rule Engine — Transfer Besar",
-    description:
-      "Rule Transfer Besar terpicu pada akun ACCT100235. Jumlah Rp 113.137.",
-    time: "15 minutes ago",
-    userId: "AGN-003648",
-    amount: null,
-    icon: "bi-gear-fill",
-  },
-  {
-    id: "static-3",
-    type: "high",
-    title: "Fraud Terdeteksi — NusaBill",
-    description:
-      "Pembayaran mencurigakan oleh CUST10000 via Web. Bill ID: BILL280462.",
-    time: "1 hour ago",
-    userId: "NUS-004798",
-    amount: null,
-    icon: "bi-exclamation-triangle-fill",
-  },
-  {
-    id: "static-4",
-    type: "medium",
-    title: "Rule Engine — API Burst Payment",
-    description: "Rule Burst Payment via API terpicu pada pelanggan CUST10318.",
-    time: "2 hours ago",
-    userId: "NUS-004818",
-    amount: null,
-    icon: "bi-gear-fill",
-  },
-  {
-    id: "static-5",
-    type: "high",
-    title: "Manual Review — Antrian Menumpuk",
-    description: "Terdapat transaksi menunggu review lebih dari 2 jam.",
-    time: "3 hours ago",
-    userId: "—",
-    amount: null,
-    icon: "bi-clipboard-check",
-  },
-];
-const STATIC_SUMMARY = { high: 3, medium: 1, low: 0 };
+const EMPTY_SUMMARY = { high: 0, medium: 0, low: 0 };
 
 const getSeverityColor = (t) =>
   t === "high"
@@ -67,19 +12,19 @@ const getSeverityColor = (t) =>
       : "severity-low";
 
 const getSeverityLabel = (t) =>
-  t === "high" ? "High Risk" : t === "medium" ? "Medium Risk" : "Low Risk";
+  t === "high" ? "High Risk" : t === "medium" ? "Medium Risk" : "Safe";
 
-const RecentAlerts = ({ alerts, summary }) => {
+const RecentAlerts = ({ alerts, summary, variant = "card" }) => {
   const navigate = useNavigate();
 
-  const displayAlerts = alerts && alerts.length > 0 ? alerts : STATIC_ALERTS;
-  const displaySummary = summary || STATIC_SUMMARY;
+  const displayAlerts = Array.isArray(alerts) ? alerts : [];
+  const displaySummary = summary || EMPTY_SUMMARY;
 
   const [dismissed, setDismissed] = useState(new Set());
   const visible = displayAlerts.filter((a) => !dismissed.has(a.id));
 
   return (
-    <div className="recent-alerts-card">
+    <div className={`recent-alerts-card recent-alerts-${variant}`}>
       <div className="alerts-header">
         <div className="header-left">
           <h3 className="alerts-title">
@@ -135,46 +80,44 @@ const RecentAlerts = ({ alerts, summary }) => {
           </div>
         ) : (
           visible.map((alert) => (
-            <div key={alert.id} className="alert-item">
+            <div key={alert.id} className="recent-alert-item">
               <div
-                className={`alert-indicator ${getSeverityColor(alert.type)}`}
+                className={`recent-alert-indicator ${getSeverityColor(alert.type)}`}
               >
                 <i className={alert.icon || "bi-exclamation-triangle-fill"}></i>
               </div>
 
-              <div className="alert-content">
-                <div className="alert-header-row">
-                  <h4 className="alert-title">{alert.title}</h4>
-                  <span
-                    className={`severity-badge ${getSeverityColor(alert.type)}`}
-                  >
-                    {getSeverityLabel(alert.type)}
-                  </span>
-                </div>
+              <div className="recent-alert-content">
+                <h4 className="recent-alert-title">{alert.title}</h4>
 
-                <p className="alert-description">{alert.description}</p>
+                <p className="recent-alert-description">{alert.description}</p>
 
-                <div className="alert-meta">
-                  {alert.userId && alert.userId !== "—" && (
-                    <span className="meta-item">
+                <div className="recent-alert-meta">
+                  {alert.userId && alert.userId !== "-" && (
+                    <span className="recent-meta-item">
                       <i className="bi bi-hash"></i>
                       {alert.userId}
                     </span>
                   )}
                   {alert.amount && (
-                    <span className="meta-item">
+                    <span className="recent-meta-item">
                       <i className="bi bi-currency-dollar"></i>
                       {alert.amount}
                     </span>
                   )}
-                  <span className="meta-item time">
+                  <span className="recent-meta-item time">
                     <i className="bi bi-clock"></i>
                     {alert.time}
                   </span>
                 </div>
               </div>
 
-              <div className="alert-actions">
+              <div className="recent-alert-actions">
+                <span
+                  className={`severity-badge ${getSeverityColor(alert.type)}`}
+                >
+                  {getSeverityLabel(alert.type)}
+                </span>
                 <button
                   className="btn-action btn-investigate"
                   title="Lihat detail"
@@ -209,7 +152,7 @@ const RecentAlerts = ({ alerts, summary }) => {
           </span>
           <span className="summary-item">
             <span className="dot severity-low"></span>
-            {displaySummary.low} Low Risk
+            {displaySummary.low} Safe
           </span>
         </div>
       </div>

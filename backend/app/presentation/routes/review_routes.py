@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -64,10 +64,11 @@ def get_analyst_performance(
 def get_review_history_route(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1),
+    reviewed_by: Optional[int] = Query(None, ge=1),
     db: Session = Depends(get_db),
-    current_admin = Depends(require_roles("FRAUD_ANALYST", "RISK_MANAGER", "SUPER_ADMIN"))
+    current_admin = Depends(require_roles("RISK_MANAGER", "SUPER_ADMIN"))
 ):
-    return get_review_history(db, page, limit)
+    return get_review_history(db, page, limit, reviewed_by)
 
 
 @router.get("/my-history", response_model=ReviewHistoryPaginatedResponse)

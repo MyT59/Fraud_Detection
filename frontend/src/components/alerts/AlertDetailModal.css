@@ -34,7 +34,7 @@
     0 8px 32px rgba(15, 23, 42, 0.12),
     0 2px 8px rgba(15, 23, 42, 0.06);
   width: 100%;
-  max-width: 680px; /* ← Diperlebar dari 560px untuk konten lebih banyak */
+  max-width: 920px;
   max-height: 92vh;
   display: flex;
   flex-direction: column;
@@ -148,6 +148,30 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.adm-case-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.adm-case-chip.flagged {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+}
+
+.adm-case-chip.blocked {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
 }
 
 /* Severity */
@@ -614,4 +638,42 @@
   .adm-score-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* UX refresh overrides */
+.adm-header,
+.adm-footer {
+  background: #fbfdff;
+}
+
+.adm-body {
+  background: #f8fafc;
+}
+
+.adm-rows,
+.adm-message-block {
+  background: #ffffff;
+}
+
+.adm-header__eyebrow {
+  color: #dc2626;
+  font-weight: 800;
+}
+
+.adm-header__title {
+  font-size: 1.18rem;
+  font-weight: 900;
+}
+
+.adm-badges-row {
+  padding: 0.1rem 0 0.2rem;
+}
+
+.adm-message-block {
+  border-radius: 10px;
+}
+
+.adm-footer {
+  position: sticky;
+  bottom: 0;
 }

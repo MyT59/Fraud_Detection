@@ -20,7 +20,7 @@ class FraudPattern(Base):
     pattern_rules = Column(JSONB, nullable=False)
     rules_hash = Column(String)
 
-    action = Column(String(20), server_default="FLAG")  # FLAG | REVIEW | BLOCK
+    action = Column(String(20), server_default="FLAG")  # FLAG | BLOCK
     risk_score = Column(Integer, server_default="50")
     priority = Column(Integer, server_default="1")
 
@@ -38,11 +38,15 @@ class FraudPattern(Base):
     false_positive_rate = Column(Float)
 
     created_by = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True)
+    deleted_by = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True)
     is_active = Column(Boolean, default=True, server_default=text("true"))
+    is_deleted = Column(Boolean, default=False, server_default=text("false"), nullable=False)
     disabled_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     # RELATION
-    admin = relationship("Admin")
+    admin = relationship("Admin", foreign_keys=[created_by])
+    deleted_by_admin = relationship("Admin", foreign_keys=[deleted_by])

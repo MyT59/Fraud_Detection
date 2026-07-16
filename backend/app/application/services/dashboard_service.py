@@ -1,3 +1,5 @@
+import builtins
+
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import case, func
 
@@ -116,6 +118,153 @@ class DashboardService:
     @staticmethod
     def get_transaction_trend(db: Session):
         return TransactionRepository(db).get_today_hourly_trend()
+
+    @staticmethod
+    def get_transaction_trend_detail(
+        db: Session,
+        range: str = "today",
+        start: str = None,
+        end: str = None,
+    ):
+        now = datetime.now(timezone.utc)
+        anchor = now
+        range_key = (range or "today").lower()
+
+        def parse_date(value, fallback):
+            if not value:
+                return fallback
+            try:
+                return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except ValueError:
+                return fallback
+
+        def is_fraud_expr():
+            return case((Transaction.final_status == "FRAUD", 1), else_=0)
+
+        if range_key == "today":
+            start_dt = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_dt = anchor.replace(hour=23, minute=59, second=59, microsecond=999999)
+            rows = (
+                db.query(
+                    func.extract("hour", Transaction.transaction_time).label("hour"),
+                    func.count(Transaction.id).label("total"),
+                    func.sum(is_fraud_expr()).label("fraud"),
+                )
+                .filter(Transaction.transaction_time >= start_dt)
+                .filter(Transaction.transaction_time <= end_dt)
+                .group_by("hour")
+                .order_by("hour")
+                .all()
+            )
+            by_hour = {int(r.hour): r for r in rows}
+            return [
+                {
+                    "hour": hour,
+                    "total": int(by_hour.get(hour).total or 0) if hour in by_hour else 0,
+                    "fraud": int(by_hour.get(hour).fraud or 0) if hour in by_hour else 0,
+                }
+                for hour in builtins.range(24)
+            ]
+
+        if range_key in ("weekly", "7d"):
+            days = 7
+            end_dt = anchor.replace(hour=23, minute=59, second=59, microsecond=999999)
+            start_dt = (end_dt - timedelta(days=days - 1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        elif range_key in ("monthly", "30d"):
+            days = 30
+            end_dt = anchor.replace(hour=23, minute=59, second=59, microsecond=999999)
+            start_dt = (end_dt - timedelta(days=days - 1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        elif range_key == "custom":
+            default_start = (anchor - timedelta(days=7)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_dt = parse_date(start, default_start)
+            end_dt = parse_date(end, anchor).replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            )
+            if end_dt < start_dt:
+                start_dt, end_dt = end_dt.replace(hour=0, minute=0, second=0, microsecond=0), start_dt.replace(
+                    hour=23, minute=59, second=59, microsecond=999999
+                )
+            days = min((end_dt.date() - start_dt.date()).days + 1, 366)
+        elif range_key in ("yearly", "1y"):
+            month_starts = []
+            for offset in builtins.range(11, -1, -1):
+                year = anchor.year
+                month = anchor.month - offset
+                while month <= 0:
+                    month += 12
+                    year -= 1
+                month_starts.append(datetime(year, month, 1, tzinfo=timezone.utc))
+            start_dt = month_starts[0]
+            end_dt = anchor.replace(hour=23, minute=59, second=59, microsecond=999999)
+            rows = (
+                db.query(
+                    func.extract("year", Transaction.transaction_time).label("year"),
+                    func.extract("month", Transaction.transaction_time).label("month"),
+                    func.count(Transaction.id).label("total"),
+                    func.sum(is_fraud_expr()).label("fraud"),
+                )
+                .filter(Transaction.transaction_time >= start_dt)
+                .filter(Transaction.transaction_time <= end_dt)
+                .group_by("year", "month")
+                .order_by("year", "month")
+                .all()
+            )
+            by_month = {(int(r.year), int(r.month)): r for r in rows}
+            return [
+                {
+                    "year": month_start.year,
+                    "month": month_start.month,
+                    "total": int(by_month.get((month_start.year, month_start.month)).total or 0)
+                    if (month_start.year, month_start.month) in by_month
+                    else 0,
+                    "fraud": int(by_month.get((month_start.year, month_start.month)).fraud or 0)
+                    if (month_start.year, month_start.month) in by_month
+                    else 0,
+                }
+                for month_start in month_starts
+            ]
+        else:
+            days = 7
+            end_dt = anchor.replace(hour=23, minute=59, second=59, microsecond=999999)
+            start_dt = (end_dt - timedelta(days=days - 1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+        def fetch_daily_rows(start_range, end_range):
+            return (
+                db.query(
+                    func.date(Transaction.transaction_time).label("date"),
+                    func.count(Transaction.id).label("total"),
+                    func.sum(is_fraud_expr()).label("fraud"),
+                )
+                .filter(Transaction.transaction_time >= start_range)
+                .filter(Transaction.transaction_time <= end_range)
+                .group_by("date")
+                .order_by("date")
+                .all()
+            )
+
+        rows = fetch_daily_rows(start_dt, end_dt)
+        by_date = {r.date.isoformat(): r for r in rows}
+        result = []
+        for idx in builtins.range(days):
+            day = (start_dt + timedelta(days=idx)).date()
+            key = day.isoformat()
+            row = by_date.get(key)
+            result.append(
+                {
+                    "date": key,
+                    "total": int(row.total or 0) if row else 0,
+                    "fraud": int(row.fraud or 0) if row else 0,
+                }
+            )
+        return result
 
     @staticmethod
     def get_fraud_distribution(db: Session):

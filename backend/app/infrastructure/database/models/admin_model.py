@@ -28,7 +28,11 @@ class Admin(Base):
     # ==========================================
     role = relationship("Role", back_populates="admins")
     activity_logs = relationship("ActivityLog", back_populates="admin")
-    blacklist_items = relationship("BlacklistItem", back_populates="admin")
+    blacklist_items = relationship(
+        "BlacklistItem",
+        back_populates="admin",
+        foreign_keys="BlacklistItem.added_by",
+    )
 
     notification_preference = relationship(
         "NotificationPreference", 

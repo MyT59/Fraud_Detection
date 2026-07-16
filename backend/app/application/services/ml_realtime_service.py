@@ -366,8 +366,8 @@ class MLRealtimeService:
         if is_anomaly:
             try:
                 # ── Opsi B: ML update final_status ───────────────────────
-                # Jika ML deteksi anomali dan final_status masih SAFE/PENDING,
-                # eskalasi ke UNDER_REVIEW agar tidak lolos tanpa review.
+                # Jika ML deteksi anomali dan final_status masih SAFE/FLAGGED,
+                # tandai untuk review pasca-transaksi tanpa memblokir transaksi.
                 # Jika sudah FRAUD (dari Rule/Pattern), tidak di-downgrade.
                 from app.infrastructure.database.enums import TransactionStatusEnum
 
@@ -377,8 +377,8 @@ class MLRealtimeService:
                     else str(transaction.final_status)
                 )
 
-                if current_status in ("SAFE", "PENDING", "safe", "pending"):
-                    transaction.final_status = TransactionStatusEnum.UNDER_REVIEW
+                if current_status in ("SAFE", "FLAGGED", "PENDING", "safe", "flagged", "pending"):
+                    transaction.final_status = TransactionStatusEnum.FLAGGED
                     transaction.is_flagged_ml = True
 
                     # Kontribusikan ML score ke risk_score
@@ -408,7 +408,7 @@ class MLRealtimeService:
 
                     logger.info(
                         f"[ML_REALTIME] tx_id={transaction_id} "
-                        f"final_status eskalasi SAFE → UNDER_REVIEW | "
+                        f"final_status escalation SAFE/FLAGGED -> FLAGGED | "
                         f"risk_score {int(current_risk)} → {new_risk} (+{ml_risk_contribution}) | "
                         f"ML risk_level={risk_level}"
                     )

@@ -124,7 +124,7 @@ const HistoryTable = ({
           <span style={{ flex: 1 }}>
             Sebagai <strong>Manager/Admin</strong>, kamu bisa melakukan Override
             atau Delete review dari halaman{" "}
-            <strong>Manual Review → Review Management</strong>.
+            <strong>Fraud Analysts → Reviewer Operations</strong>.
           </span>
           <button
             onClick={handleGoToManagement}
@@ -232,8 +232,10 @@ const HistoryTable = ({
         ) : !loading && processed.length === 0 ? (
           <div className="htable-empty">
             <i className="bi bi-inbox" />
-            <p>Tidak ada riwayat review</p>
-            <span>Belum ada review yang tercatat, atau coba ubah filter.</span>
+            <p>Belum ada riwayat review</p>
+            <span>
+              Belum ada keputusan reviewer yang tercatat untuk filter ini.
+            </span>
           </div>
         ) : (
           <table className="htable">

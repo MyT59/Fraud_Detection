@@ -9,12 +9,6 @@ const ACTION_CFG = {
     label: "BLOCK",
     avatarIcon: "bi-shield-fill-x",
   },
-  REVIEW: {
-    headerCls: "pdm-header--review",
-    icon: "bi-eye",
-    label: "REVIEW",
-    avatarIcon: "bi-eye-fill",
-  },
   FLAG: {
     headerCls: "pdm-header--flag",
     icon: "bi-flag-fill",
@@ -22,6 +16,9 @@ const ACTION_CFG = {
     avatarIcon: "bi-flag-fill",
   },
 };
+
+const normalizeMitigationAction = (action) =>
+  String(action || "FLAG").toUpperCase() === "BLOCK" ? "BLOCK" : "FLAG";
 
 const SVC_CFG = {
   ALL: { cls: "pdm-svc--all", label: "ALL" },
@@ -192,7 +189,7 @@ const PatternDetailModal = ({
 
   if (!isOpen || !pattern) return null;
 
-  const act = ACTION_CFG[pattern.action] || ACTION_CFG.FLAG;
+  const act = ACTION_CFG[normalizeMitigationAction(pattern.action)];
   const svc = SVC_CFG[pattern.service_source] || SVC_CFG.ALL;
   const acc = pattern.accuracy_score;
   const pct = acc != null ? Math.round(acc * 100) : null;
@@ -215,19 +212,19 @@ const PatternDetailModal = ({
     if (pct == null) return null;
     if (pct >= 85)
       return {
-        label: "Kandidat promote → BLOCK",
+        label: "Kandidat promote → BLOCKED",
         cls: "pdm-lc--promote",
         icon: "bi-arrow-up-circle-fill",
       };
     if (pct < 40)
       return {
-        label: "Risiko auto-disable",
+        label: "Risiko auto-disable untuk pattern",
         cls: "pdm-lc--danger",
         icon: "bi-exclamation-triangle-fill",
       };
     if (pct < 60)
       return {
-        label: "Performa perlu dipantau",
+        label: "Performa perlu dipantau untuk manual review",
         cls: "pdm-lc--warn",
         icon: "bi-eye-fill",
       };
@@ -274,7 +271,7 @@ const PatternDetailModal = ({
                   className={`bi ${pattern.is_active ? "bi-circle-fill" : "bi-circle"}`}
                   style={{ fontSize: "0.55rem" }}
                 />
-                {pattern.is_active ? "Aktif" : "Kandidat"}
+                {pattern.is_active ? "Aktif" : "Menunggu Review"}
               </span>
             </div>
           </div>
@@ -299,7 +296,7 @@ const PatternDetailModal = ({
               >
                 {pct != null ? `${pct}%` : "—"}
               </span>
-              <span className="pdm-stat-lbl">Akurasi</span>
+              <span className="pdm-stat-lbl">Akurasi Deteksi</span>
             </div>
             <div className="pdm-stat-div" />
             <div className="pdm-stat">
@@ -323,7 +320,7 @@ const PatternDetailModal = ({
             <div className="pdm-stat-div" />
             <div className="pdm-stat">
               <span className="pdm-stat-val">{pattern.hit_count ?? 0}</span>
-              <span className="pdm-stat-lbl">Total Hit</span>
+              <span className="pdm-stat-lbl">Total Deteksi</span>
             </div>
           </div>
 
@@ -445,14 +442,14 @@ const PatternDetailModal = ({
                 className="pdm-foot-btn pdm-foot-btn--warn"
                 onClick={() => setConfirmAction("deactivate")}
               >
-                <i className="bi bi-pause-circle" /> Nonaktifkan
+                <i className="bi bi-pause-circle" /> Nonaktifkan Pattern
               </button>
             ) : (
               <button
                 className="pdm-foot-btn pdm-foot-btn--activate"
                 onClick={() => setConfirmAction("activate")}
               >
-                <i className="bi bi-play-circle" /> Aktifkan
+                <i className="bi bi-play-circle" /> Aktifkan Pattern
               </button>
             )}
           </div>

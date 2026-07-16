@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import PageLoader from "../components/common/PageLoader";
 import HistoryStats from "../components/reviewhistory/HistoryStats";
 import HistoryTable from "../components/reviewhistory/HistoryTable";
@@ -16,6 +17,8 @@ import "./ReviewHistory.css";
 
 const ReviewHistory = () => {
   const { isFraudAnalyst } = useRole();
+  const [searchParams] = useSearchParams();
+  const reviewedByParam = searchParams.get("reviewed_by");
 
   const [items, setItems] = useState([]);
   const [metrics, setMetrics] = useState(null);
@@ -47,10 +50,14 @@ const ReviewHistory = () => {
         if (isFraudAnalyst) {
           data = await fetchMyReviewHistory({ page: targetPage, limit: LIMIT });
         } else {
-          data = await api.get(
-            `/reviews/history?page=${targetPage}&limit=${LIMIT}`,
-            { signal: controller.signal },
-          );
+          const params = new URLSearchParams({
+            page: targetPage,
+            limit: LIMIT,
+          });
+          if (reviewedByParam) params.set("reviewed_by", reviewedByParam);
+          data = await api.get(`/reviews/history?${params.toString()}`, {
+            signal: controller.signal,
+          });
         }
 
         const mapped = (data.items ?? []).map(mapHistoryItem);
@@ -67,7 +74,7 @@ const ReviewHistory = () => {
         setLoading(false);
       }
     },
-    [isFraudAnalyst],
+    [isFraudAnalyst, reviewedByParam],
   );
 
   // ─── Fetch Metrics ─────────────────────────────────────────────
@@ -146,7 +153,9 @@ const ReviewHistory = () => {
           />
           {isFraudAnalyst
             ? "Menampilkan riwayat review milik Anda sendiri."
-            : "Menampilkan riwayat review seluruh tim (semua analis)."}
+            : reviewedByParam
+              ? `Menampilkan riwayat review untuk Analyst ID ${reviewedByParam}.`
+              : "Menampilkan riwayat review seluruh tim (semua analis)."}
         </div>
       )}
 

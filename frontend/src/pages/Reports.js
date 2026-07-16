@@ -71,8 +71,14 @@ const Reports = () => {
     }
   };
 
-  const handleDeleteReport = (reportId) => {
-    setReports((prev) => prev.filter((r) => r.id !== reportId));
+  const handleDeleteReport = async (reportId) => {
+    try {
+      await reportService.deleteReport(reportId);
+      setReports((prev) => prev.filter((r) => r.id !== reportId));
+    } catch (err) {
+      console.error("Delete failed:", err.message);
+      alert(`Gagal menghapus report: ${err.message}`);
+    }
   };
 
   const handleViewReport = (report) => {

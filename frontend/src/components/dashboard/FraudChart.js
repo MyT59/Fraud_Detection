@@ -5,17 +5,12 @@ import "./ChartCard.css";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-const FraudChart = ({ total = 1290, fraudCount = 56, rangeData }) => {
+const FraudChart = ({ total = 0, fraudCount = 0 }) => {
   const { computedTotal, computedFraud } = useMemo(() => {
-    if (rangeData && rangeData.length > 0) {
-      const t = rangeData.reduce((sum, d) => sum + (d.transactions || 0), 0);
-      const f = rangeData.reduce((sum, d) => sum + (d.fraud || 0), 0);
-      return { computedTotal: t, computedFraud: f };
-    }
     return { computedTotal: total, computedFraud: fraudCount };
-  }, [rangeData, total, fraudCount]);
+  }, [total, fraudCount]);
 
-  const legitimateCount = computedTotal - computedFraud;
+  const legitimateCount = Math.max(0, computedTotal - computedFraud);
   const fraudPercentage =
     computedTotal > 0
       ? ((computedFraud / computedTotal) * 100).toFixed(1)
@@ -59,7 +54,8 @@ const FraudChart = ({ total = 1290, fraudCount = 56, rangeData }) => {
         callbacks: {
           label: (ctx) => {
             const val = ctx.parsed || 0;
-            const pct = ((val / computedTotal) * 100).toFixed(1);
+            const pct =
+              computedTotal > 0 ? ((val / computedTotal) * 100).toFixed(1) : "0.0";
             return `${ctx.label}: ${val.toLocaleString()} (${pct}%)`;
           },
         },

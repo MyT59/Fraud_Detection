@@ -3,13 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { storage } from "../services/apiService";
 import { fetchRecentAlerts, fetchAlertCount } from "../services/AlertsService";
 import NotificationDropdown from "./NotificationDropdown";
+import { getRoleLabel } from "../utils/roleUi";
 import "./Navbar.css";
-
-const ROLE_LABEL = {
-  SUPER_ADMIN: "Super Admin",
-  RISK_MANAGER: "Risk Manager",
-  FRAUD_ANALYST: "Fraud Analyst",
-};
 
 const getInitials = (name = "") =>
   name
@@ -80,7 +75,7 @@ const Navbar = ({ onToggleSidebar }) => {
   };
 
   const displayName = user?.full_name || "Admin User";
-  const displayRole = ROLE_LABEL[user?.role] || user?.role || "Administrator";
+  const displayRole = getRoleLabel(user?.role);
   const initials = getInitials(displayName);
 
   return (

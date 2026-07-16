@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import useRole from "../../hooks/useRole";
 import { updateAlertStatus } from "../../services/AlertsService";
+import { getAlertCaseType } from "../review/reviewHelpers";
 import "./AlertDetailModal.css";
 
 // ─── Helpers ──────────────────────────────────────────────────────
@@ -473,8 +474,16 @@ const AlertDetailModal = ({
     onStatusUpdated?.(detail.id, newStatus);
   };
 
-  const canClaim = displayStatus === "OPEN";
+  const canClaim = displayStatus === "OPEN" && typeof onClaim === "function";
   const canResolve = displayStatus === "IN_PROGRESS";
+  const caseType = getAlertCaseType({
+    ...(detail || {}),
+    transactionFinalStatus:
+      detail?.transaction?.final_status ||
+      detail?.transaction_final_status ||
+      detail?.final_status,
+    transaction: detail?.transaction,
+  });
 
   return (
     <div
@@ -521,6 +530,10 @@ const AlertDetailModal = ({
                 <SeverityBadge severity={detail.severity} />
                 <StatusBadge status={displayStatus} />
                 <AlertTypeBadge type={detail.type} />
+                <span className={`adm-case-chip ${caseType.tone}`}>
+                  <i className={`bi ${caseType.icon}`} />
+                  {caseType.label}
+                </span>
                 {priorityLabel && (
                   <PriorityBadge
                     label={priorityLabel}
@@ -1160,11 +1173,6 @@ const AlertDetailModal = ({
                               : "#64748b",
                       }}
                     >
-                      {review.decision_confidence === "HIGH"
-                        ? "🟢"
-                        : review.decision_confidence === "MEDIUM"
-                          ? "🟡"
-                          : "🔴"}{" "}
                       {review.decision_confidence}
                     </span>
                   </DetailRow>
@@ -1276,7 +1284,8 @@ const AlertDetailModal = ({
                     </>
                   ) : (
                     <>
-                      <i className="bi bi-hand-index-fill" /> Claim
+                      <i className={`bi ${caseType.icon}`} />
+                      {caseType.key === "BLOCKED" ? "Investigate" : "Review"}
                     </>
                   )}
                 </button>

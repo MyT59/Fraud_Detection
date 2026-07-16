@@ -180,7 +180,8 @@ const ProfileSettings = ({ data, onSave }) => {
                 disabled
               />
               <small className="text-muted">
-                Hubungi Super Admin untuk mengubah role
+                Role menentukan akses menu dan workflow review. Hubungi Super
+                Admin untuk mengubah role.
               </small>
             </div>
           </div>

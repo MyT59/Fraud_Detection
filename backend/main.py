@@ -113,7 +113,10 @@ async def lifespan(app: FastAPI):
         # Ambil jadwal yang statusnya aktif
         schedules = (
             db.query(RetrainSchedule)
-            .filter(RetrainSchedule.is_active == True)
+            .filter(
+                RetrainSchedule.is_active == True,
+                RetrainSchedule.is_deleted == False,
+            )
             .all()
         )
 

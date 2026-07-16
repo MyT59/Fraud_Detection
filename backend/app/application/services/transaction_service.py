@@ -168,7 +168,7 @@ def process_transaction(data: dict, db: Session):
             amount             = amount,
             transaction_time   = data.get("transaction_time") or datetime.now(timezone.utc),
             transaction_status = "SUCCESS",
-            final_status       = TransactionStatusEnum.PENDING,
+            final_status       = TransactionStatusEnum.FLAGGED,
             ip_address         = data.get("ip_address"),
             terminal_id        = data.get("terminal_id"),
             merchant_id        = data.get("merchant_id"),
@@ -191,7 +191,7 @@ def process_transaction(data: dict, db: Session):
             trx.risk_level    = "HIGH"
             trx.risk_score   += 80.0
             trx.anomaly_score = 0.99
-            trx.final_status  = TransactionStatusEnum.UNDER_REVIEW
+            trx.final_status  = TransactionStatusEnum.FLAGGED
             trx.violation_reason = jump_reason
 
         repo.create(trx)
@@ -337,6 +337,7 @@ def process_transaction(data: dict, db: Session):
 
         if isinstance(pattern_actions, str):
             pattern_actions = [pattern_actions]
+        has_block_action = "BLOCK" in set((rule_actions or []) + (pattern_actions or []))
 
         # =========================
         # 6. ENSEMBLE ENGINE
@@ -351,8 +352,8 @@ def process_transaction(data: dict, db: Session):
         trx.risk_score   = max(trx.risk_score, ensemble.get("final_score", 0))
         _perf_ensemble = _tock("ensemble")
 
-        if trx.final_status == TransactionStatusEnum.PENDING:
-            trx.final_status = ensemble.get("final_status", TransactionStatusEnum.UNDER_REVIEW)
+        if trx.final_status == TransactionStatusEnum.FLAGGED:
+            trx.final_status = ensemble.get("final_status", TransactionStatusEnum.FLAGGED)
 
         # =========================
         # 7. RISK ESCALATION
@@ -366,8 +367,10 @@ def process_transaction(data: dict, db: Session):
         if any("Fan-In" in v["name"] or "Syndicate" in v["name"] for v in violations):
             trx.risk_score = min(100, trx.risk_score + 10)
 
-        if trx.risk_score >= 90:
+        if trx.risk_score >= 90 and has_block_action:
             trx.final_status = TransactionStatusEnum.FRAUD
+        elif trx.risk_score >= 90 and trx.final_status != TransactionStatusEnum.FRAUD:
+            trx.final_status = TransactionStatusEnum.FLAGGED
 
         # =========================
         # 8. FINALIZE
@@ -394,7 +397,7 @@ def process_transaction(data: dict, db: Session):
         # 9. ALERT & COMMIT
         # =========================
         _tick("alert")
-        if trx.final_status in [TransactionStatusEnum.UNDER_REVIEW, TransactionStatusEnum.FRAUD]:
+        if trx.final_status in [TransactionStatusEnum.FLAGGED, TransactionStatusEnum.FRAUD]:
             trx.is_flagged_ml = True
             create_alert(db, trx)
             log_activity(
@@ -402,7 +405,7 @@ def process_transaction(data: dict, db: Session):
                 admin=None,
                 action_type=ActivityActionEnum.FLAG_TRANSACTION,
                 module_source=EventSourceEnum.SYSTEM,
-                severity=SeverityLevelEnum.WARNING if trx.final_status == TransactionStatusEnum.UNDER_REVIEW else SeverityLevelEnum.CRITICAL,
+                severity=SeverityLevelEnum.WARNING if trx.final_status == TransactionStatusEnum.FLAGGED else SeverityLevelEnum.CRITICAL,
                 target_type=TargetType.TRANSACTION,
                 target_id=trx.id,
                 details={

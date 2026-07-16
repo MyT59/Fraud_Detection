@@ -1,22 +1,49 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { Link } from "react-router-dom";
 import PageLoader from "../common/PageLoader";
 import AlertModal from "./AlertModal";
 import { SeverityBadge, ServiceBadge } from "./ReviewBadges";
-import { fmtDate, mapMyQueueAlert, extractItems } from "./reviewHelpers";
+import {
+  fmtDate,
+  getAlertCaseType,
+  mapMyQueueAlert,
+  extractItems,
+} from "./reviewHelpers";
 import { fetchMyQueue, submitReview } from "../../services/reviewApiService";
 
-/**
- * TabMyQueue.js
- * Tab "My Assigned Cases" — hanya untuk FRAUD_ANALYST & SUPER_ADMIN.
- * Menampilkan alert yang sudah diklaim dan siap direview.
- * Data source: GET /alerts/my-queue
- */
+const FILTERS = [
+  { value: "ALL", label: "Semua" },
+  { value: "CRITICAL", label: "Critical" },
+  { value: "HIGH", label: "High" },
+  { value: "MEDIUM", label: "Medium" },
+  { value: "LOW", label: "Low" },
+];
+
+const priorityRank = (label = "") => {
+  const key = label.toUpperCase();
+  if (key.includes("CRITICAL")) return 4;
+  if (key.includes("HIGH")) return 3;
+  if (key.includes("MEDIUM")) return 2;
+  if (key.includes("LOW")) return 1;
+  return 0;
+};
+
+const getPriorityTone = (label = "") => {
+  const rank = priorityRank(label);
+  if (rank >= 4) return "critical";
+  if (rank === 3) return "high";
+  if (rank === 2) return "medium";
+  return "low";
+};
+
 const TabMyQueue = ({ onRefreshMetrics }) => {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [query, setQuery] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("ALL");
 
   useEffect(() => {
     const load = async () => {
@@ -38,7 +65,6 @@ const TabMyQueue = ({ onRefreshMetrics }) => {
 
   const handleReview = useCallback(
     async (alert, decision, confidence, notes) => {
-      // Optimistic: langsung sembunyikan dari list
       setAlerts((prev) => prev.filter((a) => a.alertId !== alert.alertId));
       setSelectedAlert(null);
       try {
@@ -51,10 +77,8 @@ const TabMyQueue = ({ onRefreshMetrics }) => {
         setRefreshKey((k) => k + 1);
         onRefreshMetrics?.();
       } catch (err) {
-        // Rollback optimistic update
         setAlerts((prev) => [...prev, alert]);
 
-        // Error message spesifik per HTTP status BE
         const status = err.status ?? err.response?.status ?? 0;
         let message;
         if (status === 409) {
@@ -83,198 +107,233 @@ const TabMyQueue = ({ onRefreshMetrics }) => {
     [onRefreshMetrics],
   );
 
+  const queueStats = useMemo(() => {
+    const critical = alerts.filter((a) => a.severity === "CRITICAL").length;
+    const high = alerts.filter((a) => a.severity === "HIGH").length;
+    const priority = alerts.filter((a) => priorityRank(a.priorityLabel) >= 3)
+      .length;
+    const blocked = alerts.filter(
+      (a) => getAlertCaseType(a).key === "BLOCKED",
+    ).length;
+    const flagged = alerts.length - blocked;
+    return {
+      total: alerts.length,
+      critical,
+      high,
+      priority,
+      blocked,
+      flagged,
+    };
+  }, [alerts]);
+
+  const filteredAlerts = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    return alerts
+      .filter((alert) =>
+        severityFilter === "ALL" ? true : alert.severity === severityFilter,
+      )
+      .filter((alert) => {
+        if (!keyword) return true;
+        return [
+          alert.alertId,
+          alert.transactionId,
+          alert.alertType,
+          alert.service,
+          alert.title,
+          alert.message,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(keyword));
+      })
+      .sort((a, b) => {
+        const severityOrder =
+          FILTERS.findIndex((f) => f.value === a.severity) -
+          FILTERS.findIndex((f) => f.value === b.severity);
+        if (severityOrder !== 0) return severityOrder;
+        return priorityRank(b.priorityLabel) - priorityRank(a.priorityLabel);
+      });
+  }, [alerts, query, severityFilter]);
+
+  const resetFilters = () => {
+    setQuery("");
+    setSeverityFilter("ALL");
+  };
+
   if (loading) return <PageLoader message="Memuat My Queue..." />;
 
   return (
-    <div>
-      {/* Error banner */}
-      {apiError && (
-        <div
-          style={{
-            background: "#fef2f2",
-            border: "1px solid #fca5a5",
-            borderRadius: "8px",
-            padding: "12px 16px",
-            color: "#b91c1c",
-            marginBottom: "16px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <span>
-            <i className="bi bi-wifi-off" style={{ marginRight: 8 }} />
-            <strong>Gagal memuat My Queue.</strong>
-          </span>
+    <div className="review-tab-content">
+      <div className="review-panel-header">
+        <div>
+          <h2 className="review-panel-title">
+            <span className="review-panel-icon blue">
+              <i className="bi bi-person-check-fill" />
+            </span>
+            Review Alerts
+          </h2>
+          <p className="review-panel-subtitle">
+            Alert yang sudah Anda claim. Flagged case direview
+            post-transaction, sedangkan blocked case diinvestigasi untuk
+            validasi block dan false positive.
+          </p>
+        </div>
+        <div className="review-header-actions">
+          <Link className="review-secondary-btn" to="/alerts">
+            <i className="bi bi-bell" />
+            My Alerts
+          </Link>
           <button
+            className="review-secondary-btn"
             onClick={() => setRefreshKey((k) => k + 1)}
-            style={{
-              background: "#dc2626",
-              color: "#fff",
-              border: "none",
-              padding: "6px 12px",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
           >
-            Coba Lagi
+            <i className="bi bi-arrow-clockwise" />
+            Refresh
           </button>
+        </div>
+      </div>
+
+      {apiError && (
+        <div className="review-error-banner">
+          <span>
+            <i className="bi bi-wifi-off" />
+            <strong>Gagal memuat queue.</strong> Pastikan backend berjalan lalu
+            coba lagi.
+          </span>
+          <button onClick={() => setRefreshKey((k) => k + 1)}>Coba Lagi</button>
         </div>
       )}
 
-      {/* Info banner */}
-      <div
-        style={{
-          background: "#eff6ff",
-          border: "1px solid #bfdbfe",
-          borderRadius: "8px",
-          padding: "10px 16px",
-          marginBottom: "16px",
-          fontSize: ".82rem",
-          color: "#1d4ed8",
-        }}
-      >
-        <i className="bi bi-info-circle-fill" style={{ marginRight: 6 }} />
-        Halaman ini menampilkan alert yang sudah Anda <strong>claim</strong>.
-        Untuk mengambil kasus baru, pergi ke{" "}
-        <strong>Alerts → Open Queue</strong>.
+      <div className="review-mini-metrics">
+        <div className="review-mini-metric">
+          <span>Total Claimed</span>
+          <strong>{queueStats.total}</strong>
+        </div>
+        <div className="review-mini-metric danger">
+          <span>Critical</span>
+          <strong>{queueStats.critical}</strong>
+        </div>
+        <div className="review-mini-metric">
+          <span>High Risk</span>
+          <strong>{queueStats.high}</strong>
+        </div>
+        <div className="review-mini-metric success">
+          <span>Flagged</span>
+          <strong>{queueStats.flagged}</strong>
+        </div>
+        <div className="review-mini-metric danger">
+          <span>Blocked</span>
+          <strong>{queueStats.blocked}</strong>
+        </div>
       </div>
 
-      {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "1rem",
-        }}
-      >
-        <h2
-          style={{
-            margin: 0,
-            fontSize: "1rem",
-            fontWeight: 700,
-            color: "#111827",
-          }}
-        >
-          <i
-            className="bi bi-person-check-fill"
-            style={{ marginRight: 8, color: "#2563eb" }}
+      <div className="review-queue-toolbar">
+        <div className="review-queue-search">
+          <i className="bi bi-search" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Cari Alert ID, Transaction ID, layanan, atau tipe..."
           />
-          My Assigned Cases{" "}
-          <span
-            style={{ fontWeight: 400, color: "#6b7280", fontSize: ".85rem" }}
-          >
-            ({alerts.length} kasus)
-          </span>
-        </h2>
-        <button
-          onClick={() => setRefreshKey((k) => k + 1)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: ".35rem",
-            padding: ".4rem .75rem",
-            border: "1px solid #e2e8f0",
-            borderRadius: "7px",
-            background: "#fff",
-            fontSize: ".8rem",
-            fontWeight: 600,
-            color: "#374151",
-            cursor: "pointer",
-          }}
-        >
-          <i className="bi bi-arrow-clockwise" /> Refresh
-        </button>
+          {query && (
+            <button onClick={() => setQuery("")}>
+              <i className="bi bi-x" />
+            </button>
+          )}
+        </div>
+
+        <div className="review-queue-filters">
+          {FILTERS.map((filter) => (
+            <button
+              key={filter.value}
+              className={severityFilter === filter.value ? "active" : ""}
+              onClick={() => setSeverityFilter(filter.value)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Empty state */}
       {alerts.length === 0 ? (
-        <div className="txn-empty">
-          <i
-            className="bi bi-inbox"
-            style={{
-              fontSize: "2.5rem",
-              color: "#94a3b8",
-              display: "block",
-              marginBottom: "12px",
-            }}
-          />
-          <p style={{ color: "#374151", fontWeight: 600, margin: "0 0 4px" }}>
-            Tidak ada kasus yang ditugaskan
-          </p>
-          <p style={{ color: "#9ca3af", fontSize: ".875rem", margin: 0 }}>
-            Klaim alert dari <strong>Alerts → Open Queue</strong> untuk mulai
-            review.
-          </p>
+        <div className="review-queue-empty">
+          <i className="bi bi-inbox" />
+          <strong>Belum ada alert yang sedang Anda review</strong>
+          <span>
+            Klaim alert dari My Alerts untuk mulai investigasi post-transaction.
+          </span>
+          <Link to="/alerts">
+            <i className="bi bi-bell" />
+            Buka My Alerts
+          </Link>
+        </div>
+      ) : filteredAlerts.length === 0 ? (
+        <div className="review-queue-empty compact">
+          <i className="bi bi-funnel" />
+          <strong>Tidak ada alert sesuai filter</strong>
+          <span>Ubah keyword atau severity untuk melihat queue lain.</span>
+          <button onClick={resetFilters}>Reset filter</button>
         </div>
       ) : (
-        <div className="txn-table-wrapper">
-          <table className="txn-table">
-            <thead>
-              <tr>
-                <th>Service</th>
-                <th>Alert ID</th>
-                <th>Transaction ID</th>
-                <th>Tipe</th>
-                <th>Severity</th>
-                <th>Prioritas</th>
-                <th>Dibuat</th>
-                <th className="col-action">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alerts.map((alert) => (
-                <tr
+        <div className="review-alert-grid">
+          {filteredAlerts.map((alert) => (
+            (() => {
+              const caseType = getAlertCaseType(alert);
+              return (
+                <button
+                  type="button"
                   key={alert.alertId}
-                  style={{ cursor: "pointer" }}
+                  className={`review-alert-card ${getPriorityTone(alert.priorityLabel)} case-${caseType.tone}`}
                   onClick={() => setSelectedAlert(alert)}
                 >
-                  <td>
+                  <div className="review-alert-card-top">
+                    <div>
+                      <span className="review-alert-id">
+                        Alert #{alert.alertId}
+                      </span>
+                      <strong>{alert.title}</strong>
+                    </div>
                     <ServiceBadge service={alert.service} />
-                  </td>
-                  <td>
-                    <span className="cell-id">#{alert.alertId}</span>
-                  </td>
-                  <td>
-                    <span className="cell-id">
-                      #{alert.transactionId ?? "—"}
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{ fontSize: ".82rem" }}>
-                      {alert.alertType}
-                    </span>
-                  </td>
-                  <td>
+                  </div>
+
+                  <div className="review-alert-meta-row">
                     <SeverityBadge severity={alert.severity} />
-                  </td>
-                  <td>
-                    <span style={{ fontSize: ".82rem", fontWeight: 600 }}>
+                    <span className={`review-case-pill ${caseType.tone}`}>
+                      <i className={`bi ${caseType.icon}`} />
+                      {caseType.label}
+                    </span>
+                    <span className="review-priority-pill">
+                      <i className="bi bi-flag-fill" />
                       {alert.priorityLabel}
                     </span>
-                  </td>
-                  <td>
-                    <span className="cell-date">
+                  </div>
+
+                  <div className="review-alert-message">
+                    {alert.message || "Tidak ada deskripsi alert."}
+                  </div>
+
+                  <div className="review-alert-facts">
+                    <span>
+                      <i className="bi bi-arrow-left-right" />
+                      TRX #{alert.transactionId ?? "-"}
+                    </span>
+                    <span>
+                      <i className="bi bi-diagram-3" />
+                      {alert.alertType}
+                    </span>
+                    <span>
+                      <i className="bi bi-clock" />
                       {fmtDate(alert.createdAt)}
                     </span>
-                  </td>
-                  <td
-                    className="col-action"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      className="btn-aksi"
-                      onClick={() => setSelectedAlert(alert)}
-                    >
-                      <i className="bi bi-eye" /> Review
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+
+                  <div className="review-alert-card-footer">
+                    <span>{caseType.shortAction}</span>
+                    <i className="bi bi-arrow-right" />
+                  </div>
+                </button>
+              );
+            })()
+          ))}
         </div>
       )}
 

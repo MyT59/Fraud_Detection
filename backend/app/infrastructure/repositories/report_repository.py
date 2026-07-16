@@ -27,7 +27,10 @@ class ReportRepository:
     def get_by_id(self, report_id: UUID):
         return (
             self.db.query(Report)
-            .filter(Report.id == report_id)
+            .filter(
+                Report.id == report_id,
+                Report.is_deleted == False,
+            )
             .first()
         )
 
@@ -48,6 +51,7 @@ class ReportRepository:
             .options(
                 joinedload(Report.generated_by_admin)
             )
+            .filter(Report.is_deleted == False)
         )
 
         if report_type:

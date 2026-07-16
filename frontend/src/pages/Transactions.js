@@ -16,10 +16,11 @@ const ITEMS_PER_PAGE = 10;
 const SEARCH_DEBOUNCE_MS = 400;
 
 const STATUS_LABEL = {
-  PENDING: "Pending",
-  UNDER_REVIEW: "Under Review",
+  PENDING: "Flagged",
+  FLAGGED: "Flagged",
+  UNDER_REVIEW: "Flagged",
   SAFE: "Safe",
-  FRAUD: "Fraud",
+  FRAUD: "Blocked",
 };
 
 // Sort key FE → field name BE
@@ -41,7 +42,7 @@ const Transactions = () => {
     total: 0,
     fraud: 0,
     safe: 0,
-    under_review: 0,
+    flagged: 0,
   });
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -105,7 +106,8 @@ const Transactions = () => {
           total: response.summary?.total_transactions || 0,
           fraud: response.summary?.fraud || 0,
           safe: response.summary?.safe || 0,
-          under_review: response.summary?.under_review || 0,
+          flagged:
+            response.summary?.flagged ?? response.summary?.under_review ?? 0,
         });
         setApiError(false);
       } catch (err) {
@@ -120,8 +122,11 @@ const Transactions = () => {
             total: fallback.length,
             fraud: fallback.filter((t) => t.final_status === "FRAUD").length,
             safe: fallback.filter((t) => t.final_status === "SAFE").length,
-            under_review: fallback.filter(
-              (t) => t.final_status === "UNDER_REVIEW",
+            flagged: fallback.filter(
+              (t) =>
+                t.final_status === "FLAGGED" ||
+                t.final_status === "PENDING" ||
+                t.final_status === "UNDER_REVIEW",
             ).length,
           });
         }
@@ -259,8 +264,8 @@ const Transactions = () => {
   const STAT_ITEMS = [
     { key: "total", label: "Total", icon: "bi-list-ul", color: "#3b82f6" },
     {
-      key: "under_review",
-      label: "Under Review",
+      key: "flagged",
+      label: "Flagged",
       icon: "bi-hourglass-split",
       color: "#f59e0b",
     },
@@ -272,7 +277,7 @@ const Transactions = () => {
     },
     {
       key: "fraud",
-      label: "Fraud",
+      label: "Blocked",
       icon: "bi-shield-exclamation",
       color: "#dc2626",
     },
@@ -297,7 +302,7 @@ const Transactions = () => {
                 <i className="bi bi-receipt"></i> Transactions
               </h1>
               <p className="page-subtitle">
-                Monitor dan analisa semua transaksi
+                Monitor status transaksi: berhasil, flagged, dan blocked
               </p>
             </div>
             <div className="d-flex align-items-center gap-2 flex-wrap">
@@ -419,7 +424,7 @@ const Transactions = () => {
             <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
               <div className="pagination-info">
                 {totalRecords === 0
-                  ? "Tidak ada transaksi ditemukan"
+                  ? "Tidak ada transaksi sesuai filter saat ini"
                   : `Menampilkan ${indexFirst}–${indexLast} dari ${totalRecords.toLocaleString()} transaksi`}
               </div>
               <PaginationComponent
@@ -469,7 +474,7 @@ const generateFallback = () => {
             : risk >= 40
               ? "MEDIUM"
               : "LOW",
-      final_status: risk >= 65 ? "FRAUD" : r2 > 0.6 ? "SAFE" : "UNDER_REVIEW",
+      final_status: risk >= 65 ? "FRAUD" : r2 > 0.6 ? "SAFE" : "FLAGGED",
       transaction_time: new Date(
         Date.now() - Math.floor(r3 * 60) * 86400000,
       ).toISOString(),
@@ -497,7 +502,7 @@ const generateFallback = () => {
             : risk >= 40
               ? "MEDIUM"
               : "LOW",
-      final_status: risk >= 65 ? "FRAUD" : r2 > 0.6 ? "SAFE" : "PENDING",
+      final_status: risk >= 65 ? "FRAUD" : r2 > 0.6 ? "SAFE" : "FLAGGED",
       transaction_time: new Date(
         Date.now() - Math.floor(r3 * 60) * 86400000,
       ).toISOString(),

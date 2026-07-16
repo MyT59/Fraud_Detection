@@ -24,6 +24,7 @@ class AlertResponse(BaseModel):
     message: str
     created_at: datetime
     type: str #
+    transaction_final_status: Optional[str] = None
 
 class AlertPriorityDistributionResponse(BaseModel):
     critical: int # 🚀 Ubah ke huruf kecil semua

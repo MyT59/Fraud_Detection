@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
+from datetime import datetime, timezone
 
 from app.infrastructure.database.models.global_rule_model import GlobalRule
 from app.infrastructure.database.models.admin_model import Admin
@@ -48,7 +49,7 @@ def create_rule(db: Session, data, admin):
 def get_rules(db: Session, filters: dict):
     query = db.query(GlobalRule).options(
         selectinload(GlobalRule.admin).selectinload(Admin.role)
-    )
+    ).filter(GlobalRule.is_deleted == False)
 
     if filters.get("service_scope"):
         query = query.filter(GlobalRule.service_scope == filters["service_scope"])
@@ -78,7 +79,10 @@ def get_rules(db: Session, filters: dict):
 
 
 def get_rule_by_id(db: Session, rule_id: int):
-    return db.query(GlobalRule).filter(GlobalRule.id == rule_id).first()
+    return db.query(GlobalRule).filter(
+        GlobalRule.id == rule_id,
+        GlobalRule.is_deleted == False,
+    ).first()
 
 
 @log_performance(label="RuleService.update_rule")
@@ -188,8 +192,11 @@ def delete_rule(db: Session, rule_id: int, admin):
     if not rule:
         return None
 
-    snapshot_before = {"is_active": rule.is_active}
+    snapshot_before = {"is_active": rule.is_active, "is_deleted": rule.is_deleted}
     rule.is_active = False
+    rule.is_deleted = True
+    rule.deleted_at = datetime.now(timezone.utc)
+    rule.deleted_by = admin.id
     db.flush()
 
     log_activity(
@@ -198,7 +205,11 @@ def delete_rule(db: Session, rule_id: int, admin):
         module_source=EventSourceEnum.RULE_ENGINE,
         severity=SeverityLevelEnum.HIGH,
         target_type=TargetType.RULE, target_id=rule.id,
-        details={"before": snapshot_before, "after": {"is_active": False},
+        details={"before": snapshot_before, "after": {
+            "is_active": False,
+            "is_deleted": True,
+            "deleted_by": admin.id,
+        },
                  "reason": "Soft deleted by administrator"}
     )
 

@@ -5,17 +5,34 @@ import transactionService from "../../services/transactionService";
 // ─── Maps ─────────────────────────────────────────────────────────────────────
 
 const STATUS_MAP = {
-  PENDING: { icon: "bi-hourglass-split", label: "Pending", cls: "warning" },
-  UNDER_REVIEW: { icon: "bi-search", label: "Under Review", cls: "warning" },
-  SAFE: { icon: "bi-check-circle-fill", label: "Safe", cls: "success" },
-  FRAUD: { icon: "bi-exclamation-circle-fill", label: "Fraud", cls: "danger" },
+  FLAGGED: {
+    icon: "bi-flag-fill",
+    label: "Flagged",
+    cls: "warning",
+  },
+  PENDING: {
+    icon: "bi-flag-fill",
+    label: "Flagged",
+    cls: "warning",
+  },
+  UNDER_REVIEW: { icon: "bi-flag-fill", label: "Flagged", cls: "warning" },
+  SAFE: {
+    icon: "bi-check-circle-fill",
+    label: "Safe",
+    cls: "success",
+  },
+  FRAUD: {
+    icon: "bi-x-circle-fill",
+    label: "Blocked",
+    cls: "danger",
+  },
 };
 
 const RISK_LEVEL_MAP = {
-  LOW: { label: "Low", cls: "success" },
-  MEDIUM: { label: "Medium", cls: "warning" },
-  HIGH: { label: "High", cls: "danger" },
-  CRITICAL: { label: "Critical", cls: "danger" },
+  LOW: { label: "Low Risk", cls: "success" },
+  MEDIUM: { label: "Medium Risk", cls: "warning" },
+  HIGH: { label: "High Risk", cls: "danger" },
+  CRITICAL: { label: "Critical Risk", cls: "danger" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -123,8 +140,10 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
   const t = detailData || transaction;
   const riskScore = Math.round(t.risk_score || 0);
   const riskLevel = RISK_LEVEL_MAP[t.risk_level] || RISK_LEVEL_MAP.LOW;
-  const statusMeta = STATUS_MAP[t.final_status] || STATUS_MAP.PENDING;
-  const isFraud = t.final_status === "FRAUD";
+  const finalStatus = String(t.final_status || "PENDING")
+    .replace("TransactionStatusEnum.", "")
+    .toUpperCase();
+  const statusMeta = STATUS_MAP[finalStatus] || STATUS_MAP.PENDING;
   const d = t.transaction_details || {};
 
   // Count only active rule / pattern violations. Do not treat a free-text
@@ -231,8 +250,15 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                         )}
                         <span className="tdm-risk-chip">
                           <i className="bi bi-clock me-1" />
-                          {fmtDT(t.transaction_time)}
+                          Transaction Timestamp: {fmtDT(t.transaction_time)}
                         </span>
+                      </div>
+                      <div className="tdm-risk-legend">
+                        <small>
+                          Risk score menunjukkan tingkat risiko. Status
+                          transaksi menentukan apakah berhasil, flagged, atau
+                          blocked.
+                        </small>
                       </div>
                     </div>
                     <div className="tdm-amount-block">

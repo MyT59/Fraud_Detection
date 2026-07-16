@@ -69,7 +69,14 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
               className={`bi ${transaction.status === "approved" ? "bi-check-circle" : "bi-x-circle"}`}
             ></i>
             <h3>Already Reviewed</h3>
-            <p>This transaction has been {transaction.status}</p>
+            <p>
+              This transaction is already{" "}
+              {transaction.status === "approved"
+                ? "marked as Transaction Success"
+                : transaction.status === "rejected"
+                  ? "marked as Transaction Rejected"
+                  : "processed"}
+            </p>
             {transaction.reviewNotes && (
               <div className="review-notes-display">
                 <strong>Review Notes:</strong>
@@ -142,9 +149,7 @@ const ReviewDetail = ({ transaction, onClose, onReview }) => {
                   </span>
                 </div>
                 <div className="info-item">
-                  <span className="info-label">
-                    Date &amp; Time (TIMESTAMP_DB)
-                  </span>
+                  <span className="info-label">Transaction Timestamp</span>
                   <span className="info-value">
                     {formatDate(transaction.TIMESTAMP_DB)}
                   </span>

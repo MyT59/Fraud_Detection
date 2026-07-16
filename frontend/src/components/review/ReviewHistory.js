@@ -29,25 +29,35 @@ const timeAgo = (ds) => {
 const ACTION_META = {
   approved: {
     icon: "bi-check-circle-fill",
-    label: "Approved (SAFE)",
+    label: "Transaction Success",
     cls: "approved",
   },
   rejected: {
     icon: "bi-x-circle-fill",
-    label: "Rejected (FRAUD)",
+    label: "Transaction Rejected",
     cls: "rejected",
   },
-  flagged: { icon: "bi-flag-fill", label: "Flagged", cls: "flagged" },
+  flagged: { icon: "bi-flag-fill", label: "Flagged for Review", cls: "flagged" },
   escalated: {
     icon: "bi-arrow-up-circle-fill",
-    label: "Escalated",
+    label: "Reviewer Escalation",
     cls: "escalated",
   },
 };
 
 const DECISION_META = {
-  SAFE: { label: "SAFE", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
-  FRAUD: { label: "FRAUD", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
+  SAFE: {
+    label: "Transaction Success",
+    color: "#16a34a",
+    bg: "#f0fdf4",
+    border: "#bbf7d0",
+  },
+  FRAUD: {
+    label: "Transaction Rejected",
+    color: "#dc2626",
+    bg: "#fef2f2",
+    border: "#fecaca",
+  },
 };
 
 const SAMPLE = [
@@ -321,6 +331,7 @@ const ReviewHistory = ({ recentTransactions = [] }) => {
         <div className="history-empty">
           <i className="bi bi-inbox"></i>
           <p>Belum ada riwayat review.</p>
+          <span>Keputusan reviewer akan muncul setelah kasus selesai.</span>
         </div>
       ) : (
         <div className="history-list">

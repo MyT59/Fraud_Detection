@@ -1,1 +1,22 @@
+# Secrets and environment variables
 backend/.env
+
+# Python cache / test cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Runtime logs
+*.log
+
+# Folders / Directories (Added trailing slashes to ensure the whole folder is ignored)
+docs/
+tmp/
+tools/
+report_assets/
+.codex_context_extracted/
+
+# Specific files
+build_report.js
+Individual_Report_Full_Template.docx

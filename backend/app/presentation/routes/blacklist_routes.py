@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
+from datetime import datetime, timezone
 
 from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.enums import ActivityActionEnum
 from app.application.services.blacklist_service import normalize_blacklist_value
+from app.application.cache.blacklist_cache import invalidate_blacklist_cache
 from app.domain.entities.target_type import TargetType
 from app.core.rbac import require_roles
 from app.infrastructure.database.session import get_db
@@ -48,6 +50,7 @@ def add_blacklist(
     try:
         db.commit()
         db.refresh(item)
+        invalidate_blacklist_cache()
 
     except IntegrityError:
         db.rollback()
@@ -78,7 +81,8 @@ def approve_blacklist(
 ):
 
     item = db.query(BlacklistItem).filter(
-        BlacklistItem.id == item_id
+        BlacklistItem.id == item_id,
+        BlacklistItem.is_deleted == False,
     ).first()
 
     if not item:
@@ -98,6 +102,7 @@ def approve_blacklist(
     )
 
     db.commit()
+    invalidate_blacklist_cache()
     return {"message": "Blacklist approved"}
 
 @router.patch("/{item_id}/reject")
@@ -109,7 +114,8 @@ def reject_blacklist(
 ):
 
     item = db.query(BlacklistItem).filter(
-        BlacklistItem.id == item_id
+        BlacklistItem.id == item_id,
+        BlacklistItem.is_deleted == False,
     ).first()
 
     if not item:
@@ -129,6 +135,7 @@ def reject_blacklist(
     )
 
     db.commit()
+    invalidate_blacklist_cache()
     return {"message": "Blacklist rejected"}
 
 # =========================
@@ -142,7 +149,10 @@ def update_blacklist(
     current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
 
-    item = db.query(BlacklistItem).filter(BlacklistItem.id == item_id).first()
+    item = db.query(BlacklistItem).filter(
+        BlacklistItem.id == item_id,
+        BlacklistItem.is_deleted == False,
+    ).first()
 
     if not item:
         raise HTTPException(status_code=404, detail="Blacklist not found")
@@ -168,6 +178,7 @@ def update_blacklist(
     try:
         db.commit()
         db.refresh(item)
+        invalidate_blacklist_cache()
     except IntegrityError:
         db.rollback()  # Batalkan transaksi yang gagal agar koneksi database tidak mengunci
         raise HTTPException(
@@ -218,6 +229,7 @@ def bulk_import_blacklist(
                 BlacklistItem.type          == item.type,
                 BlacklistItem.value         == normalized_value,
                 BlacklistItem.service_scope == item.service_scope.upper(),
+                BlacklistItem.is_deleted    == False,
             ).first()
 
             if exists:
@@ -246,6 +258,7 @@ def bulk_import_blacklist(
 
     try:
         db.commit()
+        invalidate_blacklist_cache()
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Gagal menyimpan bulk import")
@@ -293,7 +306,7 @@ def get_blacklist(
 ):
     limit = max(1, min(limit, 50))
 
-    query = db.query(BlacklistItem)
+    query = db.query(BlacklistItem).filter(BlacklistItem.is_deleted == False)
 
     # =========================
     # FILTER
@@ -373,6 +386,10 @@ def get_blacklist(
             "status": item.status,
             "hit_count": item.hit_count,
             "created_at": item.created_at,
+            "updated_at": item.updated_at,
+            "is_deleted": item.is_deleted,
+            "deleted_at": item.deleted_at,
+            "deleted_by": item.deleted_by,
             "added_by": admin_id,
             "added_by_name": admin_name,
             "added_by_role": admin_role,
@@ -391,7 +408,10 @@ def get_blacklist(
 @router.patch("/{item_id}/deactivate")
 def deactivate_blacklist(item_id: int, db: Session = Depends(get_db), current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))):
 
-    item = db.query(BlacklistItem).filter(BlacklistItem.id == item_id).first()
+    item = db.query(BlacklistItem).filter(
+        BlacklistItem.id == item_id,
+        BlacklistItem.is_deleted == False,
+    ).first()
 
     if not item:
         raise HTTPException(status_code=404, detail="Blacklist not found")
@@ -408,6 +428,7 @@ def deactivate_blacklist(item_id: int, db: Session = Depends(get_db), current_ad
     )
 
     db.commit()
+    invalidate_blacklist_cache()
     return {"message": "Blacklist deactivated"}
 
 # =========================
@@ -415,7 +436,10 @@ def deactivate_blacklist(item_id: int, db: Session = Depends(get_db), current_ad
 # =========================
 @router.patch("/{item_id}/activate")
 def activate_blacklist(item_id: int, db: Session = Depends(get_db), current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))):
-    item = db.query(BlacklistItem).filter(BlacklistItem.id == item_id).first()
+    item = db.query(BlacklistItem).filter(
+        BlacklistItem.id == item_id,
+        BlacklistItem.is_deleted == False,
+    ).first()
 
     if not item:
         raise HTTPException(status_code=404, detail="Blacklist not found")
@@ -433,6 +457,7 @@ def activate_blacklist(item_id: int, db: Session = Depends(get_db), current_admi
     )
 
     db.commit()
+    invalidate_blacklist_cache()
     return {"message": "Blacklist activated"}
 
 # =========================
@@ -440,15 +465,27 @@ def activate_blacklist(item_id: int, db: Session = Depends(get_db), current_admi
 # =========================
 @router.delete("/{item_id}")
 def delete_blacklist(item_id: int, db: Session = Depends(get_db), current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))):
-    item = db.query(BlacklistItem).filter(BlacklistItem.id == item_id).first()
+    item = db.query(BlacklistItem).filter(
+        BlacklistItem.id == item_id,
+        BlacklistItem.is_deleted == False,
+    ).first()
 
     if not item:
         raise HTTPException(status_code=404, detail="Blacklist not found")
 
-    # Ambil ID & data sebelum dihapus untuk logging
     target_id = item.id
-    
-    db.delete(item)
+    snapshot_before = {
+        "value": item.value,
+        "type": item.type.value if hasattr(item.type, "value") else str(item.type),
+        "service_scope": item.service_scope,
+        "status": item.status,
+        "is_active": item.is_active,
+    }
+
+    item.is_active = False
+    item.is_deleted = True
+    item.deleted_at = datetime.now(timezone.utc)
+    item.deleted_by = current_admin.id
 
     # Log Activity
     log_activity(
@@ -457,8 +494,17 @@ def delete_blacklist(item_id: int, db: Session = Depends(get_db), current_admin=
         action_type=ActivityActionEnum.BLACKLIST_DELETED,
         target_type=TargetType.BLACKLIST,
         target_id=target_id,
-        details="Deleted blacklist"
+        details={
+            "before": snapshot_before,
+            "after": {
+                "is_active": False,
+                "is_deleted": True,
+                "deleted_by": current_admin.id,
+            },
+            "reason": "Soft deleted by administrator",
+        }
     )
 
     db.commit()
-    return {"message": "Blacklist deleted"}
+    invalidate_blacklist_cache()
+    return {"message": "Blacklist soft deleted"}

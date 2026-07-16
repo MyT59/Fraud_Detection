@@ -13,7 +13,13 @@ const CATEGORY_ICON = {
 const STATUS_META = {
   active: { label: "Active", cls: "active" },
   inactive: { label: "Inactive", cls: "inactive" },
-  review: { label: "Under Review", cls: "review" },
+  review: { label: "Needs Review", cls: "review" },
+};
+
+const RISK_LABEL_MAP = {
+  high: "High Risk",
+  medium: "Flagged for Review",
+  low: "Safe",
 };
 
 const PatternCard = ({ pattern, onViewDetail }) => {
@@ -40,8 +46,7 @@ const PatternCard = ({ pattern, onViewDetail }) => {
           </div>
           <div className="fp-card-badges">
             <span className={`fp-risk-badge fp-risk-${pattern.riskLevel}`}>
-              {pattern.riskLevel.charAt(0).toUpperCase() +
-                pattern.riskLevel.slice(1)}
+              {RISK_LABEL_MAP[pattern.riskLevel] || pattern.riskLevel}
             </span>
             <span className={`fp-status-badge ${statusMeta.cls}`}>
               {statusMeta.label}

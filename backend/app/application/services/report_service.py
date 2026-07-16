@@ -85,6 +85,8 @@ class ReportService:
         service_scope: str | None = None,
         is_active: bool | None = None,
         source: str | None = None,
+        # Manual Review filters
+        reviewer_id: int | None = None,
     ):
         # Menyusun dictionary kriteria filter untuk kolom JSONB
         raw_filters = {
@@ -108,6 +110,8 @@ class ReportService:
             "service_scope":   service_scope,
             "is_active":       is_active,
             "source":          source,
+            # Manual Review filters
+            "reviewer_id":     reviewer_id,
         }
         # Bersihkan key yang bernilai None agar JSONB bersih
         filter_criteria = {k: v for k, v in raw_filters.items() if v is not None}
@@ -151,6 +155,9 @@ class ReportService:
 
             elif report_type == ReportTypeEnum.ML_PERFORMANCE:
                 return self.generate_ml_performance_report(report)
+
+            elif report_type == ReportTypeEnum.MANUAL_REVIEW:
+                return self.generate_manual_review_report(report)
 
             raise ValueError(f"Unsupported report type: {report_type}")
 
@@ -360,6 +367,92 @@ class ReportService:
         return self._export_and_finalize(report, headers, rows)
 
     # ==========================================
+    # MANUAL REVIEW REPORT
+    # ==========================================
+
+    @log_performance
+    def generate_manual_review_report(self, report: Report):
+        filters = report.filter_criteria or {}
+
+        query = self.db.query(ManualReview).filter(
+            ManualReview.created_at >= report.date_from,
+            ManualReview.created_at <= report.date_to,
+            ManualReview.is_deleted == False,
+        )
+
+        if filters.get("reviewer_id"):
+            query = query.filter(ManualReview.reviewer_id == int(filters["reviewer_id"]))
+
+        reviews = query.order_by(ManualReview.created_at.desc()).all()
+
+        if report.format == ReportFormatEnum.PDF:
+            headers = [
+                "Review ID",
+                "Transaction ID",
+                "Alert ID",
+                "Reviewer",
+                "Decision",
+                "Confidence",
+                "Final Status",
+                "Reviewed At",
+            ]
+            rows = [
+                [
+                    review.id,
+                    review.transaction_id,
+                    review.alert_id or "-",
+                    review.reviewer_name or (review.admin.full_name if review.admin else "-"),
+                    self._get_enum_value(review.decision),
+                    review.decision_confidence or "-",
+                    self._get_enum_value(review.final_status),
+                    self._format_datetime(review.created_at),
+                ]
+                for review in reviews
+            ]
+        else:
+            headers = [
+                "Review ID",
+                "Transaction ID",
+                "Alert ID",
+                "Reviewer ID",
+                "Reviewer Name",
+                "Reviewer Email",
+                "Decision",
+                "Confidence",
+                "Previous Status",
+                "Final Status",
+                "Review Note",
+                "Started At",
+                "Completed At",
+                "Reviewed At",
+                "Overridden",
+                "Override Reason",
+            ]
+            rows = [
+                [
+                    review.id,
+                    review.transaction_id,
+                    review.alert_id or "-",
+                    review.reviewer_id or "-",
+                    review.reviewer_name or (review.admin.full_name if review.admin else "-"),
+                    review.admin.email if review.admin else "-",
+                    self._get_enum_value(review.decision),
+                    review.decision_confidence or "-",
+                    review.previous_status or "-",
+                    self._get_enum_value(review.final_status),
+                    review.review_note or "-",
+                    self._format_datetime(review.review_started_at) if review.review_started_at else "-",
+                    self._format_datetime(review.review_completed_at) if review.review_completed_at else "-",
+                    self._format_datetime(review.created_at),
+                    "YES" if review.is_overridden else "NO",
+                    review.override_reason or "-",
+                ]
+                for review in reviews
+            ]
+
+        return self._export_and_finalize(report, headers, rows)
+
+    # ==========================================
     # FRAUD DETECTION REPORT
     # ==========================================
 
@@ -390,7 +483,9 @@ class ReportService:
         total_transactions = trx_q().scalar() or 0
         total_fraud = trx_q().filter(Transaction.final_status == "FRAUD").scalar() or 0
         total_safe  = trx_q().filter(Transaction.final_status == "SAFE").scalar() or 0
-        total_review = trx_q().filter(Transaction.final_status == "UNDER_REVIEW").scalar() or 0
+        total_review = trx_q().filter(
+            Transaction.final_status.in_(["FLAGGED", "PENDING", "UNDER_REVIEW"])
+        ).scalar() or 0
         total_alerts  = self.db.query(func.count(FraudAlert.id)).scalar() or 0
         total_reviews = self.db.query(func.count(ManualReview.id)).scalar() or 0
 
@@ -411,7 +506,7 @@ class ReportService:
             ["Total Transactions", total_transactions],
             ["Total Fraud",        total_fraud],
             ["Total Safe",         total_safe],
-            ["Total Under Review", total_review],
+            ["Total Flagged",      total_review],
             ["Fraud Rate (%)",     fraud_rate],
             ["Total Alerts",       total_alerts],
             ["Total Reviews",      total_reviews],
@@ -432,7 +527,7 @@ class ReportService:
     def generate_fraud_pattern_report(self, report: Report):
         filters = report.filter_criteria or {}
 
-        query = self.db.query(FraudPattern)
+        query = self.db.query(FraudPattern).filter(FraudPattern.is_deleted == False)
 
         # Filter opsional
         if filters.get("risk_level"):
@@ -751,7 +846,7 @@ class ReportService:
     def generate_blacklist_report(self, report: Report):
         filters = report.filter_criteria or {}
 
-        query = self.db.query(BlacklistItem)
+        query = self.db.query(BlacklistItem).filter(BlacklistItem.is_deleted == False)
 
         if filters.get("type"):
             query = query.filter(BlacklistItem.type == filters["type"])

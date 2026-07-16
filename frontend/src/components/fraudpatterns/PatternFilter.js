@@ -4,15 +4,19 @@ import "./PatternFilter.css";
 const RISK_FILTERS = [
   { value: "all", label: "All Patterns", icon: "bi-list-ul" },
   { value: "high", label: "High Risk", icon: "bi-exclamation-triangle" },
-  { value: "medium", label: "Medium Risk", icon: "bi-exclamation-circle" },
-  { value: "low", label: "Low Risk", icon: "bi-info-circle" },
+  {
+    value: "medium",
+    label: "Flagged for Review",
+    icon: "bi-exclamation-circle",
+  },
+  { value: "low", label: "Safe", icon: "bi-info-circle" },
 ];
 
 const STATUS_FILTERS = [
   { value: "all", label: "All Status" },
   { value: "active", label: "Active" },
   { value: "inactive", label: "Inactive" },
-  { value: "review", label: "Under Review" },
+  { value: "review", label: "Needs Review" },
 ];
 
 const SORT_OPTIONS = [

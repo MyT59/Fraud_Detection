@@ -8,25 +8,36 @@ const AlertsFeed = ({
   onClaim,
   onDelete,
   onViewDetail,
+  mode = "all",
+  canClaim = false,
 }) => {
   if (alerts.length === 0) {
     return (
       <div className="alerts-empty">
-        <i className="bi bi-bell-slash"></i>
+        <i className="bi bi-bell-slash" />
         <h4>Tidak ada alert ditemukan</h4>
-        <p>Coba ubah filter atau cari dengan kata kunci lain</p>
+        <p>Coba ubah filter, keyword, atau mode queue.</p>
       </div>
     );
   }
 
   return (
-    <div className="alerts-feed-card">
+    <section className="alerts-feed-card">
       <div className="alerts-feed-header">
-        <h2 className="alerts-feed-title">
-          <i className="bi bi-list-ul"></i>
-          Log Alert
-          <span className="alerts-feed-count">({alerts.length} entri)</span>
-        </h2>
+        <div>
+          <h2 className="alerts-feed-title">
+            <i className={mode === "open" ? "bi bi-inbox-fill" : "bi bi-list-ul"} />
+            {mode === "open" ? "Open Queue" : "All Alerts"}
+          </h2>
+          <p>
+            {mode === "open"
+              ? canClaim
+                ? "Alert yang tersedia untuk diklaim dan diproses di Fraud Analysts."
+                : "Alert terbuka yang belum diklaim oleh fraud analyst."
+              : "Riwayat dan status seluruh alert dari sistem deteksi fraud."}
+          </p>
+        </div>
+        <span className="alerts-feed-count">{alerts.length} alert</span>
       </div>
       <div className="alerts-feed-list">
         {alerts.map((alert) => (
@@ -41,7 +52,7 @@ const AlertsFeed = ({
           />
         ))}
       </div>
-    </div>
+    </section>
   );
 };
 

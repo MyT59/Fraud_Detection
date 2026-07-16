@@ -72,9 +72,9 @@ const FilterBar = ({ filters, onFilterChange, onResetFilters }) => {
                 onChange={handleInputChange}
               >
                 <option value="all">Semua Status</option>
-                <option value="pending">⏳ Pending</option>
-                <option value="approved">✓ Approved</option>
-                <option value="rejected">✗ Rejected</option>
+                <option value="FLAGGED">Flagged</option>
+                <option value="SAFE">Safe</option>
+                <option value="FRAUD">Blocked</option>
               </select>
             </div>
 

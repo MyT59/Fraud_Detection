@@ -1,17 +1,24 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import PageLoader from "../common/PageLoader";
 import { fetchAnalystPerformance } from "../../services/reviewApiService";
+import AnalystReviewModal from "./AnalystReviewModal";
 
-/**
- * TabAnalystPerformance.js
- * Tab "Analyst Performance" — hanya untuk RISK_MANAGER & SUPER_ADMIN.
- * Menampilkan performa per analis: jumlah review, avg waktu, fraud rate.
- * Data source: GET /reviews/analyst-performance
- */
+const getInitials = (name = "Analyst") =>
+  name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+const formatMinutes = (seconds) =>
+  seconds > 0 ? `${(seconds / 60).toFixed(1)} min` : "-";
+
 const TabAnalystPerformance = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [selectedAnalyst, setSelectedAnalyst] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -29,180 +36,160 @@ const TabAnalystPerformance = () => {
     load();
   }, []);
 
+  const summary = useMemo(() => {
+    const reviews = data.reduce((sum, a) => sum + (a.reviews_completed || 0), 0);
+    const fraud = data.reduce((sum, a) => sum + (a.fraud_detected || 0), 0);
+    const reviewersWithTime = data.filter((a) => a.avg_review_seconds > 0);
+    const avgSeconds =
+      reviewersWithTime.length > 0
+        ? reviewersWithTime.reduce((sum, a) => sum + a.avg_review_seconds, 0) /
+          reviewersWithTime.length
+        : 0;
+
+    return {
+      analysts: data.length,
+      reviews,
+      fraud,
+      avgTime: formatMinutes(avgSeconds),
+    };
+  }, [data]);
+
   if (loading) return <PageLoader message="Memuat performa analis..." />;
 
-  if (error)
+  if (error) {
     return (
-      <div style={{ textAlign: "center", padding: "3rem", color: "#b91c1c" }}>
-        <i
-          className="bi bi-wifi-off"
-          style={{ fontSize: "2rem", display: "block", marginBottom: "8px" }}
-        />
-        <p style={{ fontWeight: 600 }}>Gagal memuat data performa.</p>
+      <div className="review-error-state">
+        <i className="bi bi-wifi-off" />
+        <p>Gagal memuat data performa.</p>
       </div>
     );
+  }
 
   return (
-    <div>
-      <h2
-        style={{
-          margin: "0 0 1rem",
-          fontSize: "1rem",
-          fontWeight: 700,
-          color: "#111827",
-        }}
-      >
-        <i
-          className="bi bi-people-fill"
-          style={{ marginRight: 8, color: "#7c3aed" }}
-        />
-        Analyst Performance{" "}
-        <span style={{ fontWeight: 400, color: "#6b7280", fontSize: ".85rem" }}>
-          ({data.length} analis)
-        </span>
-      </h2>
-
-      {data.length === 0 ? (
-        <div className="txn-empty">
-          <i
-            className="bi bi-people"
-            style={{
-              fontSize: "2.5rem",
-              color: "#94a3b8",
-              display: "block",
-              marginBottom: "12px",
-            }}
-          />
-          <p style={{ color: "#374151", fontWeight: 600 }}>
-            Belum ada data performa analis.
+    <div className="review-tab-content">
+      <div className="review-panel-header">
+        <div>
+          <h2 className="review-panel-title">
+            <span className="review-panel-icon purple">
+              <i className="bi bi-people-fill" />
+            </span>
+            Analyst Performance
+          </h2>
+          <p className="review-panel-subtitle">
+            Pantau beban kerja, kecepatan review, dan kualitas keputusan fraud
+            analyst.
           </p>
         </div>
+        <span className="review-panel-count">{data.length} analis</span>
+      </div>
+
+      <div className="review-mini-metrics">
+        <div className="review-mini-metric">
+          <span>Total Analyst</span>
+          <strong>{summary.analysts}</strong>
+        </div>
+        <div className="review-mini-metric">
+          <span>Total Review</span>
+          <strong>{summary.reviews}</strong>
+        </div>
+        <div className="review-mini-metric">
+          <span>Avg. Waktu</span>
+          <strong>{summary.avgTime}</strong>
+        </div>
+        <div className="review-mini-metric danger">
+          <span>Fraud Terdeteksi</span>
+          <strong>{summary.fraud}</strong>
+        </div>
+      </div>
+
+      {data.length === 0 ? (
+        <div className="review-compact-empty">
+          <i className="bi bi-people" />
+          <strong>Belum ada aktivitas reviewer</strong>
+          <span>Data performa akan muncul setelah analyst menyelesaikan review.</span>
+        </div>
       ) : (
-        <div className="txn-table-wrapper">
-          <table className="txn-table">
+        <div className="review-table-card">
+          <table className="txn-table review-data-table">
             <thead>
               <tr>
                 <th>Analis</th>
                 <th>Email</th>
                 <th>Reviews</th>
                 <th>Avg. Waktu</th>
-                <th>Fraud Terdeteksi</th>
+                <th>Fraud</th>
                 <th>Fraud Rate</th>
+                <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
               {data.map((a, i) => {
-                const avgMin =
-                  a.avg_review_seconds > 0
-                    ? (a.avg_review_seconds / 60).toFixed(1)
-                    : "—";
+                const avgMin = formatMinutes(a.avg_review_seconds);
                 const fraudRate =
                   a.reviews_completed > 0
                     ? ((a.fraud_detected / a.reviews_completed) * 100).toFixed(
                         1,
                       )
                     : "0.0";
+                const rateNumber = parseFloat(fraudRate);
+
                 return (
-                  <tr key={a.analyst_id ?? i}>
+                  <tr
+                    key={a.analyst_id ?? i}
+                    className="review-clickable-row"
+                    onClick={() => setSelectedAnalyst(a)}
+                  >
                     <td>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: ".6rem",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: "50%",
-                            background:
-                              "linear-gradient(135deg,#7c3aed,#4f46e5)",
-                            color: "#fff",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: ".7rem",
-                            fontWeight: 700,
-                            flexShrink: 0,
-                          }}
-                        >
-                          {(a.analyst_name || "A")
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .slice(0, 2)
-                            .toUpperCase()}
-                        </div>
-                        <span style={{ fontWeight: 600, fontSize: ".875rem" }}>
-                          {a.analyst_name || `Analyst #${a.analyst_id}`}
+                      <div className="review-analyst-cell">
+                        <span className="review-avatar">
+                          {getInitials(a.analyst_name)}
                         </span>
+                        <strong>
+                          {a.analyst_name || `Analyst #${a.analyst_id}`}
+                        </strong>
                       </div>
                     </td>
-                    <td>
-                      <span style={{ fontSize: ".82rem", color: "#6b7280" }}>
-                        {a.analyst_email || "—"}
-                      </span>
+                    <td className="review-muted-cell">
+                      {a.analyst_email || "-"}
                     </td>
                     <td>
-                      <span style={{ fontWeight: 700 }}>
-                        {a.reviews_completed}
-                      </span>
+                      <strong>{a.reviews_completed}</strong>
                     </td>
+                    <td>{avgMin}</td>
                     <td>
-                      <span style={{ fontSize: ".82rem" }}>{avgMin} min</span>
-                    </td>
-                    <td>
-                      <span style={{ fontWeight: 700, color: "#dc2626" }}>
-                        <i
-                          className="bi bi-exclamation-triangle-fill"
-                          style={{ fontSize: ".75rem", marginRight: 4 }}
-                        />
+                      <span className="review-fraud-count">
+                        <i className="bi bi-exclamation-triangle-fill" />
                         {a.fraud_detected}
                       </span>
                     </td>
                     <td>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: ".5rem",
+                      <div className="review-rate-cell">
+                        <span className="review-rate-track">
+                          <span
+                            className={`review-rate-fill ${
+                              rateNumber > 50
+                                ? "danger"
+                                : rateNumber > 20
+                                  ? "warning"
+                                  : "success"
+                            }`}
+                            style={{ width: `${Math.min(rateNumber, 100)}%` }}
+                          />
+                        </span>
+                        <strong>{fraudRate}%</strong>
+                      </div>
+                    </td>
+                    <td>
+                      <button
+                        className="review-row-action"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedAnalyst(a);
                         }}
                       >
-                        <div
-                          style={{
-                            flex: 1,
-                            height: 6,
-                            background: "#f3f4f6",
-                            borderRadius: 3,
-                            overflow: "hidden",
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: `${Math.min(parseFloat(fraudRate), 100)}%`,
-                              height: "100%",
-                              borderRadius: 3,
-                              background:
-                                parseFloat(fraudRate) > 50
-                                  ? "#dc2626"
-                                  : parseFloat(fraudRate) > 20
-                                    ? "#f59e0b"
-                                    : "#10b981",
-                            }}
-                          />
-                        </div>
-                        <span
-                          style={{
-                            fontSize: ".78rem",
-                            fontWeight: 600,
-                            minWidth: 36,
-                          }}
-                        >
-                          {fraudRate}%
-                        </span>
-                      </div>
+                        Detail
+                        <i className="bi bi-chevron-right" />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -210,6 +197,13 @@ const TabAnalystPerformance = () => {
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedAnalyst && (
+        <AnalystReviewModal
+          analyst={selectedAnalyst}
+          onClose={() => setSelectedAnalyst(null)}
+        />
       )}
     </div>
   );

@@ -229,11 +229,11 @@ const PATTERN_OPTIONS = [
   },
   {
     value: "medium",
-    label: "Medium Risk",
+    label: "Flagged for Review",
     dot: "medium",
     icon: "bi-exclamation-circle-fill",
   },
-  { value: "low", label: "Low Risk", dot: "low", icon: "bi-info-circle-fill" },
+  { value: "low", label: "Safe", dot: "low", icon: "bi-info-circle-fill" },
 ];
 
 const FORMAT_OPTIONS = [

@@ -49,7 +49,8 @@ def get_cached_blacklist(db) -> list:
             db.query(BlacklistItem)
             .filter(
                 BlacklistItem.is_active == True,
-                BlacklistItem.status == "APPROVED"
+                BlacklistItem.status == "APPROVED",
+                BlacklistItem.is_deleted == False,
             )
             .all()
         )

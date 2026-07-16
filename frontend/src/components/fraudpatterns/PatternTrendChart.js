@@ -57,10 +57,10 @@ const PatternTrendChart = ({ patterns }) => {
           <span className="ptc-leg-dot high"></span>High Risk
         </span>
         <span className="ptc-leg-item">
-          <span className="ptc-leg-dot medium"></span>Medium Risk
+          <span className="ptc-leg-dot medium"></span>Flagged for Review
         </span>
         <span className="ptc-leg-item">
-          <span className="ptc-leg-dot low"></span>Low Risk
+          <span className="ptc-leg-dot low"></span>Safe
         </span>
       </div>
     </div>

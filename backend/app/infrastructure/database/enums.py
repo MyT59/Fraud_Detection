@@ -20,7 +20,8 @@ class BlacklistTypeEnum(str, enum.Enum):
 
 
 class TransactionStatusEnum(str, enum.Enum):
-    PENDING = "PENDING"
+    FLAGGED = "FLAGGED"
+    PENDING = "PENDING"  # Legacy DB value; normalized to FLAGGED in API responses.
     UNDER_REVIEW = "UNDER_REVIEW"
     SAFE = "SAFE"
     FRAUD = "FRAUD"
@@ -147,6 +148,7 @@ class ActivityActionEnum(str, enum.Enum):
     # Reports
     REPORT_GENERATED = "REPORT_GENERATED"
     REPORT_DOWNLOADED = "REPORT_DOWNLOADED"
+    REPORT_DELETED = "REPORT_DELETED"
 
     # ML Engine
     ML_SCORING_COMPLETED = "ML_SCORING_COMPLETED"

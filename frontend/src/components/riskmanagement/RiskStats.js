@@ -5,6 +5,7 @@ const RiskStats = ({
   blacklist = [],
   rules = [],
   patterns = [],
+  patternCandidates = [],
   activeTab = "blacklist",
 }) => {
   const blTotal = blacklist.length;
@@ -19,9 +20,9 @@ const RiskStats = ({
   const rlBlock = rules.filter((r) => r.action === "block").length;
   const rlReview = rules.filter((r) => r.action === "review").length;
 
-  const ptTotal = patterns.length;
+  const ptTotal = patterns.length + patternCandidates.length;
   const ptActive = patterns.filter((p) => p.is_active).length;
-  const ptCandidates = patterns.filter((p) => !p.is_active).length;
+  const ptCandidates = patternCandidates.length;
   const ptBlock = patterns.filter(
     (p) => p.is_active && p.action === "BLOCK",
   ).length;
@@ -39,7 +40,7 @@ const RiskStats = ({
       icon: "bi-hourglass-split",
       colorClass: "c-amber",
       value: blPending,
-      label: "Menunggu Verifikasi",
+      label: "Needs Review",
       trend: blPending > 0 ? "up" : "flat",
       trendText: blPending > 0 ? "Perlu ditinjau" : "Semua sudah ditinjau",
     },
@@ -47,7 +48,7 @@ const RiskStats = ({
       icon: "bi-shield-fill-check",
       colorClass: "c-blue",
       value: blActive,
-      label: "Aktif Diblokir",
+      label: "Active Blacklist",
       trend: "flat",
       trendText: `dari ${blTotal} total entri`,
     },
@@ -90,9 +91,9 @@ const RiskStats = ({
       icon: "bi-eye-fill",
       colorClass: "c-amber",
       value: rlReview,
-      label: "Rule REVIEW",
+      label: "Rule FLAG",
       trend: "flat",
-      trendText: "Kirim ke Manual Review",
+      trendText: "Tandai dan buat alert",
     },
   ];
 

@@ -13,25 +13,25 @@ const ReviewStats = ({ stats }) => {
   const statsData = [
     {
       id: 1,
-      label: "Total Pending",
+      label: "Flagged for Review",
       value: stats.pending,
       icon: "bi-clock-history",
       color: "warning",
       trend: stats.pendingTrend || 0,
-      subtitle: "Awaiting review",
+      subtitle: "Transaksi tetap berhasil, menunggu review analis",
     },
     {
       id: 2,
-      label: "Approved Today",
+      label: "Transaction Success Today",
       value: stats.approvedToday || 0,
       icon: "bi-check-circle-fill",
       color: "success",
       trend: stats.approvedTrend || 0,
-      subtitle: `${approvalRate}% approval rate`,
+      subtitle: `${approvalRate}% transaction success rate`,
     },
     {
       id: 3,
-      label: "Rejected Today",
+      label: "Transaction Rejected Today",
       value: stats.rejectedToday || 0,
       icon: "bi-x-circle-fill",
       color: "danger",
@@ -113,15 +113,15 @@ const ReviewStats = ({ stats }) => {
         <div className="progress-legend">
           <span className="legend-item">
             <span className="legend-dot approved"></span>
-            Approved ({stats.approved})
+            Transaction Success ({stats.approved})
           </span>
           <span className="legend-item">
             <span className="legend-dot rejected"></span>
-            Rejected ({stats.rejected})
+            Transaction Rejected ({stats.rejected})
           </span>
           <span className="legend-item">
             <span className="legend-dot pending"></span>
-            Pending ({stats.pending})
+            Flagged for Review ({stats.pending})
           </span>
         </div>
       </div>

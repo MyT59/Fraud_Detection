@@ -34,12 +34,16 @@ export const fetchPriorityDistribution = (signal) =>
 
 export const fetchOpenQueue = ({
   priority,
+  severity,
+  type,
   page = 1,
   limit = 10,
   signal,
 } = {}) => {
   const params = new URLSearchParams({ page, limit });
   if (priority) params.set("priority", priority);
+  if (severity && severity !== "all") params.set("severity", severity);
+  if (type && type !== "all") params.set("alert_type", type);
 
   return api.get(`/alerts/open-queue?${params}`, { signal });
 };

@@ -14,7 +14,7 @@ CREATE TYPE blacklist_type_enum AS ENUM (
 );
 
 CREATE TYPE transaction_status_enum AS ENUM ( 
-    'PENDING', 'UNDER_REVIEW', 'SAFE', 'FRAUD'
+    'FLAGGED', 'PENDING', 'UNDER_REVIEW', 'SAFE', 'FRAUD'
 );
 
 CREATE TYPE alert_status_enum AS ENUM ( 
@@ -34,7 +34,7 @@ CREATE TYPE report_status_enum AS ENUM (
 );
 
 CREATE TYPE report_type_enum AS ENUM (
-    'FRAUD_DETECTION', 'TRANSACTION', 'MANUAL_REVIEW', 'ALERT', 'BLACKLIST', 'ACTIVITY_LOG', 'ML_PERFORMANCE'
+    'FRAUD_DETECTION', 'FRAUD_PATTERN', 'TRANSACTION', 'MANUAL_REVIEW', 'ALERT', 'BLACKLIST', 'ACTIVITY_LOG', 'ML_PERFORMANCE'
 );
 
 CREATE TYPE pattern_source_enum AS ENUM (
@@ -133,13 +133,16 @@ CREATE TABLE public.blacklist_items (
     source VARCHAR(20) DEFAULT 'MANUAL',
     hit_count INTEGER DEFAULT 0,
     status VARCHAR(20) DEFAULT 'PENDING',
-    is_active BOOLEAN DEFAULT TRUE,
+    is_active BOOLEAN DEFAULT FALSE,
+    is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
     review_note TEXT, 
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    deleted_by INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   
     CONSTRAINT fk_blacklist_admin FOREIGN KEY (added_by) REFERENCES public.admins(id) ON DELETE SET NULL, 
-    CONSTRAINT uq_blacklist_type_value_service UNIQUE (type, value, service_scope),
+    CONSTRAINT fk_blacklist_deleted_by FOREIGN KEY (deleted_by) REFERENCES public.admins(id) ON DELETE SET NULL,
     CONSTRAINT chk_value_not_empty CHECK (value <> '')
 );
 
@@ -185,10 +188,14 @@ CREATE TABLE public.retrain_schedules (
     next_run_at TIMESTAMP WITH TIME ZONE,
     last_run_status VARCHAR(20),
     created_by INTEGER, 
+    is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    deleted_by INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT retrain_schedules_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.admins(id) ON DELETE SET NULL
+    CONSTRAINT retrain_schedules_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.admins(id) ON DELETE SET NULL,
+    CONSTRAINT retrain_schedules_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES public.admins(id) ON DELETE SET NULL
 );
 
 CREATE TABLE public.retrain_history (
@@ -218,7 +225,7 @@ CREATE TABLE public.retrain_history (
 CREATE TABLE public.global_rules ( 
     id SERIAL PRIMARY KEY,
     rule_name VARCHAR(100) NOT NULL,
-    rule_key VARCHAR(100) UNIQUE NOT NULL,
+    rule_key VARCHAR(100) NOT NULL,
     rule_group VARCHAR(50),
     hit_count INTEGER DEFAULT 0,
     service_scope VARCHAR(50) DEFAULT 'ALL',
@@ -231,11 +238,15 @@ CREATE TABLE public.global_rules (
     priority INTEGER DEFAULT 0,
     description TEXT,
     is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
     created_by INTEGER,
+    deleted_by INTEGER,
+    deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT fk_global_rules_admin FOREIGN KEY (created_by) REFERENCES public.admins(id) ON DELETE SET NULL
+    CONSTRAINT fk_global_rules_admin FOREIGN KEY (created_by) REFERENCES public.admins(id) ON DELETE SET NULL,
+    CONSTRAINT fk_global_rules_deleted_by FOREIGN KEY (deleted_by) REFERENCES public.admins(id) ON DELETE SET NULL
 );
 
 CREATE TABLE public.fraud_patterns (
@@ -254,14 +265,18 @@ CREATE TABLE public.fraud_patterns (
     false_positive INTEGER DEFAULT 0,
     action VARCHAR(20) DEFAULT 'FLAG',
     created_by INTEGER,
+    deleted_by INTEGER,
     is_active BOOLEAN DEFAULT TRUE, 
+    is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
     disabled_at TIMESTAMP WITH TIME ZONE,
+    deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     pattern_source pattern_source_enum NOT NULL DEFAULT 'MANUAL_CREATE', 
 
     CONSTRAINT fk_pattern_admin FOREIGN KEY (created_by) REFERENCES public.admins(id) ON DELETE SET NULL,
-    CONSTRAINT chk_action_valid CHECK (action IN ('FLAG', 'REVIEW', 'BLOCK'))
+    CONSTRAINT fk_pattern_deleted_by FOREIGN KEY (deleted_by) REFERENCES public.admins(id) ON DELETE SET NULL,
+    CONSTRAINT chk_action_valid CHECK (action IN ('FLAG', 'BLOCK'))
 );
 
 -- ==========================================
@@ -290,7 +305,7 @@ CREATE TABLE public.transactions_feed (
     violation_rule_ids JSONB DEFAULT '[]'::jsonb,
     violation_pattern_ids JSONB DEFAULT '[]'::jsonb,
     score_breakdown JSONB DEFAULT '{}'::jsonb,
-    final_status transaction_status_enum DEFAULT 'PENDING',
+    final_status transaction_status_enum DEFAULT 'FLAGGED',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
@@ -454,14 +469,18 @@ CREATE TABLE public.reports (
     date_to TIMESTAMP WITH TIME ZONE NOT NULL,
     generated_by INTEGER,
     status report_status_enum DEFAULT 'PENDING' NOT NULL,
+    is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
     file_path TEXT,
     total_records INTEGER DEFAULT 0,
     error_message TEXT,
+    deleted_by INTEGER,
+    deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     completed_at TIMESTAMP WITH TIME ZONE,
     filter_criteria JSONB,
 
-    CONSTRAINT reports_generated_by_fkey FOREIGN KEY (generated_by) REFERENCES public.admins(id) ON DELETE SET NULL
+    CONSTRAINT reports_generated_by_fkey FOREIGN KEY (generated_by) REFERENCES public.admins(id) ON DELETE SET NULL,
+    CONSTRAINT reports_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES public.admins(id) ON DELETE SET NULL
 );
 
 -- ==========================================
@@ -490,7 +509,7 @@ CREATE INDEX idx_trx_risk_level ON transactions_feed (risk_level);
 CREATE INDEX IF NOT EXISTS idx_transactions_flagged ON transactions_feed (is_flagged_ml); 
 
 -- Partial Index (Hanya index transaksi yang menggantung untuk hemat storage)
-CREATE INDEX idx_trx_pending_review ON transactions_feed (final_status) WHERE final_status IN ('PENDING', 'UNDER_REVIEW'); 
+CREATE INDEX idx_trx_flagged_review ON transactions_feed (final_status) WHERE final_status IN ('FLAGGED', 'UNDER_REVIEW'); 
 
 -- JSONB GIN Indexes
 CREATE INDEX idx_trx_pattern_ids ON transactions_feed USING GIN (violation_pattern_ids); 
@@ -520,15 +539,19 @@ CREATE INDEX idx_reviews_overridden ON manual_reviews (is_overridden) WHERE is_o
 -- 11.3 Rules & Blacklist Indexes
 -- ------------------------------------------
 CREATE INDEX idx_blacklist_value ON blacklist_items(value); 
-CREATE INDEX idx_blacklist_lookup ON blacklist_items (type, value, service_scope) WHERE is_active = TRUE; 
+CREATE INDEX idx_blacklist_lookup ON blacklist_items (type, value, service_scope) WHERE is_active = TRUE AND is_deleted = FALSE; 
+CREATE UNIQUE INDEX uq_blacklist_type_value_service_active ON blacklist_items (type, value, service_scope) WHERE is_deleted = FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_fraud_patterns_service ON fraud_patterns(service_source); 
 CREATE INDEX IF NOT EXISTS idx_fraud_patterns_active ON fraud_patterns(is_active); 
+CREATE INDEX IF NOT EXISTS idx_fraud_patterns_deleted ON fraud_patterns(is_deleted);
 CREATE INDEX idx_rules_hash ON fraud_patterns(rules_hash); 
 CREATE INDEX idx_fraud_patterns_rules ON fraud_patterns USING GIN (pattern_rules); 
 
 -- Partial Index (Caching Rule Aktif)
-CREATE INDEX idx_global_rules_active ON global_rules (is_active) WHERE is_active = TRUE; 
+CREATE INDEX idx_global_rules_active ON global_rules (is_active) WHERE is_active = TRUE AND is_deleted = FALSE; 
+CREATE UNIQUE INDEX uq_global_rules_rule_key_active ON global_rules (rule_key) WHERE is_deleted = FALSE;
+CREATE INDEX idx_global_rules_deleted ON global_rules (is_deleted);
 
 -- ------------------------------------------
 -- 11.4 Application & Auth Indexes
@@ -566,6 +589,7 @@ CREATE INDEX idx_switching_processed ON switching_logs(processed_at);
 -- 11.6 ML Datasets, Models & Feedback Indexes
 -- ------------------------------------------
 CREATE INDEX idx_retrain_schedule_active ON retrain_schedules(is_active); 
+CREATE INDEX idx_retrain_schedule_deleted ON retrain_schedules(is_deleted); 
 CREATE INDEX idx_retrain_history_time ON retrain_history(execution_time DESC); 
 CREATE INDEX idx_ml_datasets_lookup ON ml_datasets(domain, created_at DESC); 
 CREATE INDEX idx_retrain_history_model_id ON retrain_history(model_id); 
@@ -588,6 +612,7 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_session ON activity_logs(session_id
 
 CREATE INDEX idx_reports_created_at ON reports (created_at DESC); 
 CREATE INDEX idx_reports_status ON reports (status); 
+CREATE INDEX idx_reports_deleted ON reports (is_deleted); 
 
 -- ==========================================
 -- 12. POST-INSTALLATION CLEANUP

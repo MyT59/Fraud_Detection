@@ -2,97 +2,6 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./ActivityTimeline.css";
 
-const STATIC_ACTIVITIES = [
-  {
-    id: 1,
-    type: "fraud_detected",
-    title: "High-Risk Transaction Blocked",
-    description: "TRX001234 automatically blocked by system",
-    user: "System",
-    time: "2 min ago",
-    icon: "bi-shield-exclamation",
-    color: "red",
-    details: { amount: "Rp 25.000.000", user: "USR12345" },
-  },
-  {
-    id: 2,
-    type: "manual_review",
-    title: "Transaction Approved",
-    description: "TRX001230 approved after manual review",
-    user: "Admin User",
-    time: "15 min ago",
-    icon: "bi-check-circle",
-    color: "green",
-    details: { reviewTime: "3 minutes" },
-  },
-  {
-    id: 3,
-    type: "rule_update",
-    title: "Fraud Rule Updated",
-    description: "Velocity check threshold increased to 10",
-    user: "Security Team",
-    time: "1 hr ago",
-    icon: "bi-gear",
-    color: "blue",
-    details: { rule: "Velocity Check" },
-  },
-  {
-    id: 4,
-    type: "alert",
-    title: "Multiple Failed Login Attempts",
-    description: "USR67890 had 5 failed login attempts",
-    user: "System",
-    time: "2 hr ago",
-    icon: "bi-exclamation-triangle",
-    color: "orange",
-    details: { attempts: "5 attempts", location: "Jakarta" },
-  },
-  {
-    id: 5,
-    type: "report",
-    title: "Monthly Report Generated",
-    description: "January 2026 fraud analysis completed",
-    user: "System",
-    time: "3 hr ago",
-    icon: "bi-file-earmark-text",
-    color: "purple",
-    details: { reportId: "RPT0015" },
-  },
-  {
-    id: 6,
-    type: "user_action",
-    title: "User Settings Updated",
-    description: "Email notifications enabled",
-    user: "Admin User",
-    time: "5 hr ago",
-    icon: "bi-person-gear",
-    color: "gray",
-    details: { setting: "Notifications" },
-  },
-  {
-    id: 7,
-    type: "fraud_detected",
-    title: "Suspicious Pattern Detected",
-    description: "Geographic anomaly detected in TRX001225",
-    user: "System",
-    time: "6 hr ago",
-    icon: "bi-geo-alt",
-    color: "red",
-    details: { location: "Unknown" },
-  },
-  {
-    id: 8,
-    type: "system",
-    title: "ML Model Retrained",
-    description: "Updated with new training data",
-    user: "System",
-    time: "8 hr ago",
-    icon: "bi-cpu",
-    color: "blue",
-    details: { accuracy: "98.9%" },
-  },
-];
-
 const FILTERS = [
   { label: "All", value: "all" },
   { label: "Fraud", value: "fraud_detected" },
@@ -130,9 +39,7 @@ const ActivityTimeline = ({ activities }) => {
   const [activeFilter, setActiveFilter] = useState("all");
 
   const source =
-    activities && activities.length > 0
-      ? activities.map(normaliseActivity)
-      : STATIC_ACTIVITIES;
+    Array.isArray(activities) ? activities.map(normaliseActivity) : [];
 
   const filtered =
     activeFilter === "all"
@@ -233,7 +140,9 @@ const ActivityTimeline = ({ activities }) => {
                         <strong>
                           {key.replace(/([A-Z])/g, " $1").trim()}:
                         </strong>
-                        {value}
+                        {typeof value === "object"
+                          ? JSON.stringify(value)
+                          : String(value)}
                       </span>
                     ))}
                     <span className="tag-user">
