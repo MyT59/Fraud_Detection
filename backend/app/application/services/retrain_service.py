@@ -27,7 +27,7 @@ def log_performance(func):
 from app.infrastructure.ml.domain_detector import detect_domain
 from app.infrastructure.ml.feature_builder import build_features
 from app.infrastructure.ml.training import train_from_dataframe 
-from app.infrastructure.ml.model_loader import load_isolation_model, load_isolation_meta, DOMAIN_ISO_CONFIG
+from app.infrastructure.ml.model_loader import load_isolation_meta, DOMAIN_ISO_CONFIG
 from app.infrastructure.database.models.ml_feedback_log_model import MLFeedbackLog
 from app.application.services.pattern_discovery_service import PatternDiscoveryService
 from app.application.services.dataset_retention_service import DatasetRetentionService
@@ -426,17 +426,14 @@ class RetrainService:
             # 6. Jalankan Pattern Discovery Auditing (Opsional)
             new_patterns_count = 0
             try:
-                trained_model = load_isolation_model(domain)
-                config = DOMAIN_ISO_CONFIG[domain]
-                x_eval = feature_df.drop(columns=["is_fraud", *config["drop_cols"]], errors="ignore")
-                
-                preds = trained_model.predict(x_eval)
-                feature_df["IS_ANOMALY"] = (preds == -1).astype(int)
-                anomaly_df = feature_df[feature_df["IS_ANOMALY"] == 1]
-
-                new_patterns_count = self.pattern_discovery.discover_patterns_from_anomalies(
-                    domain=domain,
-                    anomaly_df=anomaly_df
+                # Gunakan anomaly_df dari model yang baru saja dilatih. Jangan
+                # load model aktif dari cache karena model tersebut bisa masih
+                # versi sebelumnya.
+                anomaly_df = training_result["anomaly_df"]
+                new_patterns_count = self.pattern_discovery.extract_and_save_patterns(
+                    self.db,
+                    domain,
+                    anomaly_df,
                 )
             except Exception as e:
                 logger.warning(f"Pattern discovery skipped or failed during retrain: {str(e)}")

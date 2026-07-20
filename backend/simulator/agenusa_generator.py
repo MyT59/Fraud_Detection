@@ -323,7 +323,7 @@ def generate_money_mule() -> list[dict]:
     for _ in range(3):
         trx = _base_trx()
         trx["dest_account_number"] = MONEY_MULE_DEST
-        trx["amount"]              = round(random.uniform(5_000_000, 20_000_000), 2)
+        trx["amount"]              = round(random.uniform(1_000_000, 4_000_000), 2)
         records.append(trx)
     return records
 
@@ -501,9 +501,405 @@ def generate_rule_agenusa_suspended_bank() -> list[dict]:
     trx = _base_trx()
     trx["issuer_bank"] = "BANK_CADANGAN_X"
     return [trx]
+
+
+# ============================================================
+# ML SCENARIOS
+# Skenario ini mengikuti feature_builder.py, bukan fraud_patterns/global_rules.
+# ============================================================
+def generate_ml_bruteforce_pin() -> list[dict]:
+    """Satu transaksi salah PIN yang menyalakan IS_BRUTE_PATTERN."""
+    trx = _base_trx()
+    trx["processing_code"] = "300000"
+    trx["response_code"] = "55"
+    trx["amount"] = 750_000
+    return [trx]
+
+
+def generate_ml_rapid_retry_declined() -> list[dict]:
+    """Dua decline berjarak satu menit untuk RAPID_RETRY_DECLINED."""
+    base_time = datetime.now(timezone.utc)
+    card_num = "CARD_ML_RETRY_" + "".join(random.choices(string.digits, k=6))
+    records = []
+    for i in range(2):
+        trx = _base_trx(time_override=base_time + timedelta(minutes=i))
+        trx["issuer_account_number"] = card_num
+        trx["account_number"] = card_num
+        trx["customer_ref_number"] = card_num
+        trx["response_code"] = "51"
+        trx["processing_code"] = "301000"
+        trx["amount"] = 500_000
+        records.append(trx)
+    return records
+
+
+def generate_ml_midnight_unusual_amount() -> list[dict]:
+    """Baseline nominal normal lalu spike 2x pada jam malam model (UTC 00-04)."""
+    now = datetime.now(timezone.utc)
+    card_num = "CARD_ML_NIGHT_" + "".join(random.choices(string.digits, k=6))
+    records = []
+
+    for i in range(5):
+        trx = _base_trx(time_override=now - timedelta(hours=10 - i))
+        trx["issuer_account_number"] = card_num
+        trx["account_number"] = card_num
+        trx["customer_ref_number"] = card_num
+        trx["amount"] = 1_000_000
+        records.append(trx)
+
+    midnight = now.replace(hour=2, minute=0, second=0, microsecond=0)
+    if midnight <= records[-1]["timestamp_db"]:
+        midnight += timedelta(days=1)
+    trx = _base_trx(time_override=midnight)
+    trx["issuer_account_number"] = card_num
+    trx["account_number"] = card_num
+    trx["customer_ref_number"] = card_num
+    trx["amount"] = 2_500_000
+    records.append(trx)
+    return records
+
+
+def generate_ml_high_amount_spike() -> list[dict]:
+    """Baseline kecil lalu nominal 9 juta: ratio ekstrem tetapi di bawah rule 10 juta."""
+    now = datetime.now(timezone.utc)
+    card_num = "CARD_ML_AMOUNT_" + "".join(random.choices(string.digits, k=6))
+    records = []
+
+    for i in range(5):
+        trx = _base_trx(time_override=now - timedelta(hours=5 - i))
+        trx["issuer_account_number"] = card_num
+        trx["account_number"] = card_num
+        trx["customer_ref_number"] = card_num
+        trx["amount"] = 100_000
+        records.append(trx)
+
+    trx = _base_trx(time_override=now)
+    trx["issuer_account_number"] = card_num
+    trx["account_number"] = card_num
+    trx["customer_ref_number"] = card_num
+    trx["amount"] = 9_000_000
+    records.append(trx)
+    return records
+
+
+def generate_ml_unknown_mixed_outlier() -> list[dict]:
+    """
+    ML Unexplained Anomaly: kombinasi nilai langka tanpa menyalakan enam
+    heuristic pattern Agenusa. Hasil tetap bergantung pada model aktif.
+    """
+    now = datetime.now(timezone.utc)
+    unusual_time = now.replace(hour=23, minute=57, second=0, microsecond=0)
+    card_num = "CARD_ML_UNKNOWN_" + "".join(random.choices(string.digits, k=6))
+
+    baseline = _base_trx(time_override=unusual_time - timedelta(minutes=3))
+    baseline.update(
+        {
+            "terminal_id": "TERM_UNSEEN_ML_999",
+            "issuer_account_number": card_num,
+            "account_number": card_num,
+            "customer_ref_number": card_num,
+            "amount": 1_000_000,
+        }
+    )
+
+    outlier = _base_trx(time_override=unusual_time)
+    outlier.update(
+        {
+            "terminal_id": "TERM_UNSEEN_ML_999",
+            "merchant_id": "MERCHANT_UNSEEN_ML_999",
+            "issuer_account_number": card_num,
+            "account_number": card_num,
+            "customer_ref_number": card_num,
+            "processing_code": "000000",
+            "response_code": "91",
+            "mti": "0800",
+            "dest_account_number": "DEST_UNSEEN_ML_999",
+            "amount": 7_900_000,
+        }
+    )
+    return [baseline, outlier]
+
+
 # ============================================================
 # PUBLIC API
 # ============================================================
+def get_scenario_catalog() -> dict[str, dict]:
+    """Metadata scenario pattern aktif; diselaraskan dengan fraud_patterns."""
+    return {
+        "chain_decline_success_burst": {
+            "title": "Agenusa - Critical Card Testing Burst Detection",
+            "category": "Carding & Brute Force",
+            "description": (
+                "Tiga decline beruntun, satu transaksi sukses, lalu burst "
+                "transaksi sukses dari kartu yang sama."
+            ),
+            "target_engines": ["Pattern Engine"],
+            "trigger_conditions": [
+                "chain_decline_success_burst == true",
+                "tx_count >= 7 dalam 15 menit",
+            ],
+            "fraud_pattern": {
+                "id": 2,
+                "risk_score": 95,
+                "priority": 10,
+                "action": "BLOCK",
+                "logic": "AND",
+                "time_window_minutes": 15,
+            },
+            "expected_result": "FRAUD",
+            "transaction_count": 8,
+        },
+        "edc_terminal_pooling": {
+            "title": "Agenusa - EDC Terminal Pooling & Card Washing Detection",
+            "category": "Merchant Collusion & Terminal Abuse",
+            "description": (
+                "Enam kartu berbeda digunakan pada terminal EDC yang sama "
+                "dalam window sepuluh menit."
+            ),
+            "target_engines": ["Pattern Engine"],
+            "trigger_conditions": [
+                "distinct_account_count >= 5 dalam 10 menit",
+            ],
+            "fraud_pattern": {
+                "id": 4,
+                "risk_score": 90,
+                "priority": 10,
+                "action": "BLOCK",
+                "logic": "AND",
+                "time_window_minutes": 10,
+            },
+            "expected_result": "FRAUD",
+            "transaction_count": 6,
+        },
+        "bruteforce": {
+            "title": "Agenusa - Account Takeover & Brute Force PIN Guessing",
+            "category": "Account Takeover Suspect",
+            "description": (
+                "Empat kegagalan PIN beruntun diikuti satu transaksi sukses "
+                "dari kartu yang sama."
+            ),
+            "target_engines": ["Pattern Engine"],
+            "trigger_conditions": [
+                "failure_count >= 3",
+                "has_success_after_failure >= true",
+                "window 10 menit",
+            ],
+            "fraud_pattern": {
+                "id": 5,
+                "risk_score": 75,
+                "priority": 5,
+                "action": "REVIEW",
+                "logic": "AND",
+                "time_window_minutes": 10,
+            },
+            "expected_result": "UNDER_REVIEW",
+            "transaction_count": 5,
+        },
+        "fan_in": {
+            "title": "Agenusa - Fan-In Syndicate (Massive Card Pooling)",
+            "category": "Merchant Collusion & Syndicate",
+            "description": (
+                "Dua belas kartu berbeda digunakan pada satu terminal EDC "
+                "untuk memenuhi pola massive card pooling."
+            ),
+            "target_engines": ["Pattern Engine"],
+            "trigger_conditions": [
+                "distinct_account_count >= 10",
+                "tx_count >= 11 dalam 15 menit",
+            ],
+            "fraud_pattern": {
+                "id": 9,
+                "risk_score": 100,
+                "priority": 10,
+                "action": "BLOCK",
+                "logic": "AND",
+                "time_window_minutes": 15,
+            },
+            "expected_result": "FRAUD",
+            "transaction_count": 12,
+        },
+        "velocity_burst": {
+            "title": "Agenusa - Velocity Burst (High-Frequency Card Usage)",
+            "category": "Velocity Attack & Shopping Spree",
+            "description": (
+                "Delapan transaksi berfrekuensi tinggi dari kartu yang sama "
+                "dalam window lima menit."
+            ),
+            "target_engines": ["Pattern Engine"],
+            "trigger_conditions": ["tx_count >= 6 dalam 5 menit"],
+            "fraud_pattern": {
+                "id": 10,
+                "risk_score": 85,
+                "priority": 8,
+                "action": "BLOCK",
+                "logic": "AND",
+                "time_window_minutes": 5,
+            },
+            "expected_result": "FRAUD",
+            "transaction_count": 8,
+        },
+        "super_pattern": {
+            "title": "Agenusa - Super Pattern (Advanced Syndicate Attack)",
+            "category": "Syndicate & Multi-Vector Attack",
+            "description": (
+                "Kombinasi decline-success, velocity tinggi, dan akumulasi "
+                "nominal besar pada kartu yang sama."
+            ),
+            "target_engines": ["Pattern Engine"],
+            "trigger_conditions": [
+                "failure_count >= 3",
+                "has_success_after_failure == true",
+                "tx_count >= 15",
+                "total_amount >= 50,000,000 dalam 15 menit",
+            ],
+            "fraud_pattern": {
+                "id": 11,
+                "risk_score": 100,
+                "priority": 10,
+                "action": "BLOCK",
+                "logic": "AND",
+                "time_window_minutes": 15,
+            },
+            "expected_result": "FRAUD",
+            "transaction_count": 16,
+        },
+        "ml_bruteforce_pin": {
+            "title": "ML - Brute Force PIN Signal",
+            "category": "ML Feature Anomaly",
+            "description": "Menyalakan feature IS_BRUTE_PATTERN tanpa memenuhi burst pattern tabel.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": [
+                "processing_code == '300000'",
+                "response_code == '55'",
+            ],
+            "ml_pattern": {"key": "bruteforce_pin_pattern"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 1,
+        },
+        "ml_rapid_retry_declined": {
+            "title": "ML - Rapid Retry Declined",
+            "category": "ML Feature Anomaly",
+            "description": "Dua decline cepat dari kartu yang sama tanpa mencapai failure_count pattern.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": ["IS_DECLINED == 1", "GAP_MINUTES <= 2"],
+            "ml_pattern": {"key": "rapid_retry_declined"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 2,
+        },
+        "ml_money_mule_destination": {
+            "title": "ML - Money Mule Destination",
+            "category": "ML Feature Anomaly",
+            "description": "Transaksi menuju rekening tujuan khusus yang dikenali feature ML.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": ["dest_account_number == 'DST999999'"],
+            "ml_pattern": {"key": "money_mule_destination"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 3,
+        },
+        "ml_terminal_switch_fast": {
+            "title": "ML - Fast Terminal Switch",
+            "category": "ML Feature Anomaly",
+            "description": "Kartu yang sama berpindah terminal dalam waktu yang sangat singkat.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": ["GAP_MINUTES <= 10", "terminal_id berubah"],
+            "ml_pattern": {"key": "impossible_travel_terminal_switch"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 2,
+        },
+        "ml_high_amount_spike": {
+            "title": "ML - Extreme Amount Spike",
+            "category": "ML Feature Anomaly",
+            "description": "Nominal 9 juta dibanding baseline 100 ribu, tetap di bawah global rule 10 juta.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": ["AMOUNT_OVER_AVG_RATIO >= 8"],
+            "ml_pattern": {"key": "high_amount_spike"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 6,
+        },
+        "ml_midnight_unusual_amount": {
+            "title": "ML - Midnight Unusual Amount",
+            "category": "ML Feature Anomaly",
+            "description": "Lonjakan nominal pada jam 00.00-04.59 UTC dibanding histori kartu.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": ["IS_NIGHT_TX == 1", "AMOUNT_OVER_AVG_RATIO >= 2"],
+            "ml_pattern": {"key": "midnight_unusual_amount"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 6,
+        },
+        "ml_unknown_mixed_outlier": {
+            # Key lama dipertahankan agar request/history simulator tetap kompatibel.
+            "title": "ML - Unexplained Anomaly",
+            "category": "Unexplained ML Anomaly",
+            "description": (
+                "ML menilai kombinasi terminal, merchant, processing code, MTI, "
+                "tujuan, waktu, dan nominal sebagai anomali, tetapi belum ada "
+                "pattern bernama yang menjelaskannya."
+            ),
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": [
+                "kombinasi feature berada di luar distribusi training",
+                "is_anomaly == true dan patterns == []",
+            ],
+            "ml_pattern": {"key": None, "unknown": True},
+            "expected_result": "ML ANOMALY (MODEL-DEPENDENT)",
+            "transaction_count": 2,
+        },
+        "rule_agenusa_max_cash_out": {
+            "title": "Agenusa - Batas Maksimum Penarikan Fisik",
+            "category": "AMOUNT_LIMIT",
+            "description": (
+                "Membatasi tarik tunai fisik atau transfer sekali jalan melalui "
+                "EDC Agenusa maksimal Rp10.000.000 untuk menjaga likuiditas dan "
+                "memitigasi kesalahan input nominal."
+            ),
+            "target_engines": ["Rule Engine"],
+            "trigger_conditions": ["amount > 10,000,000"],
+            "global_rule": {
+                "id": 2,
+                "rule_key": "rule_agenusa_max_cash_out",
+                "rule_group": "AMOUNT_LIMIT",
+                "action": "BLOCK",
+                "severity": "CRITICAL",
+                "priority": 100,
+                "rule_config": {
+                    "field": "amount",
+                    "value": 10_000_000,
+                    "operator": ">",
+                },
+            },
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "rule_agenusa_suspended_bank": {
+            "title": "Agenusa - Penangguhan Interkoneksi Bank Partner",
+            "category": "VELOCITY",
+            "description": (
+                "Menghentikan transaksi kartu dari bank partner yang sedang "
+                "ditangguhkan karena gangguan settlement atau investigasi regulator."
+            ),
+            "target_engines": ["Rule Engine"],
+            "trigger_conditions": [
+                "transaction_details.issuer_bank >= 'BANK_CADANGAN_X'",
+            ],
+            "global_rule": {
+                "id": 3,
+                "rule_key": "rule_agenusa_suspended_bank",
+                "rule_group": "VELOCITY",
+                "action": "BLOCK",
+                "severity": "HIGH",
+                "priority": 90,
+                "rule_config": {
+                    "field": "transaction_details.issuer_bank",
+                    "value": "BANK_CADANGAN_X",
+                    "operator": ">=",
+                },
+            },
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+    }
+
+
 def get_all_scenarios() -> dict[str, list[dict]]:
     """
     Kembalikan semua skenario simulasi dalam satu dict.
@@ -511,24 +907,21 @@ def get_all_scenarios() -> dict[str, list[dict]]:
     lalu diproses via DataAggregationService.process_agenusa().
     """
     return {
-        "normal":                        generate_normal(20),
-        "blacklist_ip":                  generate_blacklist_ip(),
-        "blacklist_account":             generate_blacklist_account(),
-        "blacklist_terminal":            generate_blacklist_terminal(),
-        "blacklist_merchant":            generate_blacklist_merchant(),
-        "bruteforce":                    generate_bruteforce(),
-        "decline_velocity":              generate_decline_velocity(),
-        "super_pattern":                 generate_super_pattern(),
-        "chain_decline_success_burst":   generate_chain_decline_success_burst(),
-        "edc_terminal_pooling":          generate_edc_terminal_pooling(),
-        "fan_in":                        generate_fan_in(),
-        "midnight_spike":                generate_midnight_spike(),
-        "velocity_burst":                generate_velocity_burst(),
-        "money_mule":                    generate_money_mule(),
-        "terminal_switch_fast":          generate_terminal_switch_fast(),
-        "high_amount":                   generate_high_amount(),
-        "rule_agenusa_max_cash_out":     generate_rule_agenusa_max_cash_out(),
-        "rule_agenusa_suspended_bank":   generate_rule_agenusa_suspended_bank(),
+        "chain_decline_success_burst": generate_chain_decline_success_burst(),
+        "edc_terminal_pooling": generate_edc_terminal_pooling(),
+        "bruteforce": generate_bruteforce(),
+        "fan_in": generate_fan_in(),
+        "velocity_burst": generate_velocity_burst(),
+        "super_pattern": generate_super_pattern(),
+        "ml_bruteforce_pin": generate_ml_bruteforce_pin(),
+        "ml_rapid_retry_declined": generate_ml_rapid_retry_declined(),
+        "ml_money_mule_destination": generate_money_mule(),
+        "ml_terminal_switch_fast": generate_terminal_switch_fast(),
+        "ml_high_amount_spike": generate_ml_high_amount_spike(),
+        "ml_midnight_unusual_amount": generate_ml_midnight_unusual_amount(),
+        "ml_unknown_mixed_outlier": generate_ml_unknown_mixed_outlier(),
+        "rule_agenusa_max_cash_out": generate_rule_agenusa_max_cash_out(),
+        "rule_agenusa_suspended_bank": generate_rule_agenusa_suspended_bank(),
     }
 
 

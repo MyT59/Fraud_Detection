@@ -14,8 +14,9 @@ __pycache__/
 docs/
 tmp/
 tools/
-report_assets/
+outputs/
 .codex_context_extracted/
+report_assets/
 
 # Specific files
 build_report.js

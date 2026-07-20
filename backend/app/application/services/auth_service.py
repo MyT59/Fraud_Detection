@@ -77,11 +77,9 @@ def login(db: Session, email: str, password: str, ip: str = None, user_agent: st
     reset_attempts(email)
     admin.last_login_at = datetime.now(timezone.utc)
 
-    # ✅ FIX: Nonaktifkan session lama dengan is_active (konsisten dengan security.py)
-    # security.py filter session pakai is_active == True, jadi ini yang jadi sumber kebenaran
     db.query(UserSession)\
       .filter(UserSession.admin_id == admin.id, UserSession.is_active == True)\
-      .update({"is_active": False, "is_current": False})  # update keduanya sekaligus
+      .update({"is_active": False, "is_current": False})  
 
     # Buat Token Baru
     access_token = create_access_token({
@@ -98,7 +96,7 @@ def login(db: Session, email: str, password: str, ip: str = None, user_agent: st
         user_agent=user_agent,
         device=device_name,
         browser=browser_name,
-        is_active=True,   # ✅ pastikan is_active juga di-set True saat buat session baru
+        is_active=True,   
         is_current=True,
         last_used_at=datetime.now(timezone.utc)
     )

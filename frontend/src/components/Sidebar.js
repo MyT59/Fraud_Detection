@@ -17,6 +17,11 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
   const roleLabel = getRoleLabel(role);
 
   const menuItems = [
+    {
+      path: "/transaction-simulator",
+      icon: "bi-bezier2",
+      label: "Transaction Simulator",
+    },
     { path: "/dashboard", icon: "bi-speedometer2", label: "Dashboard" },
     {
       path: "/alerts",

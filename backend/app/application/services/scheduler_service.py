@@ -157,7 +157,6 @@ class SchedulerService:
             if self.scheduler.get_job(schedule_id):
                 self.scheduler.remove_job(schedule_id)
                 
-                # 🔥 UPDATE CACHE: Kosongkan 'Next Run' karena jadwal dimatikan (is_active = False)
                 db = SessionLocal()
                 try:
                     schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()

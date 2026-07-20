@@ -284,12 +284,9 @@ def run_pattern_engine(db, trx):
     window_cache = {}
     details      = trx.transaction_details or {}
 
-    # Ambil issuer_account_number sekali, dipakai oleh banyak field di bawah
     issuer_account_number = details.get("issuer_account_number")
 
     for pattern in patterns:
-        # [FIX #8] Filter service_source — pattern hanya berlaku untuk service-nya
-        # sendiri atau ALL. Mencegah pattern NUSABILL trigger di transaksi AGENUSA.
         pattern_service = (pattern.service_source or "ALL").upper()
         trx_service     = (trx.service_source or "").upper()
         if pattern_service != "ALL" and pattern_service != trx_service:

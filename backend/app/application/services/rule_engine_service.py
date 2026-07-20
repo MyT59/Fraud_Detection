@@ -37,7 +37,14 @@ def evaluate_simple_rule(value, operator, threshold):
         if operator == ">=": return val >= th
         if operator == "<=": return val <= th
     except (ValueError, TypeError):
-        return False
+        # Beberapa rule operasional membandingkan kode/string dengan operator
+        # berurutan (contoh issuer_bank >= BANK_CADANGAN_X).
+        val = str(value).strip()
+        th = str(threshold).strip()
+        if operator in (">", "gt"): return val > th
+        if operator in ("<", "lt"): return val < th
+        if operator in (">=", "gte"): return val >= th
+        if operator in ("<=", "lte"): return val <= th
 
     return False
 
@@ -94,7 +101,13 @@ def evaluate_json_rule(config, trx):
         if operator in (">=", "gte"): return val >= th
         if operator in ("<=", "lte"): return val <= th
     except (ValueError, TypeError):
-        return False
+        # Dukung rule kode/string yang memakai operator berurutan.
+        val = str(trx_value).strip()
+        th = str(value).strip()
+        if operator in (">", "gt"): return val > th
+        if operator in ("<", "lt"): return val < th
+        if operator in (">=", "gte"): return val >= th
+        if operator in ("<=", "lte"): return val <= th
 
     return False
 

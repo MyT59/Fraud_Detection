@@ -61,7 +61,7 @@ async def run_live_simulation(domain: str, scenario: str | None):
         if domain in ["nusabill", "all"]:
             scen = nusabill_scenarios()
             txs  = scen[scenario] if scenario and scenario in scen else [t for l in scen.values() for t in l]
-            all_records.extend([{"src": "nusabill", "data": nusabill_to_db(t)} for t in txs])
+            all_records.extend([{"src": "nusabill", "data": t} for t in txs])
 
         def extract_timestamp(item):
             if item["src"] == "agenusa":
@@ -84,8 +84,12 @@ async def run_live_simulation(domain: str, scenario: str | None):
                     sw_repo.mark_processed(log.id)
                     await process_transaction_ml_async(trx.id)
             else:
-                log = inv_repo.create(item["data"])
-                trx = process_transaction(map_nusabill(log.__dict__), db)
+                raw_data = item["data"]
+                log = inv_repo.create(nusabill_to_db(raw_data))
+                # `channel` bukan kolom invoice_transactions. Sisipkan kembali
+                # saat mapping agar feature CHANNEL_SWITCH_TO_API dapat diuji.
+                mapped_data = {**log.__dict__, "channel": raw_data.get("channel", "API")}
+                trx = process_transaction(map_nusabill(mapped_data), db)
                 if trx:
                     inv_repo.mark_processed(log.id)
                     await process_transaction_ml_async(trx.id)

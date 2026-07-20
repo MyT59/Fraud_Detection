@@ -18,7 +18,6 @@ def require_roles(*allowed_roles):
         return admin
     return checker
 
-
 # =========================
 # SPECIFIC SHORTCUTS
 # =========================
@@ -31,7 +30,6 @@ def is_super_admin(admin=Depends(get_current_user)):
             detail="Only Super Admin allowed"
         )
     return admin
-
 
 # RISK MANAGER
 def is_risk_manager(admin=Depends(get_current_user)):

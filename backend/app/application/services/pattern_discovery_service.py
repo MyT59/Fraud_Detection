@@ -183,7 +183,6 @@ class PatternDiscoveryService:
         for feature, config in map_config.items():
             if feature in anomaly_df.columns:
                 # Hitung persentase seberapa sering fitur ini memicu anomali (Hit Rate)
-                # (Karena di feature_builder nilainya 1/0, kita bisa pakai mean)
                 hit_rate = anomaly_df[feature].mean()
                 
                 # Threshold ML: Jika fitur ini dominan (muncul > 30% pada data anomali)

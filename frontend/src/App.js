@@ -26,6 +26,7 @@ import ActivityTimeline from "./pages/ActivityTimeline";
 import RetrainSchedule from "./pages/RetrainSchedule";
 import ChangePassword from "./pages/ChangePassword";
 import Login from "./pages/Login";
+import TransactionSimulator from "./pages/TransactionSimulator";
 import PageLoader from "./components/common/PageLoader";
 import { getRoleLabel } from "./utils/roleUi";
 import "./App.css";
@@ -242,6 +243,10 @@ function App() {
                     <Routes>
                       <Route path="/" element={<Dashboard />} />
                       <Route path="/dashboard" element={<Dashboard />} />
+                      <Route
+                        path="/transaction-simulator"
+                        element={<TransactionSimulator />}
+                      />
                       <Route path="/transactions" element={<Transactions />} />
                       <Route path="/analytics" element={<Analytics />} />
                       <Route

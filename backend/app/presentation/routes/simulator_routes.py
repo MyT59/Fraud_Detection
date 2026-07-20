@@ -47,8 +47,14 @@ from app.application.services.simulator_service import (
     reset_simulator_data,
 )
 from app.infrastructure.database.session import get_db
-from simulator.agenusa_generator import get_all_scenarios as agenusa_scenarios
-from simulator.nusabill_generator import get_all_scenarios as nusabill_scenarios
+from simulator.agenusa_generator import (
+    get_all_scenarios as agenusa_scenarios,
+    get_scenario_catalog as agenusa_scenario_catalog,
+)
+from simulator.nusabill_generator import (
+    get_all_scenarios as nusabill_scenarios,
+    get_scenario_catalog as nusabill_scenario_catalog,
+)
 
 from app.presentation.schemas.simulator_schema import (
     AgenusaManualInput,
@@ -72,7 +78,7 @@ router = APIRouter(prefix="/simulator", tags=["Simulator"])
 # di get_all_scenarios() pada masing-masing generator.
 # ─────────────────────────────────────────────────────────────────────────────
 
-_SCENARIO_CATALOG = {
+_LEGACY_SCENARIO_CATALOG = {
 
     # ══════════════════════════════════════════════════════════════════════
     # AGENUSA
@@ -675,6 +681,13 @@ _SCENARIO_CATALOG = {
     },
 }
 
+# Sumber aktif scenario dan metadata berada di masing-masing generator.
+# Catalog lama di atas dipertahankan sementara sebagai referensi historis.
+_SCENARIO_CATALOG = {
+    "agenusa": agenusa_scenario_catalog(),
+    "nusabill": nusabill_scenario_catalog(),
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # EXISTING: Live Simulation
@@ -717,11 +730,39 @@ def get_simulation_status():
 
 @router.get("/scenarios", summary="List scenario yang tersedia")
 def list_scenarios():
+    agenusa_catalog = agenusa_scenario_catalog()
+    nusabill_catalog = nusabill_scenario_catalog()
+
+    def scenario_type(info: dict) -> str:
+        if info.get("global_rule"):
+            return "RULE"
+        if info.get("ml_pattern"):
+            return "ML"
+        return "PATTERN"
+
     return {
         "status": "success",
         "data": {
             "agenusa": list(agenusa_scenarios().keys()),
             "nusabill": list(nusabill_scenarios().keys()),
+            "scenario_details": {
+                "agenusa": [
+                    {
+                        "key": key,
+                        "scenario_type": scenario_type(agenusa_catalog[key]),
+                        **agenusa_catalog[key],
+                    }
+                    for key in agenusa_catalog
+                ],
+                "nusabill": [
+                    {
+                        "key": key,
+                        "scenario_type": scenario_type(nusabill_catalog[key]),
+                        **nusabill_catalog[key],
+                    }
+                    for key in nusabill_catalog
+                ],
+            },
         }
     }
 
