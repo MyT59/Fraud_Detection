@@ -26,6 +26,7 @@ class RuleBase(BaseModel):
     condition_field: Optional[str] = None
     operator: Optional[RuleOperatorEnum] = None
     threshold_value: Optional[str] = None
+    rule_config: Optional[dict] = None
 
     action: RuleActionEnum
     severity: RuleSeverityEnum = RuleSeverityEnum.MEDIUM
@@ -51,6 +52,7 @@ class RuleUpdate(BaseModel):
     condition_field: Optional[str] = None
     operator: Optional[RuleOperatorEnum] = None
     threshold_value: Optional[str] = None
+    rule_config: Optional[dict] = None
 
     action: Optional[RuleActionEnum] = None
     severity: Optional[RuleSeverityEnum] = None

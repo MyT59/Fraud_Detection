@@ -211,7 +211,11 @@ class MLRealtimeService:
             logger.error(f"[ML_REALTIME] tx_id={transaction_id} ML scoring error — {type(e).__name__}: {e}")
             return None
 
-    def process_transaction_ml(self, transaction_id: int):
+    def process_transaction_ml(
+        self,
+        transaction_id: int,
+        force_rescore: bool = False,
+    ):
         """
         DEPRECATED: Gunakan process_transaction_ml_async() untuk real-time.
 
@@ -230,15 +234,25 @@ class MLRealtimeService:
         # Hanya untuk backward compatibility, bukan untuk production!
         try:
             asyncio.run(
-                self.process_transaction_ml_async(transaction_id)
+                self.process_transaction_ml_async(
+                    transaction_id,
+                    force_rescore=force_rescore,
+                )
             )
         except RuntimeError:
             # Jika event loop sudah running (misalnya di dalam FastAPI),
             # fallback ke sync version
-            self._process_transaction_ml_sync(transaction_id)
+            self._process_transaction_ml_sync(
+                transaction_id,
+                force_rescore=force_rescore,
+            )
 
     @log_performance(label="MLRealtime.process_transaction_ml_async")
-    async def process_transaction_ml_async(self, transaction_id: int) -> dict[str, Any]:
+    async def process_transaction_ml_async(
+        self,
+        transaction_id: int,
+        force_rescore: bool = False,
+    ) -> dict[str, Any]:
         """
         Async ML processing orchestration (RECOMMENDED).
 
@@ -263,6 +277,23 @@ class MLRealtimeService:
                 "status": "not_found",
             }
 
+        current_breakdown = dict(transaction.score_breakdown or {})
+        if (
+            current_breakdown.get("ml_runtime_status") == "PROCESSED"
+            and not force_rescore
+        ):
+            logger.info(
+                f"[ML_REALTIME] tx_id={transaction_id} sudah diproses — skip duplicate scoring"
+            )
+            return {
+                "transaction_id": transaction_id,
+                "ml_score": current_breakdown.get("ml_score"),
+                "is_anomaly": current_breakdown.get("is_anomaly", False),
+                "risk_level": current_breakdown.get("risk_level", "low"),
+                "patterns": current_breakdown.get("patterns", []),
+                "status": "already_processed",
+            }
+
         # ===== RUN ML SCORING (ASYNC, NON-BLOCKING) =====
         logger.info(f"[ML_REALTIME] tx_id={transaction_id} mulai async ML scoring")
 
@@ -276,12 +307,36 @@ class MLRealtimeService:
                 "status": "ml_error",
             }
 
+        # Another worker may have completed while this worker was scoring.
+        self.db.refresh(transaction)
+        current_breakdown = dict(transaction.score_breakdown or {})
+        if (
+            current_breakdown.get("ml_runtime_status") == "PROCESSED"
+            and not force_rescore
+        ):
+            logger.info(
+                f"[ML_REALTIME] tx_id={transaction_id} selesai diproses worker lain — skip persist"
+            )
+            return {
+                "transaction_id": transaction_id,
+                "ml_score": current_breakdown.get("ml_score"),
+                "is_anomaly": current_breakdown.get("is_anomaly", False),
+                "risk_level": current_breakdown.get("risk_level", "low"),
+                "patterns": current_breakdown.get("patterns", []),
+                "status": "already_processed",
+            }
+
         # ===== EXTRACT SCORING RESULTS =====
         ml_score = scoring_result.get("score", 0.0)
         is_anomaly = scoring_result.get("is_anomaly", False)
         risk_level = scoring_result.get("risk_level", "low")
         patterns = scoring_result.get("patterns", [])
         thresholds = scoring_result.get("thresholds", {})
+
+        high_risk_threshold = thresholds.get("high_risk_score_threshold", -0.0009)
+        if ml_score <= high_risk_threshold:
+            is_anomaly = True
+        scoring_result = {**scoring_result, "is_anomaly": is_anomaly}
 
         # ===== BUILD & PERSIST SELECTED FEATURES INTO transaction_details =====
         # Feature builder returns UPPERCASE keys; pattern engine expects
@@ -339,7 +394,17 @@ class MLRealtimeService:
         transaction.anomaly_score = ml_score
         transaction.is_flagged_ml = is_anomaly
 
-        existing_breakdown = dict(transaction.score_breakdown or {})    
+        existing_breakdown = dict(transaction.score_breakdown or {})
+        previous_ml_contribution = float(
+            existing_breakdown.pop("ml_risk_contribution", 0) or 0
+        )
+        if previous_ml_contribution:
+            base_risk = max(
+                0,
+                float(transaction.risk_score or 0) - previous_ml_contribution,
+            )
+            transaction.risk_score = base_risk
+            existing_breakdown["final_score"] = base_risk
 
         existing_breakdown.update(
             {
@@ -356,13 +421,6 @@ class MLRealtimeService:
         transaction.score_breakdown = existing_breakdown
 
         # ===== ALERT ESCALATION =====
-        # Ambil threshold langsung dari hasil scoring meta JSON
-        high_risk_threshold = thresholds.get("high_risk_score_threshold", -0.0009)
-
-        # Di Isolation Forest, semakin kecil/negatif nilainya, semakin berbahaya!
-        if ml_score <= high_risk_threshold:
-            is_anomaly = True
-
         if is_anomaly:
             try:
                 # ── Opsi B: ML update final_status ───────────────────────
@@ -391,8 +449,8 @@ class MLRealtimeService:
                     else:
                         ml_risk_contribution = 10
 
-                    current_risk  = float(transaction.risk_score or 0)
-                    new_risk      = min(100, int(current_risk + ml_risk_contribution))
+                    current_risk = float(transaction.risk_score or 0)
+                    new_risk = min(100, int(current_risk + ml_risk_contribution))
                     transaction.risk_score = new_risk
 
                     # Update risk_level jika naik
@@ -481,7 +539,11 @@ class MLRealtimeService:
     # =====================================================================
 
     @log_performance(label="MLRealtime.process_transaction_ml_sync")
-    def _process_transaction_ml_sync(self, transaction_id: int) -> dict[str, Any]:
+    def _process_transaction_ml_sync(
+        self,
+        transaction_id: int,
+        force_rescore: bool = False,
+    ) -> dict[str, Any]:
         """
         Fallback synchronous version jika asyncio.run() tidak bisa dipakai.
 
@@ -495,6 +557,20 @@ class MLRealtimeService:
             return {
                 "transaction_id": transaction_id,
                 "status": "not_found",
+            }
+
+        current_breakdown = dict(transaction.score_breakdown or {})
+        if (
+            current_breakdown.get("ml_runtime_status") == "PROCESSED"
+            and not force_rescore
+        ):
+            return {
+                "transaction_id": transaction_id,
+                "ml_score": current_breakdown.get("ml_score"),
+                "is_anomaly": current_breakdown.get("is_anomaly", False),
+                "risk_level": current_breakdown.get("risk_level", "low"),
+                "patterns": current_breakdown.get("patterns", []),
+                "status": "already_processed",
             }
 
         # ===== RUN ML SCORING SYNCHRONOUSLY (BLOCKING!) =====
@@ -517,6 +593,11 @@ class MLRealtimeService:
         risk_level = scoring_result.get("risk_level", "low")
         patterns = scoring_result.get("patterns", [])
         thresholds = scoring_result.get("thresholds", {})
+
+        high_risk_threshold = thresholds.get("high_risk_score_threshold", -0.0009)
+        if ml_score <= high_risk_threshold:
+            is_anomaly = True
+        scoring_result = {**scoring_result, "is_anomaly": is_anomaly}
 
         # ===== IMMUTABLE AUDIT TRAIL =====
         _log_ml_scoring_activity(self.db, transaction, scoring_result)
@@ -542,13 +623,6 @@ class MLRealtimeService:
         transaction.score_breakdown = existing_breakdown
 
         # ===== ALERT ESCALATION =====
-        # Ambil threshold langsung dari hasil scoring meta JSON
-        high_risk_threshold = thresholds.get("high_risk_score_threshold", -0.0009)
-
-        # Di Isolation Forest, semakin kecil/negatif nilainya, semakin berbahaya!
-        if ml_score <= high_risk_threshold:
-            is_anomaly = True
-
         if is_anomaly:
             try:
                 # 🔍 Cek apakah alert untuk transaksi ini sudah dibuat oleh engine lain (Sync)
@@ -627,7 +701,11 @@ def enqueue_ml_processing(db: Session, transaction_id: int):
     return service.enqueue_ml_processing(transaction_id)
 
 
-def process_transaction_ml(db: Session, transaction_id: int):
+def process_transaction_ml(
+    db: Session,
+    transaction_id: int,
+    force_rescore: bool = False,
+):
     """
     DEPRECATED: Gunakan process_transaction_ml_async().
 
@@ -635,12 +713,13 @@ def process_transaction_ml(db: Session, transaction_id: int):
     """
 
     service = MLRealtimeService(db)
-    return service.process_transaction_ml(transaction_id)
+    return service.process_transaction_ml(transaction_id, force_rescore=force_rescore)
 
 
 async def process_transaction_ml_async(
     transaction_id: int,
     db: Session = None,
+    force_rescore: bool = False,
 ) -> dict[str, Any]:
     """
     RECOMMENDED: Async ML runtime execution (non-blocking).
@@ -665,7 +744,10 @@ async def process_transaction_ml_async(
         own_db = SessionLocal()
         try:
             service = MLRealtimeService(own_db)
-            return await service.process_transaction_ml_async(transaction_id)
+            return await service.process_transaction_ml_async(
+                transaction_id,
+                force_rescore=force_rescore,
+            )
         finally:
             own_db.close()
 

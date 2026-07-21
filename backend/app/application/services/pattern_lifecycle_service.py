@@ -13,7 +13,6 @@ PROMOTE_THRESHOLD = 0.85
 DISABLE_MIN_SAMPLE = 10
 PROMOTE_MIN_SAMPLE = 20
 
-DECAY_RATE = 0.98
 COOLDOWN_DAYS = 7
 
 
@@ -29,15 +28,6 @@ def apply_pattern_lifecycle(db, pattern):
 
     if pattern.risk_score is None:
         pattern.risk_score = 40
-
-    # =========================
-    # DECAY (SAFE)
-    # =========================
-    tp = max(1, int(tp * DECAY_RATE)) if tp > 0 else 0
-    fp = max(1, int(fp * DECAY_RATE)) if fp > 0 else 0
-
-    pattern.true_positive = tp
-    pattern.false_positive = fp
 
     total = tp + fp
 
@@ -86,22 +76,24 @@ def apply_pattern_lifecycle(db, pattern):
     # AUTO DISABLE (Kinerja Buruk)
     # =========================
     if total >= DISABLE_MIN_SAMPLE and accuracy < DISABLE_THRESHOLD:
+        was_disabled = not pattern.is_active and pattern.action == "FLAG"
         pattern.is_active = False
         pattern.action = "FLAG"
         pattern.disabled_at = now
         
-        log_activity(
-            db=db, admin=None,
-            action_type=ActivityActionEnum.PATTERN_AUTO_DISABLE,
-            module_source=EventSourceEnum.PATTERN_ENGINE,
-            severity=SeverityLevelEnum.HIGH, 
-            target_type="PATTERN", target_id=str(pattern.id),
-            details={
-                "pattern_name": pattern.pattern_name,
-                "accuracy_score": round(accuracy, 2),
-                "reason": f"Accuracy dropped below critical threshold ({round(accuracy, 2)} < {DISABLE_THRESHOLD})"
-            }
-        )
+        if not was_disabled:
+            log_activity(
+                db=db, admin=None,
+                action_type=ActivityActionEnum.PATTERN_AUTO_DISABLE,
+                module_source=EventSourceEnum.PATTERN_ENGINE,
+                severity=SeverityLevelEnum.HIGH,
+                target_type="PATTERN", target_id=str(pattern.id),
+                details={
+                    "pattern_name": pattern.pattern_name,
+                    "accuracy_score": round(accuracy, 2),
+                    "reason": f"Accuracy dropped below critical threshold ({round(accuracy, 2)} < {DISABLE_THRESHOLD})"
+                }
+            )
         try:
             invalidate_pattern_cache()
         except Exception:
@@ -111,21 +103,23 @@ def apply_pattern_lifecycle(db, pattern):
     # AUTO PROMOTE 
     # =========================
     elif total >= PROMOTE_MIN_SAMPLE and accuracy >= PROMOTE_THRESHOLD:
+        was_promoted = pattern.is_active and pattern.action == "BLOCK"
         pattern.action = "BLOCK"
         pattern.is_active = True
         
-        log_activity(
-            db=db, admin=None,
-            action_type=ActivityActionEnum.PATTERN_AUTO_PROMOTE,
-            module_source=EventSourceEnum.PATTERN_ENGINE,
-            severity=SeverityLevelEnum.HIGH,
-            target_type="PATTERN", target_id=str(pattern.id),
-            details={
-                "pattern_name": pattern.pattern_name,
-                "accuracy_score": round(accuracy, 2),
-                "reason": f"High accuracy performance promoted to automated BLOCK ({round(accuracy, 2)} >= {PROMOTE_THRESHOLD})"
-            }
-        )
+        if not was_promoted:
+            log_activity(
+                db=db, admin=None,
+                action_type=ActivityActionEnum.PATTERN_AUTO_PROMOTE,
+                module_source=EventSourceEnum.PATTERN_ENGINE,
+                severity=SeverityLevelEnum.HIGH,
+                target_type="PATTERN", target_id=str(pattern.id),
+                details={
+                    "pattern_name": pattern.pattern_name,
+                    "accuracy_score": round(accuracy, 2),
+                    "reason": f"High accuracy performance promoted to automated BLOCK ({round(accuracy, 2)} >= {PROMOTE_THRESHOLD})"
+                }
+            )
         try:
             invalidate_pattern_cache()
         except Exception:
@@ -134,11 +128,9 @@ def apply_pattern_lifecycle(db, pattern):
     elif accuracy < 0.6:
         pattern.action = "FLAG"
 
-    base_score = pattern.risk_score or 40
-    new_score = int(base_score * accuracy)
-    new_score = max(10, min(new_score, 100))
-
-    pattern.risk_score = new_score
+    # risk_score is administrator/model configuration, not an accumulated
+    # lifecycle output. Re-scaling the previous score on every review causes
+    # exponential decay, so lifecycle only updates accuracy/action/status.
     # If risk_score or action/is_active changed, invalidate cache so pattern engine
     # sees up-to-date values on next transaction.
     try:

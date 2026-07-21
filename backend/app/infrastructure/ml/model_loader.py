@@ -28,6 +28,15 @@ _meta_cache:  dict[str, Any] = {}
 _cache_lock = threading.Lock()
 
 
+def invalidate_model_cache(domain: str) -> None:
+    """Remove a domain's cached model and metadata after a successful retrain."""
+    with _cache_lock:
+        _model_cache.pop(domain, None)
+        _meta_cache.pop(domain, None)
+
+    logger.info(f"[MODEL] Cache invalidated — domain={domain}")
+
+
 @log_performance(label="ML.load_isolation_model")
 def load_isolation_model(domain: str):
     """

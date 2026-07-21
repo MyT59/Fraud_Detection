@@ -20,8 +20,6 @@ const ACTION_CONFIG = {
 
 const normalizeAction = (action) => (action === "block" ? "block" : "flag");
 
-const getPriorityCls = (p) =>
-  p >= 75 ? "p-high" : p >= 30 ? "p-med" : "p-low";
 const getPriorityLabel = (p) =>
   p >= 75
     ? "Prioritas Tinggi"
@@ -65,8 +63,6 @@ const RuleDetailModal = ({
   if (!isOpen || !rule) return null;
 
   const act = ACTION_CONFIG[normalizeAction(rule.action)];
-  const prioCls = getPriorityCls(rule.priority);
-
   return (
     <div
       className="rdm-overlay"

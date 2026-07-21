@@ -879,7 +879,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             ),
             "target_engines": ["Rule Engine"],
             "trigger_conditions": [
-                "transaction_details.issuer_bank >= 'BANK_CADANGAN_X'",
+                "transaction_details.issuer_bank == 'BANK_CADANGAN_X'",
             ],
             "global_rule": {
                 "id": 3,
@@ -891,7 +891,7 @@ def get_scenario_catalog() -> dict[str, dict]:
                 "rule_config": {
                     "field": "transaction_details.issuer_bank",
                     "value": "BANK_CADANGAN_X",
-                    "operator": ">=",
+                    "operator": "=",
                 },
             },
             "expected_result": "FRAUD",

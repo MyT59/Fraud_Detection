@@ -25,7 +25,6 @@ from app.infrastructure.repositories.transaction_repository import TransactionRe
 from app.application.mappers.agenusa_mapper import map_agenusa
 from app.application.mappers.nusabill_mapper import map_nusabill
 from app.application.services.transaction_service import process_transaction
-from app.application.services.ml_realtime_service import process_transaction_ml_async
 
 from simulator.agenusa_generator import get_all_scenarios as agenusa_scenarios
 from simulator.nusabill_generator import get_all_scenarios as nusabill_scenarios, _to_db as nusabill_to_db
@@ -82,7 +81,6 @@ async def run_live_simulation(domain: str, scenario: str | None):
                 trx = process_transaction(map_agenusa(log.__dict__), db)
                 if trx:
                     sw_repo.mark_processed(log.id)
-                    await process_transaction_ml_async(trx.id)
             else:
                 raw_data = item["data"]
                 log = inv_repo.create(nusabill_to_db(raw_data))
@@ -92,7 +90,6 @@ async def run_live_simulation(domain: str, scenario: str | None):
                 trx = process_transaction(map_nusabill(mapped_data), db)
                 if trx:
                     inv_repo.mark_processed(log.id)
-                    await process_transaction_ml_async(trx.id)
 
             await asyncio.sleep(random.uniform(0.2, 0.5))
 
@@ -228,7 +225,6 @@ async def manual_input_agenusa(payload: dict, db: Session) -> dict:
         )
 
     sw_repo.mark_processed(raw_log.id)
-    await process_transaction_ml_async(transaction_id=trx.id)
 
     return {
         "raw_id":          raw_log.id,
@@ -271,7 +267,6 @@ async def manual_input_nusabill(payload: dict, db: Session) -> dict:
         )
 
     inv_repo.mark_processed(raw_invoice.id)
-    await process_transaction_ml_async(transaction_id=trx.id)
 
     return {
         "raw_id":          raw_invoice.id,

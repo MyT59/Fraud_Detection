@@ -702,10 +702,10 @@ const PatternPanel = ({
                   desc: `${LIFECYCLE.COOLDOWN_DAYS} hari setelah disabled_at, pattern di-reactivate otomatis`,
                 },
                 {
-                  icon: "bi-graph-down",
+                  icon: "bi-bar-chart-line",
                   color: "#d97706",
-                  label: "Decay TP/FP",
-                  desc: `Tiap lifecycle Ã— ${LIFECYCLE.DECAY_RATE ?? 0.98} â€” mencegah data lama terlalu mendominasi`,
+                  label: "Akumulasi Feedback",
+                  desc: "Counter TP/FP disimpan utuh agar threshold lifecycle dapat tercapai",
                 },
                 {
                   icon: "bi-database",

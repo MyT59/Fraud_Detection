@@ -221,7 +221,12 @@ def run_now(
         raise HTTPException(status_code=404, detail="Schedule not found")
         
     # Eksekusi Retrain langsung
-    result = service.execute_retrain(sched.to_dict(), trigger="manual", admin_id=current_admin.id)
+    result = service.execute_retrain(
+        domain=sched.domain,
+        schedule_id=sched.id,
+        trigger_source="manual",
+        admin_id=current_admin.id,
+    )
     return {"message": "Manual retraining finished", "result": result}
 
 # ==========================================

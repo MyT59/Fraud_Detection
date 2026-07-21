@@ -7,7 +7,10 @@ Optimasi P2 + P4:
   - logger.info → logger.debug untuk per-rule evaluation log
 """
 
+from sqlalchemy import func
+
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
+from app.infrastructure.database.models.global_rule_model import GlobalRule
 from app.application.services.activity_log_service import log_activity
 from app.application.cache.fraud_cache import get_cached_rules
 from app.core.logging import get_logger, log_performance
@@ -145,7 +148,10 @@ def run_rule_engine(db, trx):
             continue
 
         if rule.rule_config:
-            is_match = evaluate_json_rule(rule.rule_config, trx)
+            rule_config = rule.rule_config
+            if rule.rule_key == "rule_agenusa_suspended_bank":
+                rule_config = {**rule_config, "operator": "="}
+            is_match = evaluate_json_rule(rule_config, trx)
         else:
             value = getattr(trx, rule.condition_field, None)
             if value is None:
@@ -160,7 +166,10 @@ def run_rule_engine(db, trx):
             continue
 
         seen_groups.add(group)
-        rule.hit_count = (rule.hit_count or 0) + 1
+        db.query(GlobalRule).filter(GlobalRule.id == rule.id).update(
+            {"hit_count": func.coalesce(GlobalRule.hit_count, 0) + 1},
+            synchronize_session=False,
+        )
 
         action = normalize_rule_action(rule.action)
         violations.append({"type": "RULE", "name": rule.rule_name, "rule_id": rule.id})

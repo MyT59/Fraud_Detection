@@ -1,8 +1,6 @@
-import asyncio
 from sqlalchemy.orm import Session
 
 from app.application.services.transaction_service import process_transaction
-from app.application.services.ml_realtime_service import process_transaction_ml_async
 
 from app.infrastructure.repositories.switching_log_repository import SwitchingLogRepository
 from app.infrastructure.repositories.invoice_transaction_repository import InvoiceTransactionRepository
@@ -31,8 +29,6 @@ class DataAggregationService:
         records = self.switching_repo.get_unprocessed(limit=limit)
 
         processed_ids = []
-        ml_tasks      = []
-
         for record in records:
             if not record.rrn:
                 continue
@@ -44,14 +40,8 @@ class DataAggregationService:
 
             if trx:
                 processed_ids.append(record.id)
-                ml_tasks.append(
-                    process_transaction_ml_async(transaction_id=trx.id)
-                )
 
         self.switching_repo.mark_many_processed(processed_ids)
-
-        if ml_tasks:
-            await asyncio.gather(*ml_tasks, return_exceptions=True)
 
         logger.info(f"[AGENUSA] Processed {len(processed_ids)} records")
         return len(processed_ids)
@@ -67,8 +57,6 @@ class DataAggregationService:
         records = self.invoice_repo.get_unprocessed(limit=limit)
 
         processed_ids = []
-        ml_tasks      = []
-
         for record in records:
             if not record.no_invoice:
                 continue
@@ -80,14 +68,8 @@ class DataAggregationService:
 
             if trx:
                 processed_ids.append(record.id)
-                ml_tasks.append(
-                    process_transaction_ml_async(transaction_id=trx.id)
-                )
 
         self.invoice_repo.mark_many_processed(processed_ids)
-
-        if ml_tasks:
-            await asyncio.gather(*ml_tasks, return_exceptions=True)
 
         logger.info(f"[NUSABILL] Processed {len(processed_ids)} records")
         return len(processed_ids)

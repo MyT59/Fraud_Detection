@@ -9,7 +9,9 @@ from app.infrastructure.database.enums import PatternSourceEnum
 
 from app.application.services.pattern_learning_service import (
     generate_patterns_from_reviews,
-    save_generated_patterns
+    save_generated_patterns,
+    generate_rules_hash,
+    find_duplicate_pattern,
 )
 from app.application.services.pattern_analytics_service import (
     get_pattern_diagnostics_service,
@@ -57,6 +59,8 @@ def generate_patterns(
         target_id=None,
         details={"generated_count": count, "reason": "Auto pattern generation from manual reviews"}
     )
+    db.commit()
+    invalidate_pattern_cache()
 
     return {
         "message": "Pattern candidates generated",
@@ -108,11 +112,10 @@ def get_active_patterns(db: Session = Depends(get_db)):
 # =========================
 @router.get("/candidates", dependencies=[Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))])
 def get_candidates(db: Session = Depends(get_db)):
-    """Get pattern candidates from manual reviews and retrain ML (inactive only)"""
+    """Get all inactive, non-deleted patterns so they can be reactivated."""
     patterns = db.query(FraudPattern).filter(
         FraudPattern.is_active == False,
         FraudPattern.is_deleted == False,
-        FraudPattern.pattern_source.in_([PatternSourceEnum.MANUAL_REVIEW, PatternSourceEnum.RETRAIN_ML])
     ).all()
 
     return [
@@ -177,8 +180,6 @@ def activate_pattern(
 
     pattern.is_active = True
     pattern.disabled_at = None
-    db.commit()
-    invalidate_pattern_cache()
 
     log_activity(
         db=db,
@@ -190,6 +191,8 @@ def activate_pattern(
         target_id=pattern.id,
         details={"pattern_name": pattern.pattern_name, "reason": "Manual activation by admin"}
     )
+    db.commit()
+    invalidate_pattern_cache()
 
     return {"message": "Pattern activated"}
 
@@ -203,10 +206,24 @@ def create_pattern_manual(
     current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
     try:
+        pattern_rules = payload.pattern_rules.model_dump(exclude_none=True)
+        rules_hash = generate_rules_hash(pattern_rules)
+        if find_duplicate_pattern(
+            db,
+            rules_hash,
+            payload.service_source,
+            pattern_rules=pattern_rules,
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Pattern dengan kondisi dan service yang sama sudah tersedia",
+            )
+
         new_pattern = FraudPattern(
             pattern_name=payload.pattern_name,
             pattern_category=payload.pattern_category,
-            pattern_rules=payload.pattern_rules.model_dump(exclude_none=True),
+            pattern_rules=pattern_rules,
+            rules_hash=rules_hash,
             risk_score=payload.risk_score,
             action=payload.action,
             service_source=payload.service_source,
@@ -217,9 +234,7 @@ def create_pattern_manual(
         new_pattern.created_by = current_admin.id
 
         db.add(new_pattern)
-        db.commit()
-        db.refresh(new_pattern)
-        invalidate_pattern_cache()
+        db.flush()
 
         log_activity(
             db=db,
@@ -239,9 +254,15 @@ def create_pattern_manual(
                 "is_active": new_pattern.is_active
             }, "reason": "Manual pattern creation via dashboard"}
         )
+        db.commit()
+        db.refresh(new_pattern)
+        invalidate_pattern_cache()
 
         return new_pattern
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
@@ -278,13 +299,39 @@ def update_pattern(
     update_data = payload.model_dump(exclude_unset=True)
     if "pattern_rules" in update_data and update_data["pattern_rules"]:
         update_data["pattern_rules"] = payload.pattern_rules.model_dump(exclude_none=True)
+        new_hash = generate_rules_hash(update_data["pattern_rules"])
+        service_source = update_data.get("service_source", pattern.service_source)
+        if find_duplicate_pattern(
+            db,
+            new_hash,
+            service_source,
+            exclude_id=pattern.id,
+            pattern_rules=update_data["pattern_rules"],
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Pattern dengan kondisi dan service yang sama sudah tersedia",
+            )
+        update_data["rules_hash"] = new_hash
+    elif "service_source" in update_data:
+        current_hash = pattern.rules_hash or generate_rules_hash(pattern.pattern_rules)
+        if find_duplicate_pattern(
+            db,
+            current_hash,
+            update_data["service_source"],
+            exclude_id=pattern.id,
+            pattern_rules=pattern.pattern_rules,
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Pattern dengan kondisi dan service yang sama sudah tersedia",
+            )
+        update_data["rules_hash"] = current_hash
 
     for key, value in update_data.items():
         setattr(pattern, key, value)
 
-    db.commit()
-    db.refresh(pattern)
-    invalidate_pattern_cache()
+    db.flush()
 
     snapshot_after = {
         "pattern_name": pattern.pattern_name,
@@ -307,6 +354,9 @@ def update_pattern(
         target_id=pattern.id,
         details={"before": snapshot_before, "after": snapshot_after, "reason": "Manual pattern update via dashboard"}
     )
+    db.commit()
+    db.refresh(pattern)
+    invalidate_pattern_cache()
 
     return pattern
 
@@ -342,8 +392,6 @@ def delete_pattern(
     pattern.disabled_at = datetime.now(timezone.utc)
     pattern.deleted_at = pattern.disabled_at
     pattern.deleted_by = current_admin.id
-    db.commit()
-    invalidate_pattern_cache()
 
     # Opted to use PATTERN_DEACTIVATED log here as requested for deactivation
     log_activity(
@@ -356,6 +404,8 @@ def delete_pattern(
         target_id=pattern.id,
         details={"pattern_name": pattern.pattern_name, "reason": "Soft delete via dashboard"}
     )
+    db.commit()
+    invalidate_pattern_cache()
 
     return {"message": "Pattern soft deleted"}
 
@@ -378,8 +428,6 @@ def deactivate_pattern(
 
     pattern.is_active = False
     pattern.disabled_at = datetime.now(timezone.utc)
-    db.commit()
-    invalidate_pattern_cache()
 
     log_activity(
         db=db,
@@ -391,5 +439,7 @@ def deactivate_pattern(
         target_id=pattern.id,
         details={"pattern_name": pattern.pattern_name, "reason": "Manual deactivation via dashboard"}
     )
+    db.commit()
+    invalidate_pattern_cache()
 
     return {"message": "Pattern deactivated"}

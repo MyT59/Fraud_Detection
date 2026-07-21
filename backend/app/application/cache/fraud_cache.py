@@ -82,6 +82,9 @@ def get_cached_rules(db) -> list:
         rules = db.query(GlobalRule).filter(
             GlobalRule.is_active == True,
             GlobalRule.is_deleted == False,
+        ).order_by(
+            GlobalRule.priority.desc(),
+            GlobalRule.id.asc(),
         ).all()
         
         # JURUS SAKTI CACHING: Lepaskan objek dari ikatan Session

@@ -22,7 +22,7 @@ const ACTION_CONFIG = {
 
 const normalizeAction = (action) => (action === "block" ? "block" : "flag");
 
-const getPriorityCls = (p) => (p <= 3 ? "p-high" : p <= 6 ? "p-med" : "p-low");
+const getPriorityCls = (p) => (p >= 75 ? "p-high" : p >= 30 ? "p-med" : "p-low");
 
 const SortIcon = ({ dir }) => {
   if (dir === "asc") return <i className="bi bi-sort-up re-sort-icon active" />;
@@ -50,9 +50,6 @@ const ColDropdown = ({ isOpen, onClose, children }) => {
     </div>
   );
 };
-
-// ─── Helper: next sort direction cycle ───────────────────────────────────────
-const nextDir = (cur) => (cur === null ? "asc" : cur === "asc" ? "desc" : null);
 
 // ─── RuleEngine ──────────────────────────────────────────────────────────────
 // Semua filter/sort/search/page state dikelola dari parent (RiskManagement)
@@ -102,7 +99,7 @@ const RuleEngine = ({
     if (sortKey === "priority" && sortPDir)
       chips.push({
         key: "sort-p",
-        label: `Prioritas: ${sortPDir === "asc" ? "Tertinggi (1)" : "Terendah (10)"}`,
+        label: `Prioritas: ${sortPDir === "desc" ? "Tertinggi" : "Terendah"}`,
         onRemove: () => {
           setSortPDir(null);
           setSortKey(null);
@@ -356,17 +353,16 @@ const RuleEngine = ({
                 <ColDropdown isOpen={openDrop === "P"} onClose={closeDrop}>
                   <div className="re-col-drop-title">Urutkan Prioritas</div>
                   <button
-                    className={`re-col-drop-item${sortPDir === "asc" && sortKey === "priority" ? " selected" : ""}`}
-                    onClick={() => applyPSort("asc")}
-                  >
-                    <i className="bi bi-sort-numeric-up" /> Tertinggi (1 → 10)
-                  </button>
-                  <button
                     className={`re-col-drop-item${sortPDir === "desc" && sortKey === "priority" ? " selected" : ""}`}
                     onClick={() => applyPSort("desc")}
                   >
-                    <i className="bi bi-sort-numeric-down-alt" /> Terendah (10 →
-                    1)
+                    <i className="bi bi-sort-numeric-down-alt" /> Tertinggi
+                  </button>
+                  <button
+                    className={`re-col-drop-item${sortPDir === "asc" && sortKey === "priority" ? " selected" : ""}`}
+                    onClick={() => applyPSort("asc")}
+                  >
+                    <i className="bi bi-sort-numeric-up" /> Terendah
                   </button>
                   {sortKey === "priority" && sortPDir && (
                     <button
