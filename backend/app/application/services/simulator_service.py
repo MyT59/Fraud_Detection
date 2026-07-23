@@ -130,6 +130,25 @@ _CITIES = [
 ]
 
 
+def _response_value(value):
+    """Ubah nilai payload menjadi bentuk aman untuk response JSON."""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _build_anomaly_changes(before: dict, after: dict) -> dict:
+    """Field yang benar-benar berubah setelah anomaly diterapkan."""
+    return {
+        key: {
+            "before": _response_value(before.get(key)),
+            "after": _response_value(after.get(key)),
+        }
+        for key in sorted(set(before) | set(after))
+        if before.get(key) != after.get(key)
+    }
+
+
 def _apply_anomaly_agenusa(payload: dict, anomaly: str) -> dict:
     """
     Mutasi payload Agenusa sesuai jenis anomali.
@@ -210,13 +229,19 @@ async def manual_input_agenusa(payload: dict, db: Session) -> dict:
     reset_location_cache()
 
     anomaly = payload.pop("inject_anomaly", None)
+    payload_before_anomaly = payload.copy()
     if anomaly:
         payload = _apply_anomaly_agenusa(payload, anomaly)
+    anomaly_changes = _build_anomaly_changes(payload_before_anomaly, payload)
+
+    # city/country bukan kolom switching_logs, tetapi tetap diperlukan mapper.
+    city = payload.pop("city", None)
+    country = payload.pop("country", None)
 
     sw_repo = SwitchingLogRepository(db)
     raw_log = sw_repo.create(payload)
 
-    normalized = map_agenusa(raw_log.__dict__)
+    normalized = map_agenusa({**raw_log.__dict__, "city": city, "country": country})
     trx = process_transaction(normalized, db)
 
     if not trx:
@@ -236,6 +261,7 @@ async def manual_input_agenusa(payload: dict, db: Session) -> dict:
         "risk_level":      trx.risk_level,
         "final_status":    trx.final_status.value if trx.final_status else "FLAGGED",
         "anomaly_injected": anomaly,
+        "anomaly_changes": anomaly_changes,
         "ml_triggered":    True,
     }
 
@@ -252,13 +278,18 @@ async def manual_input_nusabill(payload: dict, db: Session) -> dict:
     reset_location_cache()
 
     anomaly = payload.pop("inject_anomaly", None)
+    payload_before_anomaly = payload.copy()
     if anomaly:
         payload = _apply_anomaly_nusabill(payload, anomaly)
+    anomaly_changes = _build_anomaly_changes(payload_before_anomaly, payload)
+
+    # channel bukan kolom invoice_transactions, tetapi merupakan feature mapper.
+    channel = payload.pop("channel", "API")
 
     inv_repo    = InvoiceTransactionRepository(db)
     raw_invoice = inv_repo.create(payload)
 
-    normalized = map_nusabill(raw_invoice.__dict__)
+    normalized = map_nusabill({**raw_invoice.__dict__, "channel": channel})
     trx = process_transaction(normalized, db)
 
     if not trx:
@@ -278,6 +309,7 @@ async def manual_input_nusabill(payload: dict, db: Session) -> dict:
         "risk_level":      trx.risk_level,
         "final_status":    trx.final_status.value if trx.final_status else "FLAGGED",
         "anomaly_injected": anomaly,
+        "anomaly_changes": anomaly_changes,
         "ml_triggered":    True,
     }
 

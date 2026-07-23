@@ -498,6 +498,11 @@
   background: #dcfce7;
 }
 
+.sim-risk--mixed {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
 .sim-preview h3 {
   margin: 0 0 8px;
   font-size: 1rem;
@@ -1045,6 +1050,133 @@
   font-size: 0.73rem;
   font-weight: 700;
   text-decoration: none;
+}
+
+.sim-bulk-scenario-preset {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 13px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fffafa;
+}
+
+.sim-bulk-scenario-preset > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #dc2626;
+}
+
+.sim-bulk-scenario-preset > div:first-child span {
+  display: grid;
+  gap: 2px;
+}
+
+.sim-bulk-scenario-preset > div:first-child strong {
+  color: #334155;
+  font-size: 0.75rem;
+}
+
+.sim-bulk-scenario-preset > div:first-child span:not(strong),
+.sim-bulk-scenario-preset > div:first-child small {
+  color: #64748b;
+  font-size: 0.66rem;
+}
+
+@media (max-width: 900px) {
+  .sim-bulk-scenario-preset {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sim-anomaly-result {
+  margin: 0 14px 14px;
+  overflow: hidden;
+  border: 1px solid #fed7aa;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.sim-anomaly-result__header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 11px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 0.72rem;
+}
+
+.sim-anomaly-result__table-wrap {
+  overflow-x: auto;
+}
+
+.sim-anomaly-result table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+}
+
+.sim-anomaly-result th,
+.sim-anomaly-result td {
+  padding: 9px 11px;
+  border-top: 1px solid #f1f5f9;
+  color: #475569;
+  font-size: 0.68rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.sim-anomaly-result th {
+  color: #94a3b8;
+  font-size: 0.61rem;
+  text-transform: uppercase;
+}
+
+.sim-anomaly-result code {
+  color: #c2410c;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.sim-anomaly-changes {
+  display: grid;
+  gap: 5px;
+}
+
+.sim-anomaly-changes span {
+  display: grid;
+  grid-template-columns: minmax(105px, 0.45fr) minmax(240px, 1fr);
+  gap: 8px;
+}
+
+.sim-anomaly-changes strong {
+  color: #334155;
+  font-size: 0.65rem;
+}
+
+.sim-anomaly-changes small,
+.sim-anomaly-no-change {
+  color: #64748b;
+  font-size: 0.65rem;
+}
+
+.sim-anomaly-no-change {
+  color: #b45309;
+}
+
+.sim-anomaly-status {
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.61rem;
+  font-weight: 750;
 }
 
 .sim-raw-result {

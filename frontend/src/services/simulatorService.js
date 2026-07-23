@@ -14,6 +14,12 @@ export const simulatorService = {
         service,
       })}`,
     ),
+  getScenarioTransactions: (scenario, service) =>
+    api.get(
+      `/simulator/scenarios/${encodeURIComponent(scenario)}/transactions?${query({
+        service,
+      })}`,
+    ),
   start: (domain, scenario) =>
     api.post("/simulator/generate", {
       domain,

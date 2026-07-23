@@ -734,6 +734,10 @@ def list_scenarios():
     nusabill_catalog = nusabill_scenario_catalog()
 
     def scenario_type(info: dict) -> str:
+        if info.get("category") == "Blacklist":
+            return "BLACKLIST"
+        if info.get("category") == "Baseline":
+            return "BASELINE"
         if info.get("global_rule"):
             return "RULE"
         if info.get("ml_pattern"):
@@ -822,6 +826,32 @@ def preview_scenario(
             "service":            service.upper(),
             **info,
             "sample_transaction": sample_transaction,
+        },
+    }
+
+
+@router.get(
+    "/scenarios/{scenario_name}/transactions",
+    summary="Ambil transaksi scenario sebagai template Bulk",
+)
+def get_scenario_transactions(
+    scenario_name: str,
+    service: Literal["agenusa", "nusabill"] = "agenusa",
+):
+    scenarios = agenusa_scenarios() if service == "agenusa" else nusabill_scenarios()
+    transactions = scenarios.get(scenario_name)
+    if transactions is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Scenario '{scenario_name}' tidak ditemukan untuk service '{service}'.",
+        )
+    return {
+        "status": "success",
+        "data": {
+            "service": service,
+            "scenario": scenario_name,
+            "count": len(transactions),
+            "transactions": transactions,
         },
     }
 

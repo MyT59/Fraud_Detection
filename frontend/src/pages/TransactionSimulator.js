@@ -19,6 +19,8 @@ const ANOMALIES = [
   "DIFF_CITY",
 ];
 
+const MAX_BULK_TRANSACTIONS = 150;
+
 const initialAgenusa = {
   amount: 500000,
   msg_type: "TRANSFER",
@@ -66,7 +68,6 @@ const tabs = [
   { key: "scenario", label: "Live Scenario", icon: "bi-play-circle" },
   { key: "manual", label: "Manual", icon: "bi-pencil-square" },
   { key: "bulk", label: "Bulk", icon: "bi-stack" },
-  { key: "replay", label: "Replay", icon: "bi-arrow-repeat" },
   { key: "history", label: "Run History", icon: "bi-clock-history" },
   { key: "reset", label: "Reset Data", icon: "bi-trash3" },
 ];
@@ -121,6 +122,18 @@ const Field = ({ label, hint, children, as = "label" }) => {
 };
 
 const scenarioGroupMeta = {
+  ALL: {
+    label: "Complete Simulation",
+    icon: "bi-collection-play",
+  },
+  BASELINE: {
+    label: "Baseline Scenarios",
+    icon: "bi-check-circle",
+  },
+  BLACKLIST: {
+    label: "Blacklist Scenarios",
+    icon: "bi-person-x",
+  },
   PATTERN: {
     label: "Fraud Patterns",
     icon: "bi-bug",
@@ -153,7 +166,7 @@ const ScenarioDropdown = ({ details, options, value, onChange }) => {
 
   const groups = useMemo(() => {
     if (details.length) {
-      return ["PATTERN", "RULE", "ML"]
+      return ["ALL", "BASELINE", "BLACKLIST", "PATTERN", "RULE", "ML"]
         .map((type) => ({
           type,
           items: details.filter((detail) => detail.scenario_type === type),
@@ -298,6 +311,20 @@ const ResultPanel = ({ result, error, onClose }) => {
   const successfulBulk = bulkResults
     .filter((item) => item.status === "success")
     .map((item) => item.data);
+  const anomalyBulk = successfulBulk.filter((item) => item.anomaly_injected);
+  const formatAnomalyValue = (field, value) => {
+    if (value === null || value === undefined || value === "") return "—";
+    if (["amount", "total_tagihan", "payment_amount"].includes(field)) {
+      return `Rp ${Number(value).toLocaleString("id-ID")}`;
+    }
+    if (field.includes("timestamp") || field.startsWith("tanggal_")) {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime())
+        ? String(value)
+        : date.toLocaleString("id-ID");
+    }
+    return String(value);
+  };
   const riskScores = [data, ...successfulBulk]
     .map((item) => Number(item?.risk_score))
     .filter(Number.isFinite);
@@ -396,6 +423,66 @@ const ResultPanel = ({ result, error, onClose }) => {
               Lihat di Transactions <i className="bi bi-arrow-right" />
             </a>
           )}
+          {anomalyBulk.length > 0 && (
+            <div className="sim-anomaly-result">
+              <div className="sim-anomaly-result__header">
+                <i className="bi bi-lightning-charge-fill" />
+                <strong>Perubahan anomaly yang diterapkan</strong>
+              </div>
+              <div className="sim-anomaly-result__table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Transaksi</th>
+                      <th>Anomaly</th>
+                      <th>Perubahan payload</th>
+                      <th>Hasil</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {anomalyBulk.map((item) => {
+                      const changes = Object.entries(
+                        item.anomaly_changes || {},
+                      );
+                      return (
+                        <tr key={item.transaction_id || item.index}>
+                          <td>#{Number(item.index ?? 0) + 1}</td>
+                          <td>
+                            <code>{item.anomaly_injected}</code>
+                          </td>
+                          <td>
+                            {changes.length ? (
+                              <div className="sim-anomaly-changes">
+                                {changes.map(([field, change]) => (
+                                  <span key={field}>
+                                    <strong>{field}</strong>
+                                    <small>
+                                      {formatAnomalyValue(field, change.before)}
+                                      {" → "}
+                                      {formatAnomalyValue(field, change.after)}
+                                    </small>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="sim-anomaly-no-change">
+                                Tidak ada perubahan untuk layanan ini
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <span className="sim-anomaly-status">
+                              {item.final_status || "COMPLETED"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           <details className="sim-raw-result">
             <summary>Technical response</summary>
             <pre>{JSON.stringify(result.data ?? result, null, 2)}</pre>
@@ -422,6 +509,7 @@ const TransactionSimulator = () => {
   const [advancedMode, setAdvancedMode] = useState(false);
   const [bulkCount, setBulkCount] = useState(5);
   const [bulkRows, setBulkRows] = useState([]);
+  const [bulkScenario, setBulkScenario] = useState("");
   const [bulkIntervalSeconds, setBulkIntervalSeconds] = useState(30);
   const [delayMs, setDelayMs] = useState(300);
   const [stopOnError, setStopOnError] = useState(false);
@@ -441,13 +529,59 @@ const TransactionSimulator = () => {
   const activeForm = service === "agenusa" ? agenusaForm : nusabillForm;
   const setActiveForm =
     service === "agenusa" ? setAgenusaForm : setNusabillForm;
+  const scopedScenarioDetails = useMemo(
+    () =>
+      service === "all"
+        ? [
+            ...(scenarioDetails.agenusa || []),
+            ...(scenarioDetails.nusabill || []),
+          ]
+        : scenarioDetails[service] || [],
+    [scenarioDetails, service],
+  );
+  const allScenarioDetail = useMemo(() => {
+    const serviceLabel =
+      service === "all"
+        ? "Semua Layanan"
+        : service === "agenusa"
+          ? "Agenusa"
+          : "Nusabill";
+    return {
+      key: "all",
+      scenario_type: "ALL",
+      title: `${serviceLabel} - Semua Scenario`,
+      category: "Complete Simulation",
+      description:
+        service === "all"
+          ? "Menjalankan seluruh scenario Agenusa dan Nusabill dalam satu simulation run."
+          : `Menjalankan seluruh scenario ${serviceLabel} dalam satu simulation run.`,
+      target_engines: [
+        ...new Set(
+          scopedScenarioDetails.flatMap(
+            (detail) => detail.target_engines || [],
+          ),
+        ),
+      ],
+      expected_result: "MIXED",
+      transaction_count: scopedScenarioDetails.reduce(
+        (total, detail) => total + Number(detail.transaction_count || 0),
+        0,
+      ),
+    };
+  }, [scopedScenarioDetails, service]);
   const scenarioOptions = useMemo(
-    () => scenarios[service] || [],
+    () =>
+      service === "all"
+        ? ["all"]
+        : ["all", ...(scenarios[service] || [])],
     [scenarios, service],
   );
   const activeScenarioDetails = useMemo(
-    () => scenarioDetails[service] || [],
-    [scenarioDetails, service],
+    () =>
+      service === "all"
+        ? [allScenarioDetail]
+        : [allScenarioDetail, ...scopedScenarioDetails],
+    [allScenarioDetail, scopedScenarioDetails, service],
   );
 
   const showError = (err) => {
@@ -563,7 +697,15 @@ const TransactionSimulator = () => {
   }, [service, scenarioOptions]);
 
   useEffect(() => {
+    setBulkScenario("");
+  }, [service]);
+
+  useEffect(() => {
     if (!selectedScenario) return;
+    if (selectedScenario === "all") {
+      setPreview(allScenarioDetail);
+      return;
+    }
     let active = true;
     simulatorService
       .getScenarioPreview(selectedScenario, service)
@@ -572,7 +714,7 @@ const TransactionSimulator = () => {
     return () => {
       active = false;
     };
-  }, [selectedScenario, service]);
+  }, [allScenarioDetail, selectedScenario, service]);
 
   const updateForm = (key, value) =>
     setActiveForm((current) => ({ ...current, [key]: value }));
@@ -581,7 +723,10 @@ const TransactionSimulator = () => {
     (count = bulkCount, source = service) => {
       const base =
         source === "agenusa" ? { ...agenusaForm } : { ...nusabillForm };
-      const safeCount = Math.min(100, Math.max(1, Number(count) || 1));
+      const safeCount = Math.min(
+        MAX_BULK_TRANSACTIONS,
+        Math.max(1, Number(count) || 1),
+      );
       const commonCard =
         base.issuer_account_number || base.account_number || createCardId();
       const commonCustomer =
@@ -645,9 +790,78 @@ const TransactionSimulator = () => {
   };
 
   const prepareBulkRows = (count = bulkCount) => {
-    const safeCount = Math.min(100, Math.max(1, Number(count) || 1));
+    const safeCount = Math.min(
+      MAX_BULK_TRANSACTIONS,
+      Math.max(1, Number(count) || 1),
+    );
     setBulkCount(safeCount);
     setBulkRows(makeBulkRows(safeCount));
+  };
+
+  const applyScenarioToBulk = async () => {
+    if (!bulkScenario) return;
+    setBusy("bulk-scenario");
+    setError("");
+    setResult(null);
+    try {
+      const response = await simulatorService.getScenarioTransactions(
+        bulkScenario,
+        service,
+      );
+      const transactions = response?.data?.transactions || [];
+      const rows = transactions.map((transaction, index) => {
+        if (service === "agenusa") {
+          const msgType = ["TRANSFER", "TARIK_SALDO", "CEK_SALDO"].includes(
+            transaction.msg_type,
+          )
+            ? transaction.msg_type
+            : "TRANSFER";
+          return {
+            ...initialAgenusa,
+            ...transaction,
+            msg_type: msgType,
+            timestamp_db: transaction.timestamp_db
+              ? toLocalDateTimeInput(new Date(transaction.timestamp_db))
+              : "",
+            city: transaction.city || "Jakarta",
+            country: transaction.country || "ID",
+            inject_anomaly: "",
+            _rowId: `scenario-${Date.now()}-${index}`,
+          };
+        }
+        return {
+          ...initialNusabill,
+          ...transaction,
+          payment_amount:
+            transaction.payment_amount ?? transaction.total_tagihan,
+          tanggal_tagihan: transaction.tanggal_tagihan
+            ? toLocalDateTimeInput(new Date(transaction.tanggal_tagihan))
+            : "",
+          tanggal_pembayaran: transaction.tanggal_pembayaran
+            ? toLocalDateTimeInput(new Date(transaction.tanggal_pembayaran))
+            : transaction.tanggal_tagihan
+              ? toLocalDateTimeInput(new Date(transaction.tanggal_tagihan))
+              : "",
+          inject_anomaly: "",
+          _rowId: `scenario-${Date.now()}-${index}`,
+        };
+      });
+      setBulkRows(rows);
+      setBulkCount(rows.length);
+      setResult({
+        status: "success",
+        message: `Scenario berhasil dimuat ke ${rows.length} baris Bulk dan belum dikirim.`,
+        data: {
+          scenario: bulkScenario,
+          service,
+          transaction_count: rows.length,
+        },
+      });
+    } catch (err) {
+      showError(err);
+    } finally {
+      setBusy("");
+    }
   };
 
   const applyBulkHelper = (helper) => {
@@ -1203,7 +1417,7 @@ const TransactionSimulator = () => {
               ];
             })
           }
-          disabled={bulkRows.length >= 100}
+          disabled={bulkRows.length >= MAX_BULK_TRANSACTIONS}
         >
           <i className="bi bi-plus-lg" /> Tambah baris
         </button>
@@ -1218,6 +1432,7 @@ const TransactionSimulator = () => {
                   <th>Amount</th>
                   <th>Type</th>
                   <th>Issuer account</th>
+                  <th>Bank penerbit</th>
                   <th>Terminal</th>
                   <th>Customer ref</th>
                   <th>Response</th>
@@ -1233,7 +1448,6 @@ const TransactionSimulator = () => {
                   <th>Timestamp</th>
                 </>
               )}
-              {advancedMode && <th>Anomaly</th>}
               <th aria-label="Aksi" />
             </tr>
           </thead>
@@ -1277,6 +1491,21 @@ const TransactionSimulator = () => {
                           )
                         }
                         placeholder="Auto"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        required
+                        value={row.issuer_bank}
+                        onChange={(e) =>
+                          updateBulkRow(
+                            row._rowId,
+                            "issuer_bank",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Contoh: BCA"
+                        aria-label={`Bank penerbit transaksi ${index + 1}`}
                       />
                     </td>
                     <td>
@@ -1423,26 +1652,6 @@ const TransactionSimulator = () => {
                     </td>
                   </>
                 )}
-                {advancedMode && (
-                  <td>
-                    <select
-                      value={row.inject_anomaly}
-                      onChange={(e) =>
-                        updateBulkRow(
-                          row._rowId,
-                          "inject_anomaly",
-                          e.target.value,
-                        )
-                      }
-                    >
-                      {ANOMALIES.map((item) => (
-                        <option key={item || "none"} value={item}>
-                          {item || "None"}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                )}
                 <td>
                   <button
                     className="sim-row-delete"
@@ -1497,6 +1706,9 @@ const TransactionSimulator = () => {
             type="button"
             className={activeTab === tab.key ? "active" : ""}
             onClick={() => {
+              if (tab.key !== "scenario" && service === "all") {
+                setService("agenusa");
+              }
               setActiveTab(tab.key);
               setResult(null);
               setError("");
@@ -1532,6 +1744,7 @@ const TransactionSimulator = () => {
                   value={service}
                   onChange={(e) => setService(e.target.value)}
                 >
+                  <option value="all">Semua layanan</option>
                   <option value="agenusa">Agenusa</option>
                   <option value="nusabill">Nusabill</option>
                 </select>
@@ -1553,7 +1766,10 @@ const TransactionSimulator = () => {
                     const data = await runAction(
                       "start",
                       () =>
-                        simulatorService.start(service, selectedScenario),
+                        simulatorService.start(
+                          service,
+                          selectedScenario === "all" ? null : selectedScenario,
+                        ),
                       {
                         mode: "scenario",
                         service,
@@ -1588,7 +1804,15 @@ const TransactionSimulator = () => {
                 <>
                   <div className="sim-preview__topline">
                     <span>{preview.category}</span>
-                    <strong className={`sim-risk sim-risk--${preview.expected_result?.includes("FRAUD") ? "fraud" : "safe"}`}>
+                    <strong
+                      className={`sim-risk sim-risk--${
+                        preview.expected_result?.includes("FRAUD")
+                          ? "fraud"
+                          : preview.expected_result === "SAFE"
+                            ? "safe"
+                            : "mixed"
+                      }`}
+                    >
                       {preview.expected_result}
                     </strong>
                   </div>
@@ -1675,6 +1899,7 @@ const TransactionSimulator = () => {
                     onClick={() => {
                       setService(item);
                       setBulkRows([]);
+                      setBulkScenario("");
                     }}
                   >
                     {item}
@@ -1684,24 +1909,45 @@ const TransactionSimulator = () => {
             </div>
           </div>
           {activeTab === "bulk" && (
-            <div className="sim-template-label">
-              <i className="bi bi-copy" />
-              <span>
-                <strong>Bulk template</strong>
-                Nilai berikut dipakai saat membuat ulang tabel.
-              </span>
+            <div className="sim-bulk-scenario-preset">
+              <div>
+                <i className="bi bi-magic" />
+                <span>
+                  <strong>Scenario preset</strong>
+                  Ambil pola yang sama dari Live Scenario ke tabel Bulk.
+                </span>
+              </div>
+              <ScenarioDropdown
+                value={bulkScenario}
+                onChange={setBulkScenario}
+                details={activeScenarioDetails.filter(
+                  (detail) => detail.key !== "all",
+                )}
+                options={scenarioOptions.filter((option) => option !== "all")}
+              />
+              <button
+                className="sim-btn sim-btn--ghost"
+                type="button"
+                disabled={!bulkScenario || busy === "bulk-scenario"}
+                onClick={applyScenarioToBulk}
+              >
+                <i
+                  className={`bi ${busy === "bulk-scenario" ? "bi-arrow-repeat sim-spin" : "bi-table"}`}
+                />
+                Terapkan scenario ke tabel
+              </button>
             </div>
           )}
           <div className="sim-form-grid">
             {renderTransactionFields()}
-            {anomalyField}
+            {activeTab === "manual" && anomalyField}
             {activeTab === "bulk" && (
               <>
-                <Field label="Jumlah transaksi" hint="Maksimal 100">
+                <Field label="Jumlah transaksi" hint="Maksimal 150">
                   <input
                     type="number"
                     min="1"
-                    max="100"
+                    max={MAX_BULK_TRANSACTIONS}
                     required
                     value={bulkCount}
                     onChange={(e) => setBulkCount(e.target.value)}

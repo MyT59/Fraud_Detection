@@ -236,8 +236,8 @@ class AgenusaBulkInput(BaseModel):
     transactions: List[AgenusaManualInput] = Field(
         ...,
         min_length=1,
-        max_length=100,
-        description="List transaksi Agenusa (maks 100 per request)."
+        max_length=150,
+        description="List transaksi Agenusa (maks 150 per request)."
     )
     delay_ms: int = Field(
         default=300,
@@ -260,8 +260,8 @@ class NusabillBulkInput(BaseModel):
     transactions: List[NusabillManualInput] = Field(
         ...,
         min_length=1,
-        max_length=100,
-        description="List transaksi Nusabill (maks 100 per request)."
+        max_length=150,
+        description="List transaksi Nusabill (maks 150 per request)."
     )
     delay_ms: int = Field(
         default=300,

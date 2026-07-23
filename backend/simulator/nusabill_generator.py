@@ -409,6 +409,42 @@ def generate_ml_unknown_mixed_outlier() -> list[dict]:
 def get_scenario_catalog() -> dict[str, dict]:
     """Metadata scenario pattern aktif; diselaraskan dengan fraud_patterns."""
     return {
+        "normal": {
+            "title": "Nusabill - Normal Invoices",
+            "category": "Baseline",
+            "description": "Dua puluh pembayaran invoice normal ",
+            "target_engines": [],
+            "trigger_conditions": [],
+            "expected_result": "SAFE",
+            "transaction_count": 20,
+        },
+        "blacklist_customer": {
+            "title": "Nusabill - Blacklist CUSTOMER_ID",
+            "category": "Blacklist",
+            "description": "Pembayaran dilakukan oleh customer ID yang diblacklist.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["customer_id == 'CUST-BL-00001'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "blacklist_ip": {
+            "title": "Nusabill - Blacklist IP_ADDRESS",
+            "category": "Blacklist",
+            "description": "Pembayaran berasal dari alamat IP yang diblacklist.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["ip_address == '99.99.99.99'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "blacklist_merchant": {
+            "title": "Nusabill - Blacklist MERCHANT_ID",
+            "category": "Blacklist",
+            "description": "Pembayaran memakai kode pembayaran merchant yang diblacklist.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["kode_pembayaran == 'PAY-BL-00001'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
         "smurfing": {
             "title": "Nusabill - High-Velocity Split Payment Anomaly (Smurfing)",
             "category": "Money Laundering & Split Transaction",
@@ -628,6 +664,10 @@ def get_all_scenarios() -> dict[str, list[dict]]:
     lalu diproses via DataAggregationService.process_nusabill().
     """
     return {
+        "normal": generate_normal(),
+        "blacklist_customer": generate_blacklist_customer(),
+        "blacklist_ip": generate_blacklist_ip(),
+        "blacklist_merchant": generate_blacklist_merchant(),
         "smurfing": generate_smurfing(),
         "fake_invoice_blast": generate_fake_invoice_blast(),
         "fan_out_spam": generate_fan_out_spam(),

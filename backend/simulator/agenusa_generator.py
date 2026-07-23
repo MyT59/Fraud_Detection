@@ -27,6 +27,7 @@ IP_POOL         = ["36.90.120.15", "114.10.20.30", "180.250.50.60"]
 
 # ⚠️ Pastikan sudah ada di tabel blacklist_items sebelum demo
 BLACKLISTED_IP       = "99.99.99.99"     # type = IP_ADDRESS
+BLACKLISTED_USER     = "USER-BL-00001"   # type = USER_ID (customer_ref_number)
 BLACKLISTED_ACCOUNT  = "card_bl_000001"  # type = ACCOUNT_NUMBER
 BLACKLISTED_TERMINAL = "TRM_BL_00001"    # type = TERMINAL_ID
 BLACKLISTED_MERCHANT = "M_BL_00001"      # type = MERCHANT_ID
@@ -76,6 +77,17 @@ def _base_trx(time_override=None) -> dict:
 def generate_normal(count: int = 20) -> list[dict]:
     """Transaksi normal. Tidak seharusnya memicu engine manapun."""
     return [_base_trx() for _ in range(count)]
+
+
+# ============================================================
+# SCENARIO 2 — BLACKLIST USER ID
+# Target engine : Blacklist Engine → USER_ID
+# map_agenusa() : customer_ref_number → user_account_id
+# ============================================================
+def generate_blacklist_user() -> list[dict]:
+    trx = _base_trx()
+    trx["customer_ref_number"] = BLACKLISTED_USER
+    return [trx]
 
 
 # ============================================================
@@ -626,6 +638,60 @@ def generate_ml_unknown_mixed_outlier() -> list[dict]:
 def get_scenario_catalog() -> dict[str, dict]:
     """Metadata scenario pattern aktif; diselaraskan dengan fraud_patterns."""
     return {
+        "normal": {
+            "title": "Agenusa - Normal Transactions",
+            "category": "Baseline",
+            "description": "Dua puluh transaksi normal ",
+            "target_engines": [],
+            "trigger_conditions": [],
+            "expected_result": "SAFE",
+            "transaction_count": 20,
+        },
+        "blacklist_user": {
+            "title": "Agenusa - Blacklist USER_ID",
+            "category": "Blacklist",
+            "description": "Transaksi dari user ID yang terdapat pada blacklist Agenusa.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["customer_ref_number == 'USER-BL-00001'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "blacklist_ip": {
+            "title": "Agenusa - Blacklist IP_ADDRESS",
+            "category": "Blacklist",
+            "description": "Transaksi berasal dari alamat IP yang diblacklist.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["ip_address == '99.99.99.99'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "blacklist_terminal": {
+            "title": "Agenusa - Blacklist TERMINAL_ID",
+            "category": "Blacklist",
+            "description": "Transaksi berasal dari terminal EDC yang diblacklist.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["terminal_id == 'TRM_BL_00001'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "blacklist_merchant": {
+            "title": "Agenusa - Blacklist MERCHANT_ID",
+            "category": "Blacklist",
+            "description": "Transaksi berasal dari merchant yang diblacklist.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["merchant_id == 'M_BL_00001'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "blacklist_account": {
+            "title": "Agenusa - Blacklist ACCOUNT_NUMBER",
+            "category": "Blacklist",
+            "description": "Transaksi menggunakan rekening atau kartu yang diblacklist.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["account_number == 'card_bl_000001'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
         "chain_decline_success_burst": {
             "title": "Agenusa - Critical Card Testing Burst Detection",
             "category": "Carding & Brute Force",
@@ -907,6 +973,12 @@ def get_all_scenarios() -> dict[str, list[dict]]:
     lalu diproses via DataAggregationService.process_agenusa().
     """
     return {
+        "normal": generate_normal(),
+        "blacklist_user": generate_blacklist_user(),
+        "blacklist_ip": generate_blacklist_ip(),
+        "blacklist_terminal": generate_blacklist_terminal(),
+        "blacklist_merchant": generate_blacklist_merchant(),
+        "blacklist_account": generate_blacklist_account(),
         "chain_decline_success_burst": generate_chain_decline_success_burst(),
         "edc_terminal_pooling": generate_edc_terminal_pooling(),
         "bruteforce": generate_bruteforce(),
