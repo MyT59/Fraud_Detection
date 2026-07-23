@@ -29,6 +29,7 @@ const ruleFromApi = (r) => {
     condField: r.condition_field || "",
     condOp: r.operator || ">",
     condValue: r.threshold_value || "",
+    rule_config: r.rule_config || null,
     rule_key: r.rule_key || "",
     service_scope: r.service_scope || "ALL",
     severity: r.severity || "MEDIUM",

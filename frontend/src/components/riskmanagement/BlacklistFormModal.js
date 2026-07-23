@@ -127,7 +127,27 @@ const SCOPE_ICONS = {
   NUSABILL: "bi-receipt",
 };
 
-const flatTypes = (scope) => TYPE_MAP[scope].flatMap((g) => g.types);
+const typeGroups = (scope) => {
+  const groups = TYPE_MAP[scope];
+  if (scope !== "NUSABILL") return groups;
+
+  return [
+    {
+      group: "Aktif dicek",
+      types: [
+        groups[0].types.find((type) => type.v === "CUSTOMER_ID"),
+        {
+          v: "IP_ADDRESS",
+          l: "IP Address",
+          hint: "Format IPv4/IPv6 - disimpan lowercase",
+          cs: false,
+        },
+      ],
+    },
+  ];
+};
+
+const flatTypes = (scope) => typeGroups(scope).flatMap((g) => g.types);
 
 const getTypeInfo = (scope, typeVal) =>
   flatTypes(scope).find((t) => t.v === typeVal) || null;
@@ -139,17 +159,9 @@ const VALID_TYPES = [
   "USER_ID",
   "CUSTOMER_ID",
   "ACCOUNT_NUMBER",
-  "DEVICE_ID",
   "TERMINAL_ID",
   "IP_ADDRESS",
   "MERCHANT_ID",
-  "INVOICE_NUMBER",
-  "RRN",
-  "PAYMENT_CODE",
-  "BILLER_ID",
-  "CUSTOMER_PHONE",
-  "CUSTOMER_EMAIL",
-  "VIRTUAL_ACCOUNT_NUMBER",
 ];
 const VALID_SCOPES = ["ALL", "AGENUSA", "NUSABILL"];
 
@@ -159,7 +171,7 @@ const downloadTemplate = () => {
     "user123,USER_ID,ALL,Percobaan penipuan berulang",
     "1234567890,ACCOUNT_NUMBER,AGENUSA,Rekening mule",
     "192.168.1.1,IP_ADDRESS,ALL,IP mencurigakan",
-    "scam@gmail.com,CUSTOMER_EMAIL,NUSABILL,Email penipuan",
+    "customer123,CUSTOMER_ID,NUSABILL,Customer terindikasi fraud",
     "MRC001,MERCHANT_ID,AGENUSA,Merchant terlibat fraud",
   ].join("\n");
   const csv = `${header}\n${examples}`;
@@ -336,7 +348,7 @@ const AddForm = ({ onClose, onSubmit }) => {
                 onChange={(e) => handleType(e.target.value)}
               >
                 <option value="">Pilih tipe...</option>
-                {TYPE_MAP[scope].map((g) => (
+                {typeGroups(scope).map((g) => (
                   <optgroup key={g.group} label={g.group}>
                     {g.types.map((t) => (
                       <option key={t.v} value={t.v}>
@@ -663,7 +675,7 @@ const BulkForm = ({ onClose, onSubmit }) => {
             <i className="bi bi-info-circle" />
             <span>
               <strong>type</strong> valid: USER_ID, CUSTOMER_ID, ACCOUNT_NUMBER,
-              IP_ADDRESS, MERCHANT_ID, CUSTOMER_EMAIL, dll.{" "}
+              IP_ADDRESS, TERMINAL_ID, MERCHANT_ID.{" "}
               <strong>service_scope</strong>: ALL / AGENUSA / NUSABILL. Kolom
               type/scope opsional — default ACCOUNT_NUMBER / ALL.
             </span>
