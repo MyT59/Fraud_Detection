@@ -432,23 +432,6 @@ const AddForm = ({ onClose, onSubmit }) => {
   );
 };
 
-const TYPE_OPTIONS = [
-  "USER_ID",
-  "CUSTOMER_ID",
-  "ACCOUNT_NUMBER",
-  "DEVICE_ID",
-  "TERMINAL_ID",
-  "IP_ADDRESS",
-  "MERCHANT_ID",
-  "INVOICE_NUMBER",
-  "RRN",
-  "PAYMENT_CODE",
-  "BILLER_ID",
-  "CUSTOMER_PHONE",
-  "CUSTOMER_EMAIL",
-  "VIRTUAL_ACCOUNT_NUMBER",
-];
-
 const SCOPE_OPTIONS = ["ALL", "AGENUSA", "NUSABILL"];
 
 const EMPTY_EDIT = {
@@ -459,12 +442,20 @@ const EMPTY_EDIT = {
 };
 
 const EditForm = ({ editData, onClose, onSubmit }) => {
-  const [form, setForm] = useState({
-    ...EMPTY_EDIT,
-    value: editData?.value || editData?.accountNumber || "",
-    type: editData?.type || editData?.bank || "ACCOUNT_NUMBER",
-    service_scope: editData?.service_scope || "ALL",
-    reason: editData?.reason || "",
+  const [form, setForm] = useState(() => {
+    const service_scope = editData?.service_scope || "ALL";
+    const requestedType = editData?.type || editData?.bank || "ACCOUNT_NUMBER";
+    const typeIsSupported = flatTypes(service_scope).some(
+      (item) => item.v === requestedType,
+    );
+
+    return {
+      ...EMPTY_EDIT,
+      value: editData?.value || editData?.accountNumber || "",
+      type: typeIsSupported ? requestedType : "",
+      service_scope,
+      reason: editData?.reason || "",
+    };
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -474,8 +465,22 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
     if (errors[f]) setErrors((p) => ({ ...p, [f]: undefined }));
   };
 
+  const handleScopeChange = (service_scope) => {
+    setForm((previous) => {
+      const typeStillSupported = flatTypes(service_scope).some(
+        (item) => item.v === previous.type,
+      );
+      return {
+        ...previous,
+        service_scope,
+        type: typeStillSupported ? previous.type : "",
+      };
+    });
+  };
+
   const validate = () => {
     const e = {};
+    if (!form.type) e.type = "Pilih tipe identifier yang didukung engine.";
     if (!form.value.trim()) e.value = "Nilai / Identifier wajib diisi.";
     if (!form.reason.trim()) e.reason = "Alasan wajib diisi.";
     return e;
@@ -528,17 +533,22 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
         </Field>
 
         <div className="bfm-row">
-          <Field label="Tipe Identifier" req>
+          <Field label="Tipe Identifier" req err={errors.type}>
             <div className="bfm-select-wrap">
               <select
                 className="bfm-select"
                 value={form.type}
                 onChange={(e) => set("type", e.target.value)}
               >
-                {TYPE_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
+                <option value="">Pilih tipe...</option>
+                {typeGroups(form.service_scope).map((group) => (
+                  <optgroup key={group.group} label={group.group}>
+                    {group.types.map((type) => (
+                      <option key={type.v} value={type.v}>
+                        {type.l}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -549,7 +559,7 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
               <select
                 className="bfm-select"
                 value={form.service_scope}
-                onChange={(e) => set("service_scope", e.target.value)}
+                onChange={(e) => handleScopeChange(e.target.value)}
               >
                 {SCOPE_OPTIONS.map((s) => (
                   <option key={s} value={s}>
