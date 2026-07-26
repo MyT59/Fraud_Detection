@@ -292,7 +292,6 @@ const STATUS_OPTIONS = [
   { value: "all", label: "Semua Status" },
   { value: "---" },
   { value: "active", label: "Active", dot: "#16a34a" },
-  { value: "inactive", label: "Inactive", dot: "#9ca3af" },
   { value: "suspended", label: "Suspended", dot: "#dc2626" },
 ];
 
@@ -482,6 +481,11 @@ const UserTable = ({
                       </div>
                       <div className="user-cell-info">
                         <span className="user-full-name">{user.name}</span>
+                        {user.isPasswordTemporary && (
+                          <span className="badge bg-warning text-dark align-self-start">
+                            Password sementara
+                          </span>
+                        )}
                         <span className="user-email-text">{user.email}</span>
                       </div>
                     </div>

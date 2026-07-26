@@ -75,6 +75,7 @@ class ReportService:
         max_risk_score=None,
         # Activity Log filters
         action_type: str | None = None,
+        action_types: list[str] | None = None,
         module_source: str | None = None,
         severity: str | None = None,
         # Fraud Pattern filters
@@ -100,6 +101,7 @@ class ReportService:
             "max_risk_score":  max_risk_score,
             # Activity Log filters
             "action_type":     action_type,
+            "action_types":    action_types,
             "module_source":   module_source,
             "severity":        severity,
             # Fraud Pattern filters
@@ -929,8 +931,11 @@ class ReportService:
         )
 
         # Filter opsional dari filter_criteria
-        if filters.get("action_type"):
-            query = query.filter(ActivityLog.action_type == filters["action_type"])
+        action_types = filters.get("action_types") or (
+            [filters["action_type"]] if filters.get("action_type") else []
+        )
+        if action_types:
+            query = query.filter(ActivityLog.action_type.in_(action_types))
 
         if filters.get("module_source"):
             query = query.filter(ActivityLog.module_source == filters["module_source"])

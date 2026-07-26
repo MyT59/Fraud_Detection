@@ -73,8 +73,10 @@ const Settings = () => {
       const payload = {
         full_name: formData.name,
         phone_number: formData.phone,
-        department: formData.department,
       };
+      if (storage.getUser()?.role === "SUPER_ADMIN") {
+        payload.department = formData.department;
+      }
       const data = await api.patch("/accounts/me", payload);
       const updated = {
         name: data.full_name || formData.name,
@@ -90,17 +92,18 @@ const Settings = () => {
 
       window.dispatchEvent(new Event("storage"));
       setSaveStatus("success");
+      return true;
     } catch {
       setSaveStatus("error");
+      return false;
     } finally {
       setTimeout(() => setSaveStatus(null), 3000);
     }
   };
 
-  const handleSave = (tab, data) => {
+  const handleSave = async (tab, data) => {
     if (tab === "profile") {
-      handleSaveProfile(data);
-      return;
+      return handleSaveProfile(data);
     }
     setSaveStatus("saving");
     setTimeout(() => {
@@ -138,6 +141,7 @@ const Settings = () => {
         return (
           <ProfileSettings
             data={userData}
+            canEditDepartment={storage.getUser()?.role === "SUPER_ADMIN"}
             onSave={(d) => handleSave("profile", d)}
           />
         );

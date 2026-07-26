@@ -13,6 +13,9 @@ const ACTION_TYPE_MAP = {
   ACCOUNT_CREATED: "create",
   ACCOUNT_ROLE_CHANGED: "edit",
   ACCOUNT_SUSPENDED: "suspend",
+  ACCOUNT_ACTIVATED: "edit",
+  ACCOUNT_UPDATED: "edit",
+  ACCOUNT_DELETED: "delete",
 };
 
 // Konversi log BE ke format feed
@@ -36,7 +39,7 @@ const toFeedItem = (log) => {
       .map((k) => `${k}: ${before[k] ?? "—"} → ${after[k]}`)
       .join(", ");
     desc = `Memperbarui akun ${targetName}${changes ? `: ${changes}` : ""}`;
-  } else if (type === "suspend") {
+  } else if (type === "suspend" || type === "delete") {
     const isActive = details.target_status_active;
     if (isActive === true) desc = `Mengaktifkan kembali akun ${targetName}`;
     else if (isActive === false) desc = `Men-suspend akun ${targetName}`;
@@ -65,7 +68,7 @@ const toFeedItem = (log) => {
   };
 };
 
-const FALLBACK_LOGS = [
+/* Legacy fixture retained only as reference; never render fabricated audit data.
   {
     id: "f-01",
     type: "create",
@@ -108,12 +111,13 @@ const FALLBACK_LOGS = [
     time: "28 Jan 2024",
     actor: "Super Admin",
   },
-];
+]; */
 
 const ACTION_TYPE_FILTER = {
   create: ["ACCOUNT_CREATED"],
-  edit: ["ACCOUNT_ROLE_CHANGED"],
+  edit: ["ACCOUNT_ROLE_CHANGED", "ACCOUNT_UPDATED", "ACCOUNT_ACTIVATED"],
   suspend: ["ACCOUNT_SUSPENDED"],
+  delete: ["ACCOUNT_DELETED"],
 };
 
 // ---- Main Page ----
@@ -125,6 +129,7 @@ const AuditLog = () => {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [page, setPage] = useState(1);
   const debounceTimer = useRef(null);
 
   const fetchLogs = useCallback(
@@ -132,8 +137,8 @@ const AuditLog = () => {
       if (isRefresh) setLoading(true);
       try {
         const params = {
-          page: 1,
-          limit: 200,
+          page,
+          limit: 10,
           action_types:
             typeFilter === "all"
               ? AUDIT_LOG_ACTIONS
@@ -148,13 +153,13 @@ const AuditLog = () => {
         setApiError(false);
       } catch {
         setApiError(true);
-        setLogs(FALLBACK_LOGS);
-        setTotalRecords(FALLBACK_LOGS.length);
+        setLogs([]);
+        setTotalRecords(0);
       } finally {
         setLoading(false);
       }
     },
-    [typeFilter, debouncedSearch],
+    [typeFilter, debouncedSearch, page],
   );
 
   useEffect(() => {
@@ -163,6 +168,7 @@ const AuditLog = () => {
 
   const handleSearch = (val) => {
     setSearch(val);
+    setPage(1);
     clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => setDebouncedSearch(val), 400);
   };
@@ -171,6 +177,12 @@ const AuditLog = () => {
     setSearch("");
     setDebouncedSearch("");
     setTypeFilter("all");
+    setPage(1);
+  };
+
+  const handleTypeFilter = (value) => {
+    setTypeFilter(value);
+    setPage(1);
   };
 
   if (loading) return <PageLoader message="Memuat Audit Log..." />;
@@ -240,7 +252,8 @@ const AuditLog = () => {
           }}
         >
           <i className="bi bi-exclamation-triangle-fill"></i>
-          API tidak tersedia — menampilkan data historis sementara.
+          Tidak ada data audit pengganti yang ditampilkan.
+          API tidak tersedia.
         </div>
       )}
 
@@ -250,7 +263,7 @@ const AuditLog = () => {
         search={search}
         onSearch={handleSearch}
         typeFilter={typeFilter}
-        onTypeFilter={setTypeFilter}
+        onTypeFilter={handleTypeFilter}
         onReset={handleReset}
       />
 
@@ -264,7 +277,12 @@ const AuditLog = () => {
             </span>
           </h2>
         </div>
-        <ActivityFeed logs={logs} />
+        <ActivityFeed
+          logs={logs}
+          page={page}
+          total={totalRecords}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

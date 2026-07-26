@@ -1,6 +1,7 @@
 from app.infrastructure.repositories.admin_repository import AdminRepository
 from app.infrastructure.database.models.admin_model import Admin
 from app.infrastructure.database.models.role_model import Role
+from app.infrastructure.database.models.user_session_model import UserSession
 from app.presentation.schemas.admin_schema import AdminResponse, ProfileUpdateRequest
 from app.core.security import verify_password, hash_password
 from fastapi import HTTPException
@@ -8,6 +9,7 @@ import re
 import secrets
 import string
 from datetime import datetime, timezone
+from sqlalchemy.exc import IntegrityError
 
 from app.domain.entities.target_type import TargetType
 
@@ -16,6 +18,8 @@ from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelE
 from app.core.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
+
+MANAGEABLE_ROLE_NAMES = {"SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST"}
 
 
 # PASSWORD VALIDATION
@@ -33,11 +37,32 @@ def validate_password(password: str):
 
 
 # HELPER: COUNT ACTIVE SUPER ADMIN
-def count_active_super_admins(repo):
-    return len([
-        a for a in repo.get_all()
-        if a.role.role_name == "SUPER_ADMIN" and a.is_active and not getattr(a, "is_deleted", False)
-    ])
+def _active_super_admins(db, lock=False):
+    query = db.query(Admin).join(Role).filter(
+        Role.role_name == "SUPER_ADMIN",
+        Admin.is_active == True,
+        Admin.is_deleted == False,
+    )
+    if lock:
+        query = query.with_for_update()
+    return query.all()
+
+
+def _get_manageable_role(db, role_id):
+    role = db.query(Role).filter(
+        Role.id == role_id,
+        Role.role_name.in_(MANAGEABLE_ROLE_NAMES),
+    ).first()
+    if not role:
+        raise HTTPException(status_code=422, detail="Invalid account role")
+    return role
+
+
+def _deactivate_sessions(db, admin_id):
+    db.query(UserSession).filter(
+        UserSession.admin_id == admin_id,
+        UserSession.is_active == True,
+    ).update({"is_active": False, "is_current": False})
 
 
 def _to_response(admin):
@@ -62,19 +87,25 @@ def _to_response(admin):
 @log_performance
 def create_account(db, full_name, email, password, confirm_password, role_id, created_by, department=None,
                     phone_number=None, notes=None):
-    repo = AdminRepository(db)
-    existing = repo.get_by_email(email)
-    if existing: raise HTTPException(400, "Email already registered")
+    email = email.strip().lower()
+    existing = db.query(Admin).filter(Admin.email.ilike(email)).first()
+    if existing:
+        raise HTTPException(409, "Email already registered")
     if password != confirm_password: raise HTTPException(400, "Password confirmation does not match")
     validate_password(password)
+    _get_manageable_role(db, role_id)
 
     new_admin = Admin(
         full_name=full_name, email=email, password_hash=hash_password(password),
         role_id=role_id, is_active=True, is_deleted=False,
         department=department, phone_number=phone_number, notes=notes, created_by=created_by
     )
-    new_admin = repo.create(new_admin)
-    db.flush()
+    db.add(new_admin)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Email already registered")
 
     actor_admin = db.query(Admin).filter(Admin.id == created_by).first()
     log_activity(
@@ -84,13 +115,14 @@ def create_account(db, full_name, email, password, confirm_password, role_id, cr
         details={"email": new_admin.email, "role_id": role_id, "department": department}
     )
     db.commit()
+    db.refresh(new_admin)
     return _to_response(new_admin)
 
 
 # GET ALL
 @log_performance
 def get_all_accounts(db):
-    admins = db.query(Admin).filter(Admin.is_deleted == False).all()
+    admins = db.query(Admin).filter(Admin.is_deleted == False).order_by(Admin.created_at.desc()).all()
     return [_to_response(a) for a in admins]
 
 
@@ -103,9 +135,37 @@ def get_my_profile(current_admin):
 # UPDATE MY PROFILE
 @log_performance
 def update_my_profile(db, current_admin, full_name=None, phone_number=None, department=None):
-    if full_name is not None: current_admin.full_name = full_name
+    before = {
+        "full_name": current_admin.full_name,
+        "phone_number": current_admin.phone_number,
+        "department": current_admin.department,
+    }
+    if full_name is not None:
+        full_name = full_name.strip()
+        if not full_name:
+            raise HTTPException(422, "Full name must not be blank")
+        current_admin.full_name = full_name
     if phone_number is not None: current_admin.phone_number = phone_number
-    if department is not None: current_admin.department = department
+    if department is not None:
+        if current_admin.role.role_name != "SUPER_ADMIN":
+            raise HTTPException(403, "Only Super Admin may change department")
+        current_admin.department = department
+
+    after = {
+        "full_name": current_admin.full_name,
+        "phone_number": current_admin.phone_number,
+        "department": current_admin.department,
+    }
+    if before == after:
+        return _to_response(current_admin)
+
+    log_activity(
+        db=db, admin=current_admin,
+        action_type=ActivityActionEnum.ACCOUNT_UPDATED,
+        module_source=EventSourceEnum.AUTH, severity=SeverityLevelEnum.INFO,
+        target_type=TargetType.ADMIN, target_id=current_admin.id,
+        details={"before": before, "after": after, "reason": "Self profile update"},
+    )
     db.commit()
     db.refresh(current_admin)
     return _to_response(current_admin)
@@ -120,6 +180,10 @@ def change_password(db, current_admin, old_password, new_password):
     validate_password(new_password)
     current_admin.password_hash = hash_password(new_password)
     current_admin.is_password_temporary = False
+    db.query(UserSession).filter(
+        UserSession.admin_id == current_admin.id,
+        UserSession.is_active == True,
+    ).update({"is_active": False, "is_current": False})
 
     log_activity(
         db=db,
@@ -153,6 +217,10 @@ def reset_password(db, admin_id, performed_by):
     temp_password = generate_temp_password()
     admin.password_hash = hash_password(temp_password)
     admin.is_password_temporary = True
+    db.query(UserSession).filter(
+        UserSession.admin_id == admin.id,
+        UserSession.is_active == True,
+    ).update({"is_active": False, "is_current": False})
 
     actor_admin = db.query(Admin).filter(Admin.id == performed_by).first()
 
@@ -174,33 +242,40 @@ def reset_password(db, admin_id, performed_by):
 @log_performance
 def update_account(db, admin_id, full_name=None, role_id=None, department=None, phone_number=None,
                    notes=None, updated_by=None):
-    repo = AdminRepository(db)
-    admin = repo.get_by_id(admin_id)
+    admin = db.query(Admin).filter(Admin.id == admin_id).with_for_update().first()
     if not admin or admin.is_deleted: raise HTTPException(404, "User not found")
 
-    if admin.role.role_name == "SUPER_ADMIN" and role_id:
-        new_role = db.query(Role).filter(Role.id == role_id).first()
-        if new_role and new_role.role_name != "SUPER_ADMIN":
-            if count_active_super_admins(repo) <= 1:
-                raise HTTPException(400, "Cannot change role of the last Super Admin")
+    new_role = _get_manageable_role(db, role_id) if role_id is not None else None
+    if admin.role.role_name == "SUPER_ADMIN" and new_role and new_role.role_name != "SUPER_ADMIN":
+        if len(_active_super_admins(db, lock=True)) <= 1:
+            raise HTTPException(400, "Cannot change role of the last Super Admin")
 
-    snapshot_before = {"full_name": admin.full_name, "role_id": admin.role_id, "department": admin.department}
-    if full_name: admin.full_name = full_name
-    if role_id: admin.role_id = role_id
-    if department: admin.department = department
+    snapshot_before = {
+        "full_name": admin.full_name, "role_id": admin.role_id,
+        "department": admin.department, "phone_number": admin.phone_number,
+        "notes": admin.notes,
+    }
+    if full_name is not None: admin.full_name = full_name.strip()
+    if role_id is not None: admin.role_id = new_role.id
+    if department is not None: admin.department = department
     if phone_number is not None: admin.phone_number = phone_number
     if notes is not None: admin.notes = notes
 
-    repo.update()
     db.flush()
 
-    snapshot_after = {"full_name": admin.full_name, "role_id": admin.role_id, "department": admin.department}
+    snapshot_after = {
+        "full_name": admin.full_name, "role_id": admin.role_id,
+        "department": admin.department, "phone_number": admin.phone_number,
+        "notes": admin.notes,
+    }
+    if snapshot_before == snapshot_after:
+        return _to_response(admin)
     actor_admin = db.query(Admin).filter(Admin.id == updated_by).first()
 
     log_activity(
         db=db,
         admin=actor_admin,
-        action_type=ActivityActionEnum.ACCOUNT_ROLE_CHANGED if role_id else ActivityActionEnum.ACCOUNT_UPDATED,
+        action_type=ActivityActionEnum.ACCOUNT_ROLE_CHANGED if role_id is not None else ActivityActionEnum.ACCOUNT_UPDATED,
         module_source=EventSourceEnum.AUTH,
         severity=SeverityLevelEnum.WARNING,
         target_type=TargetType.ADMIN,
@@ -214,16 +289,19 @@ def update_account(db, admin_id, full_name=None, role_id=None, department=None, 
 # SUSPEND / ACTIVATE
 @log_performance
 def set_account_status(db, admin_id, is_active: bool, performed_by):
-    repo = AdminRepository(db)
-    admin = repo.get_by_id(admin_id)
+    admin = db.query(Admin).filter(Admin.id == admin_id).with_for_update().first()
     if not admin or admin.is_deleted: raise HTTPException(404, "User not found")
 
     if admin.role.role_name == "SUPER_ADMIN" and not is_active:
-        if count_active_super_admins(repo) <= 1:
+        if len(_active_super_admins(db, lock=True)) <= 1:
             raise HTTPException(400, "Cannot suspend the last Super Admin")
 
+    if admin.is_active == is_active:
+        return _to_response(admin)
+
     admin.is_active = is_active
-    repo.update()
+    if not is_active:
+        _deactivate_sessions(db, admin.id)
     db.flush()
 
     status_enum = ActivityActionEnum.ACCOUNT_SUSPENDED if not is_active else ActivityActionEnum.ACCOUNT_ACTIVATED
@@ -246,14 +324,13 @@ def set_account_status(db, admin_id, is_active: bool, performed_by):
 # SOFT DELETE ACCOUNT
 @log_performance
 def delete_account(db, admin_id, performed_by):
-    repo = AdminRepository(db)
-    admin = repo.get_by_id(admin_id)
+    admin = db.query(Admin).filter(Admin.id == admin_id).with_for_update().first()
 
     if not admin or admin.is_deleted:
         raise HTTPException(404, "User not found")
 
     if admin.role.role_name == "SUPER_ADMIN":
-        if count_active_super_admins(repo) <= 1:
+        if len(_active_super_admins(db, lock=True)) <= 1:
             raise HTTPException(400, "Cannot delete the last Super Admin")
 
     admin.is_deleted = True
@@ -261,7 +338,7 @@ def delete_account(db, admin_id, performed_by):
     admin.deleted_at = datetime.now(timezone.utc)
     admin.deleted_by = performed_by
 
-    repo.update()
+    _deactivate_sessions(db, admin.id)
     db.flush()
 
     actor_admin = db.query(Admin).filter(Admin.id == performed_by).first()
@@ -269,7 +346,7 @@ def delete_account(db, admin_id, performed_by):
     log_activity(
         db=db,
         admin=actor_admin,
-        action_type=ActivityActionEnum.ACCOUNT_SUSPENDED,
+        action_type=ActivityActionEnum.ACCOUNT_DELETED,
         module_source=EventSourceEnum.AUTH,
         severity=SeverityLevelEnum.CRITICAL,
         target_type=TargetType.ADMIN,

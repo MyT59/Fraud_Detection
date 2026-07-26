@@ -19,6 +19,11 @@ const ANOMALIES = [
   "DIFF_CITY",
 ];
 
+const ANOMALIES_BY_SERVICE = {
+  agenusa: ["", "HIGH_AMOUNT", "UNUSUAL_HOUR", "RAPID_FIRE", "FOREIGN_IP", "DIFF_CITY"],
+  nusabill: ["", "HIGH_AMOUNT", "UNUSUAL_HOUR", "RAPID_FIRE", "UNDERPAYMENT", "OVERPAYMENT", "FOREIGN_IP"],
+};
+
 const MAX_BULK_TRANSACTIONS = 150;
 
 const initialAgenusa = {
@@ -372,6 +377,12 @@ const ResultPanel = ({ result, error, onClose }) => {
       icon: "bi-stack",
       tone: result.failed ? "warning" : "success",
     },
+    result?.skipped > 0 && {
+      label: "Dilewati",
+      value: `${result.skipped} transaksi`,
+      icon: "bi-skip-forward",
+      tone: "warning",
+    },
     data.amount !== undefined && {
       label: "Amount",
       value: `Rp ${Number(data.amount).toLocaleString("id-ID")}`,
@@ -616,7 +627,7 @@ const TransactionSimulator = () => {
           label: metadata.label || name,
           startedAt: startedAt.toISOString(),
           durationMs: Date.now() - startedAt.getTime(),
-          status: "success",
+          status: metadata.status || "success",
           total: data?.total ?? metadata.total ?? 1,
           succeeded: data?.succeeded ?? 1,
           failed: data?.failed ?? 0,
@@ -665,7 +676,33 @@ const TransactionSimulator = () => {
   const refreshStatus = useCallback(async () => {
     try {
       const data = await simulatorService.getStatus();
-      setIsRunning(Boolean(data?.data?.is_running));
+      const liveState = data?.data || {};
+      const liveStatus = liveState.last_status || "IDLE";
+      setIsRunning(Boolean(liveState.is_running));
+      if (["COMPLETED", "FAILED", "STOPPED"].includes(liveStatus)) {
+        setRunHistory((current) => {
+          const hasRunningLiveRun = current.some(
+            (run) => run.mode === "scenario" && run.status === "running",
+          );
+          if (!hasRunningLiveRun) return current;
+
+          const next = current.map((run) =>
+            run.mode === "scenario" && run.status === "running"
+              ? {
+                  ...run,
+                  status: liveStatus === "COMPLETED" ? "success" : liveStatus.toLowerCase(),
+                  durationMs: Date.now() - new Date(run.startedAt).getTime(),
+                  succeeded: liveState.processed ?? run.succeeded,
+                  total: liveState.total ?? run.total,
+                  failed: liveStatus === "FAILED" ? 1 : run.failed,
+                  error: liveState.last_error || run.error,
+                }
+              : run,
+          );
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+          return next;
+        });
+      }
     } catch {
       // Status polling is non-blocking; action errors are shown separately.
     }
@@ -811,15 +848,10 @@ const TransactionSimulator = () => {
       const transactions = response?.data?.transactions || [];
       const rows = transactions.map((transaction, index) => {
         if (service === "agenusa") {
-          const msgType = ["TRANSFER", "TARIK_SALDO", "CEK_SALDO"].includes(
-            transaction.msg_type,
-          )
-            ? transaction.msg_type
-            : "TRANSFER";
           return {
             ...initialAgenusa,
             ...transaction,
-            msg_type: msgType,
+            msg_type: transaction.msg_type || "TRANSFER",
             timestamp_db: transaction.timestamp_db
               ? toLocalDateTimeInput(new Date(transaction.timestamp_db))
               : "",
@@ -1207,7 +1239,7 @@ const TransactionSimulator = () => {
         value={activeForm.inject_anomaly}
         onChange={(e) => updateForm("inject_anomaly", e.target.value)}
       >
-        {ANOMALIES.map((item) => (
+        {(ANOMALIES_BY_SERVICE[service] || ANOMALIES).map((item) => (
           <option key={item || "none"} value={item}>
             {item || "Tanpa anomali"}
           </option>
@@ -1775,6 +1807,7 @@ const TransactionSimulator = () => {
                         service,
                         label: preview?.title || selectedScenario,
                         total: preview?.transaction_count || 1,
+                        status: "running",
                       },
                     );
                     if (data) setIsRunning(true);

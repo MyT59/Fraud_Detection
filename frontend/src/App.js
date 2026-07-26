@@ -5,7 +5,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { storage } from "./services/apiService";
+import { api, storage } from "./services/apiService";
 import { authService } from "./services/AuthService"; // ✅ FIX: dari AuthService
 
 import Navbar from "./components/Navbar";
@@ -44,14 +44,10 @@ const useAuthValidator = () => {
         return;
       }
       try {
-        const me = await fetch(
-          `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/accounts/me`,
-          {
-            headers: {
-              Authorization: `Bearer ${storage.getAccessToken()}`,
-            },
-          },
-        );
+        const me = {
+          ok: true,
+          json: () => api.get("/accounts/me"),
+        };
         if (!me.ok) {
           // Token invalid/expired → clear
           storage.clear();

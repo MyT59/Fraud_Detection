@@ -8,7 +8,7 @@ const DEPARTMENT_OPTIONS = [
   "Operations",
 ];
 
-const ProfileSettings = ({ data, onSave }) => {
+const ProfileSettings = ({ data, onSave, canEditDepartment = false }) => {
   const [formData, setFormData] = useState(data);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -27,9 +27,9 @@ const ProfileSettings = ({ data, onSave }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
-    await onSave(formData);
+    const saved = await onSave(formData);
     setIsSaving(false);
-    setIsEditing(false);
+    if (saved) setIsEditing(false);
   };
 
   const handleCancel = () => {
@@ -75,11 +75,6 @@ const ProfileSettings = ({ data, onSave }) => {
                   <span>{getInitials(formData.name)}</span>
                 )}
               </div>
-              {isEditing && (
-                <button type="button" className="avatar-upload-btn">
-                  <i className="bi bi-camera"></i>
-                </button>
-              )}
             </div>
             <div className="avatar-info">
               <h6>{formData.name || "—"}</h6>
@@ -144,7 +139,7 @@ const ProfileSettings = ({ data, onSave }) => {
                 <i className="bi bi-building me-1"></i>
                 Department
               </label>
-              {isEditing ? (
+              {isEditing && canEditDepartment ? (
                 <select
                   className="form-select"
                   name="department"

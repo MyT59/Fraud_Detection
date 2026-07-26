@@ -5,7 +5,7 @@ import { api } from "../../services/apiService";
 const ROLES = [
   {
     value: "superadmin",
-    roleId: 1,
+    roleName: "SUPER_ADMIN",
     label: "Super Admin",
     desc: "Kontrol penuh sistem",
     icon: "bi-shield-fill",
@@ -13,7 +13,7 @@ const ROLES = [
   },
   {
     value: "riskmanager",
-    roleId: 2,
+    roleName: "RISK_MANAGER",
     label: "Risk Manager",
     desc: "Hak akses penuh",
     icon: "bi-person-badge-fill",
@@ -21,7 +21,7 @@ const ROLES = [
   },
   {
     value: "analyst",
-    roleId: 3,
+    roleName: "FRAUD_ANALYST",
     label: "Fraud Analyst",
     desc: "Review & investigasi",
     icon: "bi-search",
@@ -29,7 +29,6 @@ const ROLES = [
   },
 ];
 
-const ROLE_TO_ID = { superadmin: 1, riskmanager: 2, analyst: 3 };
 const DEPARTMENTS = ["Risk Management", "Fraud Prevention"];
 
 const EMPTY = {
@@ -66,6 +65,7 @@ const AddUserModal = ({
   editData,
   currentUser,
   superadminCount,
+  roles = [],
 }) => {
   const [form, setForm] = useState(EMPTY);
   const [errors, setErrors] = useState({});
@@ -76,6 +76,10 @@ const AddUserModal = ({
   const nameRef = useRef(null);
 
   const isEdit = Boolean(editData);
+  const availableRoles = ROLES.map((role) => ({
+    ...role,
+    roleId: roles.find((item) => item.role_name === role.roleName)?.id,
+  })).filter((role) => Number.isInteger(role.roleId));
 
   const isSelf = isEdit && editData?.id === currentUser?.id;
   const lockRole =
@@ -113,7 +117,13 @@ const AddUserModal = ({
     if (!form.role) e.role = "Pilih salah satu role.";
     if (!isEdit) {
       if (!form.password) e.password = "Password wajib diisi.";
-      else if (form.password.length < 8) e.password = "Minimal 8 karakter.";
+      else if (
+        form.password.length < 8 ||
+        !/[A-Z]/.test(form.password) ||
+        !/[a-z]/.test(form.password) ||
+        !/[0-9]/.test(form.password) ||
+        !/[@$!%*?&]/.test(form.password)
+      ) e.password = "Minimal 8 karakter, huruf besar/kecil, angka, dan simbol @$!%*?&.";
       if (form.password !== form.confirmPassword)
         e.confirmPassword = "Password tidak cocok.";
     }
@@ -135,7 +145,7 @@ const AddUserModal = ({
       if (isEdit) {
         data = await api.patch(`/accounts/${editData.id}`, {
           full_name: form.name.trim(),
-          role_id: ROLE_TO_ID[form.role],
+          role_id: availableRoles.find((role) => role.value === form.role)?.roleId,
           department: form.department || null,
           phone_number: form.phone || null,
           notes: form.notes || null,
@@ -146,7 +156,7 @@ const AddUserModal = ({
           email: form.email.trim(),
           password: form.password,
           confirm_password: form.confirmPassword,
-          role_id: ROLE_TO_ID[form.role],
+          role_id: availableRoles.find((role) => role.value === form.role)?.roleId,
           department: form.department || null,
           phone_number: form.phone || null,
           notes: form.notes || null,
@@ -260,7 +270,7 @@ const AddUserModal = ({
               Role <span className="aum-req">*</span>
             </label>
             <div className="aum-roles">
-              {ROLES.map((r) => {
+              {availableRoles.map((r) => {
                 const locked = lockRole && r.value !== "superadmin";
                 return (
                   <div

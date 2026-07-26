@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 
 @log_performance
 def login(db: Session, email: str, password: str, ip: str = None, user_agent: str = None):
+    email = email.strip().lower()
     device_name, browser_name = parse_device(user_agent)
     if device_name == "Unknown":
         device_name = "Unknown Device"
@@ -152,18 +153,21 @@ def refresh_access_token(db: Session, refresh_token: str, ip: str = None, user_a
     # ✅ FIX: filter pakai is_active (konsisten)
     session = db.query(UserSession).filter(
         UserSession.refresh_token == refresh_token,
-        UserSession.is_active == True
+        UserSession.admin_id == admin.id,
+        UserSession.is_active == True,
     ).first()
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Session revoked or expired")
 
     new_access_token = create_access_token({
         "sub": str(admin.id),
         "role": admin.role.role_name
     })
 
-    if session:
-        session.access_token = new_access_token
-        session.last_used_at = datetime.now(timezone.utc)
-        db.flush()
+    session.access_token = new_access_token
+    session.last_used_at = datetime.now(timezone.utc)
+    db.flush()
 
     dev_name, brw_name = parse_device(user_agent)
 
@@ -173,7 +177,7 @@ def refresh_access_token(db: Session, refresh_token: str, ip: str = None, user_a
         module_source=EventSourceEnum.AUTH,
         severity=SeverityLevelEnum.INFO,
         target_type=TargetType.ADMIN,
-        session_id=session.id if session else None,
+        session_id=session.id,
         ip_address=ip,
         device=dev_name,
         browser=brw_name,

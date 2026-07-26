@@ -26,23 +26,33 @@ const scoreToRisk = (score = 50) => {
 
 const activityTypeMap = {
   FRAUD: "fraud_detected",
+  TIMELINE_FRAUD: "fraud_detected",
   REVIEW: "manual_review",
+  TIMELINE_REVIEW: "manual_review",
   SECURITY: "rule_update",
+  TIMELINE_SECURITY: "system",
   ALERT: "alert",
+  TIMELINE_ALERT: "alert",
   SYSTEM: "system",
+  TIMELINE_SYSTEM: "system",
 };
 
 const typeToIcon = (type = "") => {
   switch (type.toUpperCase()) {
     case "FRAUD":
+    case "TIMELINE_FRAUD":
       return "bi-shield-exclamation";
     case "REVIEW":
+    case "TIMELINE_REVIEW":
       return "bi-check-circle";
     case "SECURITY":
+    case "TIMELINE_SECURITY":
       return "bi-gear";
     case "ALERT":
+    case "TIMELINE_ALERT":
       return "bi-exclamation-triangle";
     case "SYSTEM":
+    case "TIMELINE_SYSTEM":
       return "bi-cpu";
     default:
       return "bi-clock";
@@ -52,14 +62,19 @@ const typeToIcon = (type = "") => {
 const typeToColor = (type = "") => {
   switch (type.toUpperCase()) {
     case "FRAUD":
+    case "TIMELINE_FRAUD":
       return "red";
     case "REVIEW":
+    case "TIMELINE_REVIEW":
       return "green";
     case "SECURITY":
+    case "TIMELINE_SECURITY":
       return "blue";
     case "ALERT":
+    case "TIMELINE_ALERT":
       return "orange";
     case "SYSTEM":
+    case "TIMELINE_SYSTEM":
       return "purple";
     default:
       return "gray";

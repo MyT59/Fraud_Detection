@@ -57,7 +57,7 @@ def _base_trx(time_override=None) -> dict:
         "terminal_id":          random.choice(TERMINALS),
         "merchant_id":          "M_" + "".join(random.choices(string.digits, k=4)),
         "processing_code":      random.choice(PROCESSING_CODES),
-        "msg_type":             "REQ",
+        "msg_type":             random.choice(["TRANSFER", "TARIK_SALDO", "CEK_SALDO"]),
         "response_code":        "00",
         "account_number":       "ACC" + "".join(random.choices(string.digits, k=8)),
         "dest_account_number":  "ACC" + "".join(random.choices(string.digits, k=8)),

@@ -12,6 +12,7 @@ __pycache__/
 
 # Folders / Directories (Added trailing slashes to ensure the whole folder is ignored)
 docs/
+.docx_dash/
 tmp/
 tools/
 outputs/
@@ -21,3 +22,7 @@ report_assets/
 # Specific files
 build_report.js
 Individual_Report_Full_Template.docx
+.~lock.Mapper_Based_Schema_Unification_IEEE_Paper.docx#
+Mapper_Based_Schema_Unification_IEEE_Paper.docx
+Mapper_Based_Schema_Unification_IEEE_Paper_Submission_No_Em_Dash.docx
+Mapper_Based_Schema_Unification_IEEE_Paper_Submission_Novelty_Enhanced.docx

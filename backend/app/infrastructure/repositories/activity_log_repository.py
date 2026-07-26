@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from app.infrastructure.database.models.activity_log_model import ActivityLog
 from app.infrastructure.database.models.admin_model import Admin
 from datetime import datetime
@@ -82,3 +83,12 @@ class ActivityLogRepository:
             .limit(limit)
             .all()
         )
+
+    def get_action_counts(self, admin_id=None):
+        query = self.db.query(
+            ActivityLog.action_type,
+            func.count(ActivityLog.id),
+        )
+        if admin_id is not None:
+            query = query.filter(ActivityLog.admin_id == admin_id)
+        return dict(query.group_by(ActivityLog.action_type).all())

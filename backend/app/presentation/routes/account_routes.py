@@ -17,6 +17,7 @@ from app.application.services.account_service import (
 )
 from app.core.rbac import require_roles
 from app.presentation.schemas.admin_schema import AdminCreateRequest, AdminUpdateRequest, AdminResponse, ProfileUpdateRequest
+from app.infrastructure.database.models.role_model import Role
 
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
 
@@ -47,6 +48,16 @@ def get_all(
     current_admin=Depends(require_roles("SUPER_ADMIN"))
 ):
     return get_all_accounts(db)
+
+
+@router.get("/roles")
+def get_account_roles(
+    db: Session = Depends(get_db),
+    current_admin=Depends(require_roles("SUPER_ADMIN")),
+):
+    allowed = ("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST")
+    roles = db.query(Role).filter(Role.role_name.in_(allowed)).all()
+    return [{"id": role.id, "role_name": role.role_name} for role in roles]
 
 # GET MY PROFILE
 @router.get("/me", response_model=AdminResponse)

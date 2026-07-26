@@ -8,6 +8,7 @@ export const ACTION_GROUPS = {
     "PATTERN_TRIGGERED",
     "RULE_TRIGGERED",
     "FLAG_TRANSACTION",
+    "ML_SCORING_COMPLETED",
   ],
   reviews: [
     "ALERT_CLAIMED",
@@ -15,6 +16,8 @@ export const ACTION_GROUPS = {
     "REVIEW_APPROVED",
     "REVIEW_REJECTED",
     "REVIEW_OVERRIDDEN",
+    "SOFT_DELETE_REVIEW",
+    "REPORT_FALSE_NEGATIVE",
   ],
   system: [
     "LOGIN",
@@ -23,23 +26,41 @@ export const ACTION_GROUPS = {
     "SESSION_REVOKED",
     "TOKEN_REFRESHED",
     "MANUAL_RUN_RETRAIN",
+    "ACCOUNT_LOCKED",
+    "PASSWORD_CHANGED",
+    "PASSWORD_RESET",
+    "CREATE_RETRAIN_SCHEDULE",
+    "UPDATE_RETRAIN_SCHEDULE",
+    "ACTIVATE_RETRAIN_SCHEDULE",
+    "DEACTIVATE_RETRAIN_SCHEDULE",
+    "DELETE_RETRAIN_SCHEDULE",
   ],
   rules: ["RULE_CREATED", "RULE_UPDATED", "RULE_DELETED"],
-  alerts: ["SLA_ESCALATION"],
+  alerts: ["SLA_ESCALATION", "ALERT_UPDATED"],
   patterns: [
     "PATTERN_CREATED",
+    "PATTERN_UPDATED",
+    "PATTERN_ACTIVATED",
+    "PATTERN_DEACTIVATED",
     "PATTERN_AUTO_DISABLE",
     "PATTERN_AUTO_PROMOTE",
     "PATTERN_REACTIVATED",
-    "PATTERN_TRIGGERED",
   ],
-  blacklist: ["BLACKLIST_ADD", "BLACKLIST_REMOVE"],
+  blacklist: [
+    "BLACKLIST_ADD", "BLACKLIST_REMOVE", "BLACKLIST_CREATED",
+    "BLACKLIST_UPDATED", "BLACKLIST_DELETED", "BLACKLIST_APPROVED",
+    "BLACKLIST_REJECTED", "BLACKLIST_ACTIVATED", "BLACKLIST_DEACTIVATED",
+    "BLACKLIST_BULK_IMPORT",
+  ],
   user_actions: [
     "ACCOUNT_CREATED",
     "ACCOUNT_SUSPENDED",
     "ACCOUNT_ROLE_CHANGED",
+    "ACCOUNT_UPDATED",
+    "ACCOUNT_ACTIVATED",
+    "ACCOUNT_DELETED",
   ],
-  reports: ["REPORT_GENERATED", "REPORT_DOWNLOADED"],
+  reports: ["REPORT_GENERATED", "REPORT_DOWNLOADED", "REPORT_DELETED"],
 };
 
 export const AUDIT_LOG_ACTIONS = ACTION_GROUPS.user_actions;
@@ -65,6 +86,8 @@ const activityLogService = {
     email, // tetap ada untuk Audit Log filter by email
     start_date,
     end_date,
+    severity,
+    signal,
   } = {}) => {
     const params = new URLSearchParams();
     params.append("page", page);
@@ -77,12 +100,14 @@ const activityLogService = {
     if (email) params.append("email", email);
     if (start_date) params.append("start_date", start_date);
     if (end_date) params.append("end_date", end_date);
+    if (severity) params.append("severity", severity);
 
-    return api.get(`/activity-logs/?${params.toString()}`);
+    return api.get(`/activity-logs/?${params.toString()}`, { signal });
   },
 
   getTimelineLogs: (params = {}) => activityLogService.getLogs(params),
   getAuditLogs: (params = {}) => activityLogService.getLogs(params),
+  getSummary: () => api.get("/activity-logs/summary"),
 
   exportToCSV: (logs, filename = "activity_log") => {
     if (!logs || logs.length === 0) return;

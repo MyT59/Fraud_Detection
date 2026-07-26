@@ -58,6 +58,7 @@ def generate_report(
             min_risk_score=payload.min_risk_score,
             max_risk_score=payload.max_risk_score,
             action_type=payload.action_type,
+            action_types=payload.action_types,
             module_source=payload.module_source,
             severity=payload.severity,
             status=payload.status,

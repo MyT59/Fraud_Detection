@@ -37,6 +37,7 @@ from typing import Literal
 
 from app.application.services.simulator_service import (
     run_live_simulation,
+    reserve_simulation_service,
     stop_simulation_service,
     get_simulation_status_service,
     manual_input_agenusa,
@@ -700,7 +701,7 @@ class SimulateRequest(BaseModel):
 
 @router.post("/generate", summary="Jalankan live simulation (background)")
 async def generate_live(payload: SimulateRequest, background_tasks: BackgroundTasks):
-    if get_simulation_status_service():
+    if not reserve_simulation_service():
         raise HTTPException(
             status_code=400,
             detail="Simulasi sedang berjalan. Harap stop terlebih dahulu."
@@ -708,7 +709,8 @@ async def generate_live(payload: SimulateRequest, background_tasks: BackgroundTa
     background_tasks.add_task(run_live_simulation, payload.domain, payload.scenario)
     return {
         "status": "success",
-        "message": f"Live simulation started for domain: {payload.domain}"
+        "message": f"Live simulation started for domain: {payload.domain}",
+        "data": get_simulation_status_service(),
     }
 
 
@@ -724,7 +726,7 @@ async def stop_simulation():
 def get_simulation_status():
     return {
         "status": "success",
-        "data": {"is_running": get_simulation_status_service()}
+        "data": get_simulation_status_service()
     }
 
 
@@ -928,7 +930,7 @@ async def manual_nusabill(
     response_model=BulkSimulateResponse,
     summary="Bulk input transaksi Agenusa",
     description=(
-        "Insert banyak transaksi Agenusa sekaligus (maks 100 per request). "
+        "Insert banyak transaksi Agenusa sekaligus (maks 150 per request). "
         "Gunakan `delay_ms=0` + `inject_anomaly='RAPID_FIRE'` untuk simulasi velocity attack. "
         "Set `stop_on_error=true` jika ingin berhenti saat ada 1 transaksi yang gagal."
     ),
@@ -949,10 +951,11 @@ async def bulk_agenusa(
 
     return BulkSimulateResponse(
         status="success",
-        message=f"Bulk Agenusa selesai: {result['succeeded']} sukses, {result['failed']} gagal.",
+        message=f"Bulk Agenusa selesai: {result['succeeded']} sukses, {result['failed']} gagal, {result['skipped']} dilewati.",
         total=result["total"],
         succeeded=result["succeeded"],
         failed=result["failed"],
+        skipped=result["skipped"],
         results=result["results"],
     )
 
@@ -966,7 +969,7 @@ async def bulk_agenusa(
     response_model=BulkSimulateResponse,
     summary="Bulk input transaksi Nusabill",
     description=(
-        "Insert banyak transaksi Nusabill sekaligus (maks 100 per request). "
+        "Insert banyak transaksi Nusabill sekaligus (maks 150 per request). "
         "Tiap item di list bisa punya `inject_anomaly` yang berbeda-beda "
         "untuk simulasi mix pattern dalam satu batch."
     ),
@@ -987,10 +990,11 @@ async def bulk_nusabill(
 
     return BulkSimulateResponse(
         status="success",
-        message=f"Bulk Nusabill selesai: {result['succeeded']} sukses, {result['failed']} gagal.",
+        message=f"Bulk Nusabill selesai: {result['succeeded']} sukses, {result['failed']} gagal, {result['skipped']} dilewati.",
         total=result["total"],
         succeeded=result["succeeded"],
         failed=result["failed"],
+        skipped=result["skipped"],
         results=result["results"],
     )
 

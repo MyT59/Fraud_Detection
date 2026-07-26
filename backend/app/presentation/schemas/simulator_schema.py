@@ -15,7 +15,7 @@ import random
 from datetime import datetime, timezone
 from typing import Literal, Optional, List
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ─────────────────────────────────────────────
@@ -50,6 +50,9 @@ AnomalyType = Literal[
     "FOREIGN_IP",       # ip_address dari range luar negeri (simulasi)
     "DIFF_CITY",        # city berbeda-beda tiap transaksi (location hopping)
 ]
+
+AGENUSA_ANOMALIES = {"HIGH_AMOUNT", "UNUSUAL_HOUR", "RAPID_FIRE", "FOREIGN_IP", "DIFF_CITY"}
+NUSABILL_ANOMALIES = {"HIGH_AMOUNT", "UNUSUAL_HOUR", "RAPID_FIRE", "UNDERPAYMENT", "OVERPAYMENT", "FOREIGN_IP"}
 
 
 # ─────────────────────────────────────────────
@@ -133,6 +136,13 @@ class AgenusaManualInput(BaseModel):
         )
     )
 
+    @field_validator("inject_anomaly")
+    @classmethod
+    def anomaly_must_match_agenusa(cls, value):
+        if value is not None and value not in AGENUSA_ANOMALIES:
+            raise ValueError("Anomaly ini tidak didukung untuk Agenusa")
+        return value
+
     # ── VALIDATORS ──────────────────────────────────────
     @model_validator(mode="after")
     def derive_iso_fields(self) -> "AgenusaManualInput":
@@ -214,6 +224,13 @@ class NusabillManualInput(BaseModel):
             "FOREIGN_IP   → ip_address dari range luar negeri."
         )
     )
+
+    @field_validator("inject_anomaly")
+    @classmethod
+    def anomaly_must_match_nusabill(cls, value):
+        if value is not None and value not in NUSABILL_ANOMALIES:
+            raise ValueError("Anomaly ini tidak didukung untuk Nusabill")
+        return value
 
     # ── VALIDATORS ──────────────────────────────────────
     @model_validator(mode="after")
@@ -342,6 +359,7 @@ class BulkSimulateResponse(BaseModel):
     total:        int
     succeeded:    int
     failed:       int
+    skipped:      int = 0
     results:      List[dict]
 
 
