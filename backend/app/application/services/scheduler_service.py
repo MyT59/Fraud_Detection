@@ -69,7 +69,11 @@ def scheduled_retrain_task(schedule_dict: Dict[str, Any]):
         logger.info(f"[Scheduler] Memulai retrain otomatis untuk: {schedule_dict.get('name')} ({schedule_id})")
         
         retrain_service = RetrainService(db)
-        result = retrain_service.execute_retrain(schedule_dict=schedule_dict, trigger="scheduled")
+        result = retrain_service.execute_retrain(
+            domain=schedule_dict.get("domain"),
+            schedule_id=schedule_dict.get("id"),
+            trigger_source="scheduled",
+        )
         schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
         if schedule_obj:
             schedule_obj.last_run_at = datetime.now(timezone.utc)
@@ -157,7 +161,6 @@ class SchedulerService:
             if self.scheduler.get_job(schedule_id):
                 self.scheduler.remove_job(schedule_id)
                 
-                # 🔥 UPDATE CACHE: Kosongkan 'Next Run' karena jadwal dimatikan (is_active = False)
                 db = SessionLocal()
                 try:
                     schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()

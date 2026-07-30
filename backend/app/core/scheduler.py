@@ -13,12 +13,11 @@ def start_scheduler():
     if not _scheduler.running:
         global SCHEDULER_STARTED_AT
 
-        # FIX: Daftarkan Worker Eskalasi SLA otomatis setiap 1 menit
         from app.application.services.scheduler_service import run_sla_escalation_task
         _scheduler.add_job(
             func=run_sla_escalation_task,
             trigger="interval",
-            minutes=1,  # Interval pengecekan berkala (1 Menit sekali)
+            minutes=1, 
             id="sla_escalation_engine_worker",
             replace_existing=True,
             name="SLA Escalation Engine Worker"

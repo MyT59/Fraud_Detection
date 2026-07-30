@@ -6,8 +6,13 @@ from app.core.logging import get_logger, log_performance
 logger = get_logger(__name__) 
 from app.infrastructure.database.session import get_db
 from app.application.services.dashboard_service import DashboardService
+from app.core.rbac import require_roles
 
-router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+router = APIRouter(
+    prefix="/dashboard",
+    tags=["Dashboard"],
+    dependencies=[Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST"))],
+)
 
 
 @router.get("/kpi")

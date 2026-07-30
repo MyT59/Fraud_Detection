@@ -56,7 +56,7 @@ from app.infrastructure.database.models.transaction_model import Transaction
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
 
 from app.application.services.activity_log_service import log_activity
-from app.application.cache.fraud_cache import get_cached_patterns, invalidate_pattern_cache
+from app.application.cache.fraud_cache import get_cached_patterns
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 from app.core.logging import get_logger, log_performance
 
@@ -284,12 +284,9 @@ def run_pattern_engine(db, trx):
     window_cache = {}
     details      = trx.transaction_details or {}
 
-    # Ambil issuer_account_number sekali, dipakai oleh banyak field di bawah
     issuer_account_number = details.get("issuer_account_number")
 
     for pattern in patterns:
-        # [FIX #8] Filter service_source — pattern hanya berlaku untuk service-nya
-        # sendiri atau ALL. Mencegah pattern NUSABILL trigger di transaksi AGENUSA.
         pattern_service = (pattern.service_source or "ALL").upper()
         trx_service     = (trx.service_source or "").upper()
         if pattern_service != "ALL" and pattern_service != trx_service:
@@ -626,13 +623,6 @@ def run_pattern_engine(db, trx):
                 }
             )
 
-    # [FIX] Invalidate cache setelah loop selesai jika ada pattern yang matched
-    # dan hit_count diupdate. Dipanggil sekali di luar loop (bukan per pattern)
-    # agar tidak redundant. Cache akan di-reload fresh pada transaksi berikutnya
-    # sehingga hit_count yang ditampilkan di PatternDiagnostics FE tidak stale.
-    if pattern_ids:
-        invalidate_pattern_cache()
-
     return violations, pattern_ids, risk_score, actions
 
 
@@ -691,30 +681,118 @@ def detect_suppressed_patterns(db: Session, trx: Transaction) -> list:
                 except Exception:
                     current_value = None
             elif window_ms:
-                # Reuse same window logic as engine for common fields
                 time_thresh = trx.transaction_time - timedelta(minutes=window_ms)
                 cache_key = (field, window_ms, getattr(trx, 'id', None))
-                # For brevity reuse subset of windowed computations similar to run_pattern_engine
                 if field == "tx_count":
-                    if issuer_account_number:
-                        cache_key = (field, window_ms, issuer_account_number)
-                        if cache_key not in window_cache:
-                            res = db.query(func.count(Transaction.id)).filter(
-                                Transaction.transaction_details["issuer_account_number"].astext == issuer_account_number,
+                    is_terminal_based = any(
+                        c.get("field") == "distinct_account_count"
+                        for c in conditions
+                    )
+                    if is_terminal_based and trx.terminal_id:
+                        cache_key = (field, window_ms, "terminal", trx.terminal_id)
+                        filters = [Transaction.terminal_id == trx.terminal_id]
+                    elif issuer_account_number:
+                        cache_key = (field, window_ms, "card", issuer_account_number)
+                        filters = [
+                            Transaction.transaction_details["issuer_account_number"].astext
+                            == issuer_account_number
+                        ]
+                    else:
+                        cache_key = (field, window_ms, "user", trx.user_account_id)
+                        filters = [Transaction.user_account_id == trx.user_account_id]
+                    if cache_key not in window_cache:
+                        window_cache[cache_key] = db.query(func.count(Transaction.id)).filter(
+                            *filters,
+                            Transaction.transaction_time >= time_thresh,
+                            Transaction.transaction_time <= trx.transaction_time,
+                        ).scalar() or 0
+                elif field == "total_amount":
+                    is_card_based = any(
+                        c.get("field") in ("failure_count", "has_success_after_failure")
+                        for c in conditions
+                    )
+                    is_terminal_based = any(
+                        c.get("field") == "distinct_account_count"
+                        for c in conditions
+                    )
+                    if is_card_based and issuer_account_number:
+                        cache_key = (field, window_ms, "card", issuer_account_number)
+                        filters = [
+                            Transaction.transaction_details["issuer_account_number"].astext
+                            == issuer_account_number
+                        ]
+                    elif is_terminal_based and trx.terminal_id:
+                        cache_key = (field, window_ms, "terminal", trx.terminal_id)
+                        filters = [Transaction.terminal_id == trx.terminal_id]
+                    else:
+                        cache_key = (field, window_ms, "user", trx.user_account_id)
+                        filters = [Transaction.user_account_id == trx.user_account_id]
+                    if cache_key not in window_cache:
+                        value = db.query(func.sum(Transaction.amount)).filter(
+                            *filters,
+                            Transaction.transaction_time >= time_thresh,
+                            Transaction.transaction_time <= trx.transaction_time,
+                        ).scalar() or 0
+                        window_cache[cache_key] = float(value)
+                elif field == "distinct_account_count":
+                    cache_key = (field, window_ms, trx.terminal_id)
+                    if cache_key not in window_cache:
+                        if trx.terminal_id:
+                            window_cache[cache_key] = db.query(func.count(distinct(
+                                Transaction.transaction_details["issuer_account_number"].astext
+                            ))).filter(
+                                Transaction.terminal_id == trx.terminal_id,
                                 Transaction.transaction_time >= time_thresh,
-                                Transaction.transaction_time <= trx.transaction_time
+                                Transaction.transaction_time <= trx.transaction_time,
                             ).scalar() or 0
-                            window_cache[cache_key] = res
-                else:
-                    # fallback: try a simple count per user
+                        else:
+                            window_cache[cache_key] = 0
+                elif field == "distinct_customer_count":
                     cache_key = (field, window_ms, trx.user_account_id)
                     if cache_key not in window_cache:
-                        res = db.query(func.count(Transaction.id)).filter(
+                        window_cache[cache_key] = db.query(func.count(distinct(
+                            Transaction.transaction_details["nama_customer"].astext
+                        ))).filter(
                             Transaction.user_account_id == trx.user_account_id,
                             Transaction.transaction_time >= time_thresh,
-                            Transaction.transaction_time <= trx.transaction_time
+                            Transaction.transaction_time <= trx.transaction_time,
                         ).scalar() or 0
-                        window_cache[cache_key] = res
+                elif field in ("failure_count", "has_success_after_failure"):
+                    failure_key = ("failure_count", window_ms, issuer_account_number)
+                    success_key = ("has_success_after_failure", window_ms, issuer_account_number)
+                    if failure_key not in window_cache:
+                        failure_count = 0
+                        success_after_failure = False
+                        if issuer_account_number:
+                            recent = db.query(Transaction).filter(
+                                Transaction.transaction_details["issuer_account_number"].astext
+                                == issuer_account_number,
+                                Transaction.transaction_time >= time_thresh,
+                                Transaction.transaction_time <= trx.transaction_time,
+                            ).order_by(Transaction.transaction_time.asc()).limit(100).all()
+                            decline_streak = 0
+                            for recent_trx in recent:
+                                response_code = (
+                                    recent_trx.transaction_details or {}
+                                ).get("response_code")
+                                if response_code != "00":
+                                    decline_streak += 1
+                                    failure_count += 1
+                                else:
+                                    if decline_streak >= 3:
+                                        success_after_failure = True
+                                    decline_streak = 0
+                        window_cache[failure_key] = failure_count
+                        window_cache[success_key] = success_after_failure
+                    cache_key = (
+                        failure_key
+                        if field == "failure_count"
+                        else success_key
+                    )
+                else:
+                    cache_key = (field, window_ms, trx.user_account_id)
+                    if cache_key not in window_cache:
+                        window_cache[cache_key] = None
 
                 current_value = window_cache.get(cache_key)
             else:
@@ -733,6 +811,10 @@ def detect_suppressed_patterns(db: Session, trx: Transaction) -> list:
             matched = False
 
         if matched:
+            db.query(FraudPattern).filter(FraudPattern.id == pattern.id).update(
+                {"hit_count": func.coalesce(FraudPattern.hit_count, 0) + 1},
+                synchronize_session=False,
+            )
             suppressed.append({
                 "id": pattern.id,
                 "name": pattern.pattern_name,

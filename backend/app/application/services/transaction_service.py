@@ -60,7 +60,6 @@ def _apply_hard_block(trx: Transaction, violations: list, db: Session, bl_score:
     if violations:
         trx.violation_reason = " | ".join([f"{v['type']}:{v['name']}" for v in violations])
 
-    trx.is_flagged_ml = True
     create_alert(db, trx)
 
     log_activity(
@@ -190,7 +189,6 @@ def process_transaction(data: dict, db: Session):
         if is_jump:
             trx.risk_level    = "HIGH"
             trx.risk_score   += 80.0
-            trx.anomaly_score = 0.99
             trx.final_status  = TransactionStatusEnum.FLAGGED
             trx.violation_reason = jump_reason
 
@@ -398,7 +396,6 @@ def process_transaction(data: dict, db: Session):
         # =========================
         _tick("alert")
         if trx.final_status in [TransactionStatusEnum.FLAGGED, TransactionStatusEnum.FRAUD]:
-            trx.is_flagged_ml = True
             create_alert(db, trx)
             log_activity(
                 db=db,

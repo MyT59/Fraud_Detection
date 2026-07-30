@@ -48,15 +48,10 @@ const ChangePassword = () => {
     try {
       await authService.changePassword(form.currentPassword, form.newPassword);
 
-      // Update is_password_temporary di storage
-      const current = storage.getUser();
-      if (current) {
-        storage.setUser({ ...current, is_password_temporary: false });
-      }
-
       setSuccess(true);
       setTimeout(() => {
-        navigate("/dashboard", { replace: true });
+        storage.clear();
+        navigate("/login", { replace: true });
       }, 1500);
     } catch (err) {
       setError(err.message || "Gagal mengubah password. Coba lagi.");
@@ -82,7 +77,7 @@ const ChangePassword = () => {
         {success && (
           <div className="cp-alert cp-alert-success">
             <i className="bi bi-check-circle-fill"></i>
-            Password berhasil diubah! Mengarahkan ke dashboard...
+          Password berhasil diubah! Silakan login kembali...
           </div>
         )}
 
@@ -189,7 +184,10 @@ const ChangePassword = () => {
 
         <button
           className="cp-logout"
-          onClick={() => authService.logout()}
+          onClick={async () => {
+            await authService.logout();
+            navigate("/login", { replace: true });
+          }}
           disabled={saving}
         >
           <i className="bi bi-box-arrow-right"></i>

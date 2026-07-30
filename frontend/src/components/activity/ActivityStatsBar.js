@@ -1,7 +1,7 @@
 import React from "react";
 import { STATS_BAR, getActivityGroup } from "./activityData";
 
-const ActivityStatsBar = ({ activities = [] }) => {
+const ActivityStatsBar = ({ activities = [], groupCounts: providedCounts }) => {
   // Count per group berdasarkan action_type
   const groupCounts = {};
   activities.forEach((a) => {
@@ -11,7 +11,7 @@ const ActivityStatsBar = ({ activities = [] }) => {
 
   const counts = STATS_BAR.map((stat) => ({
     ...stat,
-    count: groupCounts[stat.key] || 0,
+    count: (providedCounts || groupCounts)[stat.key] || 0,
   }));
 
   return (

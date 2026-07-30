@@ -22,6 +22,7 @@ const mapUser = (u) => ({
   notes: u.notes || "",
   role: ROLE_FROM_API[u.role] || "analyst",
   status: u.is_active ? "active" : "suspended",
+  isPasswordTemporary: Boolean(u.is_password_temporary),
   createdAt: u.created_at
     ? new Date(u.created_at).toLocaleDateString("id-ID", {
         day: "2-digit",
@@ -132,6 +133,7 @@ const ResetPasswordModal = ({ data, onClose }) => {
 const SuperAdmin = () => {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editData, setEditData] = useState(null);
   const [resetModal, setResetModal] = useState(null); // { name, email, password }
@@ -140,7 +142,9 @@ const SuperAdmin = () => {
   const [currentUser, setCurrentUser] = useState(() => storage.getUser());
 
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
-  const superadminCount = users.filter((u) => u.role === "superadmin").length;
+  const superadminCount = users.filter(
+    (u) => u.role === "superadmin" && u.status === "active",
+  ).length;
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -148,6 +152,15 @@ const SuperAdmin = () => {
       setUsers(data.map(mapUser));
     } catch (err) {
       pushToast(err.message || "Gagal memuat data pengguna.", "error");
+    }
+  }, [pushToast]);
+
+  const fetchRoles = useCallback(async () => {
+    try {
+      const data = await api.get("/accounts/roles");
+      setRoles(Array.isArray(data) ? data : []);
+    } catch (err) {
+      pushToast(err.message || "Gagal memuat role.", "error");
     }
   }, [pushToast]);
 
@@ -163,11 +176,11 @@ const SuperAdmin = () => {
           console.error("Gagal memuat profil:", err);
         }
       }
-      await fetchUsers();
+      await Promise.all([fetchUsers(), fetchRoles()]);
       setLoading(false);
     };
     init();
-  }, [fetchUsers]);
+  }, [fetchUsers, fetchRoles]);
 
   const handleSubmit = (apiUser) => {
     const mapped = mapUser(apiUser);
@@ -190,6 +203,7 @@ const SuperAdmin = () => {
 
   const handleResetPassword = async (id) => {
     const user = users.find((u) => u.id === id);
+    if (!window.confirm(`Reset password untuk ${user?.name || "pengguna ini"}?`)) return;
     try {
       const res = await api.post(`/accounts/${id}/reset-password`);
       setResetModal({
@@ -287,6 +301,7 @@ const SuperAdmin = () => {
           editData={editData}
           currentUser={currentUser}
           superadminCount={superadminCount}
+          roles={roles}
         />
       </div>
 

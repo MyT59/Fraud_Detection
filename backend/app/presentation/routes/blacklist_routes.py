@@ -48,10 +48,7 @@ def add_blacklist(
     db.add(item)
 
     try:
-        db.commit()
-        db.refresh(item)
-        invalidate_blacklist_cache()
-
+        db.flush()
     except IntegrityError:
         db.rollback()
 
@@ -69,6 +66,9 @@ def add_blacklist(
         target_id=item.id,
         details=f"Added {item.type}={item.value}"
     )
+    db.commit()
+    db.refresh(item)
+    invalidate_blacklist_cache()
 
     return item
 
@@ -174,13 +174,10 @@ def update_blacklist(
     item.is_active = False
     item.review_note = None
 
-    # 🎯 FIX DI SINI: Bungkus dengan try-except untuk menangkap UniqueConstraint Violation
     try:
-        db.commit()
-        db.refresh(item)
-        invalidate_blacklist_cache()
+        db.flush()
     except IntegrityError:
-        db.rollback()  # Batalkan transaksi yang gagal agar koneksi database tidak mengunci
+        db.rollback()
         raise HTTPException(
             status_code=409,
             detail="Kombinasi Tipe, Nilai, dan Scope Blacklist ini sudah terdaftar di data lain!"
@@ -203,6 +200,9 @@ def update_blacklist(
             }
         }
     )
+    db.commit()
+    db.refresh(item)
+    invalidate_blacklist_cache()
 
     return item
 
@@ -223,45 +223,38 @@ def bulk_import_blacklist(
 
     for item in data.items:
         try:
-            normalized_value = normalize_blacklist_value(item.value, item.type)
+            with db.begin_nested():
+                normalized_value = normalize_blacklist_value(item.value, item.type)
 
-            exists = db.query(BlacklistItem).filter(
-                BlacklistItem.type          == item.type,
-                BlacklistItem.value         == normalized_value,
-                BlacklistItem.service_scope == item.service_scope.upper(),
-                BlacklistItem.is_deleted    == False,
-            ).first()
+                exists = db.query(BlacklistItem).filter(
+                    BlacklistItem.type          == item.type,
+                    BlacklistItem.value         == normalized_value,
+                    BlacklistItem.service_scope == item.service_scope.upper(),
+                    BlacklistItem.is_deleted    == False,
+                ).first()
 
-            if exists:
-                skipped += 1
-                skipped_vals.append(item.value)
-                continue
+                if exists:
+                    skipped += 1
+                    skipped_vals.append(item.value)
+                    continue
 
-            new_item = BlacklistItem(
-                value         = normalized_value,
-                type          = item.type,
-                service_scope = item.service_scope.upper(),
-                reason        = item.reason,
-                source        = "IMPORT",
-                status        = "PENDING",
-                is_active     = False,
-                added_by      = current_admin.id,
-            )
-            db.add(new_item)
-            db.flush()
+                new_item = BlacklistItem(
+                    value         = normalized_value,
+                    type          = item.type,
+                    service_scope = item.service_scope.upper(),
+                    reason        = item.reason,
+                    source        = "IMPORT",
+                    status        = "PENDING",
+                    is_active     = False,
+                    added_by      = current_admin.id,
+                )
+                db.add(new_item)
+                db.flush()
             success += 1
 
         except Exception:
-            db.rollback()
             failed += 1
             failed_vals.append(item.value)
-
-    try:
-        db.commit()
-        invalidate_blacklist_cache()
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Gagal menyimpan bulk import")
 
     log_activity(
         db,
@@ -276,6 +269,12 @@ def bulk_import_blacklist(
             "failed" : failed,
         }
     )
+    try:
+        db.commit()
+        invalidate_blacklist_cache()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Gagal menyimpan bulk import")
 
     return {
         "total"         : len(data.items),

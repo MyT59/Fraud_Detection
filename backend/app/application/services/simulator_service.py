@@ -12,6 +12,7 @@ Business logic untuk semua fitur simulator:
 
 import asyncio
 import random
+import threading
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -25,7 +26,6 @@ from app.infrastructure.repositories.transaction_repository import TransactionRe
 from app.application.mappers.agenusa_mapper import map_agenusa
 from app.application.mappers.nusabill_mapper import map_nusabill
 from app.application.services.transaction_service import process_transaction
-from app.application.services.ml_realtime_service import process_transaction_ml_async
 
 from simulator.agenusa_generator import get_all_scenarios as agenusa_scenarios
 from simulator.nusabill_generator import get_all_scenarios as nusabill_scenarios, _to_db as nusabill_to_db
@@ -34,8 +34,13 @@ from simulator.nusabill_generator import get_all_scenarios as nusabill_scenarios
 # GLOBAL STATE
 # ============================================================
 SIMULATION_STATE = {
-    "is_running": False
+    "is_running": False,
+    "last_status": "IDLE",
+    "last_error": None,
+    "processed": 0,
+    "total": 0,
 }
+_simulation_lock = threading.Lock()
 
 
 # ============================================================
@@ -44,7 +49,6 @@ SIMULATION_STATE = {
 
 async def run_live_simulation(domain: str, scenario: str | None):
     """Business logic untuk menjalankan simulasi secara live di background."""
-    SIMULATION_STATE["is_running"] = True
     db = SessionLocal()
 
     try:
@@ -61,7 +65,7 @@ async def run_live_simulation(domain: str, scenario: str | None):
         if domain in ["nusabill", "all"]:
             scen = nusabill_scenarios()
             txs  = scen[scenario] if scenario and scenario in scen else [t for l in scen.values() for t in l]
-            all_records.extend([{"src": "nusabill", "data": nusabill_to_db(t)} for t in txs])
+            all_records.extend([{"src": "nusabill", "data": t} for t in txs])
 
         def extract_timestamp(item):
             if item["src"] == "agenusa":
@@ -69,6 +73,8 @@ async def run_live_simulation(domain: str, scenario: str | None):
             return item["data"]["tanggal_tagihan"]
 
         all_records.sort(key=extract_timestamp)
+        with _simulation_lock:
+            SIMULATION_STATE["total"] = len(all_records)
 
         print(f"🚀 Memulai live simulation untuk {len(all_records)} transaksi...")
 
@@ -82,34 +88,65 @@ async def run_live_simulation(domain: str, scenario: str | None):
                 trx = process_transaction(map_agenusa(log.__dict__), db)
                 if trx:
                     sw_repo.mark_processed(log.id)
-                    await process_transaction_ml_async(trx.id)
             else:
-                log = inv_repo.create(item["data"])
-                trx = process_transaction(map_nusabill(log.__dict__), db)
+                raw_data = item["data"]
+                log = inv_repo.create(nusabill_to_db(raw_data))
+                # `channel` bukan kolom invoice_transactions. Sisipkan kembali
+                # saat mapping agar feature CHANNEL_SWITCH_TO_API dapat diuji.
+                mapped_data = {**log.__dict__, "channel": raw_data.get("channel", "API")}
+                trx = process_transaction(map_nusabill(mapped_data), db)
                 if trx:
                     inv_repo.mark_processed(log.id)
-                    await process_transaction_ml_async(trx.id)
+
+            with _simulation_lock:
+                SIMULATION_STATE["processed"] += 1
 
             await asyncio.sleep(random.uniform(0.2, 0.5))
 
         print("✅ Live simulation selesai.")
 
+        with _simulation_lock:
+            if SIMULATION_STATE["is_running"]:
+                SIMULATION_STATE["last_status"] = "COMPLETED"
+
     except Exception as e:
+        with _simulation_lock:
+            SIMULATION_STATE["last_status"] = "FAILED"
+            SIMULATION_STATE["last_error"] = str(e)
         print(f"❌ Error pada live simulation: {e}")
     finally:
-        SIMULATION_STATE["is_running"] = False
+        with _simulation_lock:
+            SIMULATION_STATE["is_running"] = False
         db.close()
 
 
-def stop_simulation_service() -> bool:
-    if SIMULATION_STATE["is_running"]:
-        SIMULATION_STATE["is_running"] = False
+def reserve_simulation_service() -> bool:
+    """Atomically reserve the only live-simulation slot before task scheduling."""
+    with _simulation_lock:
+        if SIMULATION_STATE["is_running"]:
+            return False
+        SIMULATION_STATE.update(
+            is_running=True,
+            last_status="RUNNING",
+            last_error=None,
+            processed=0,
+            total=0,
+        )
         return True
-    return False
 
 
-def get_simulation_status_service() -> bool:
-    return SIMULATION_STATE["is_running"]
+def stop_simulation_service() -> bool:
+    with _simulation_lock:
+        if not SIMULATION_STATE["is_running"]:
+            return False
+        SIMULATION_STATE["is_running"] = False
+        SIMULATION_STATE["last_status"] = "STOPPED"
+        return True
+
+
+def get_simulation_status_service() -> dict:
+    with _simulation_lock:
+        return dict(SIMULATION_STATE)
 
 
 # ============================================================
@@ -127,6 +164,27 @@ _CITIES = [
     "Surabaya", "Medan", "Bandung", "Makassar",
     "Semarang", "Palembang", "Balikpapan", "Denpasar",
 ]
+_AGENUSA_ANOMALIES = {"HIGH_AMOUNT", "UNUSUAL_HOUR", "RAPID_FIRE", "FOREIGN_IP", "DIFF_CITY"}
+_NUSABILL_ANOMALIES = {"HIGH_AMOUNT", "UNUSUAL_HOUR", "RAPID_FIRE", "UNDERPAYMENT", "OVERPAYMENT", "FOREIGN_IP"}
+
+
+def _response_value(value):
+    """Ubah nilai payload menjadi bentuk aman untuk response JSON."""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _build_anomaly_changes(before: dict, after: dict) -> dict:
+    """Field yang benar-benar berubah setelah anomaly diterapkan."""
+    return {
+        key: {
+            "before": _response_value(before.get(key)),
+            "after": _response_value(after.get(key)),
+        }
+        for key in sorted(set(before) | set(after))
+        if before.get(key) != after.get(key)
+    }
 
 
 def _apply_anomaly_agenusa(payload: dict, anomaly: str) -> dict:
@@ -134,6 +192,8 @@ def _apply_anomaly_agenusa(payload: dict, anomaly: str) -> dict:
     Mutasi payload Agenusa sesuai jenis anomali.
     Return payload yang sudah dimodifikasi (copy, tidak mutasi in-place).
     """
+    if anomaly not in _AGENUSA_ANOMALIES:
+        raise ValueError(f"Anomaly '{anomaly}' tidak didukung untuk Agenusa.")
     p = payload.copy()
 
     if anomaly == "HIGH_AMOUNT":
@@ -165,6 +225,8 @@ def _apply_anomaly_nusabill(payload: dict, anomaly: str) -> dict:
     """
     Mutasi payload Nusabill sesuai jenis anomali.
     """
+    if anomaly not in _NUSABILL_ANOMALIES:
+        raise ValueError(f"Anomaly '{anomaly}' tidak didukung untuk Nusabill.")
     p = payload.copy()
 
     if anomaly == "HIGH_AMOUNT":
@@ -209,13 +271,19 @@ async def manual_input_agenusa(payload: dict, db: Session) -> dict:
     reset_location_cache()
 
     anomaly = payload.pop("inject_anomaly", None)
+    payload_before_anomaly = payload.copy()
     if anomaly:
         payload = _apply_anomaly_agenusa(payload, anomaly)
+    anomaly_changes = _build_anomaly_changes(payload_before_anomaly, payload)
+
+    # city/country bukan kolom switching_logs, tetapi tetap diperlukan mapper.
+    city = payload.pop("city", None)
+    country = payload.pop("country", None)
 
     sw_repo = SwitchingLogRepository(db)
     raw_log = sw_repo.create(payload)
 
-    normalized = map_agenusa(raw_log.__dict__)
+    normalized = map_agenusa({**raw_log.__dict__, "city": city, "country": country})
     trx = process_transaction(normalized, db)
 
     if not trx:
@@ -224,7 +292,6 @@ async def manual_input_agenusa(payload: dict, db: Session) -> dict:
         )
 
     sw_repo.mark_processed(raw_log.id)
-    await process_transaction_ml_async(transaction_id=trx.id)
 
     return {
         "raw_id":          raw_log.id,
@@ -236,6 +303,7 @@ async def manual_input_agenusa(payload: dict, db: Session) -> dict:
         "risk_level":      trx.risk_level,
         "final_status":    trx.final_status.value if trx.final_status else "FLAGGED",
         "anomaly_injected": anomaly,
+        "anomaly_changes": anomaly_changes,
         "ml_triggered":    True,
     }
 
@@ -252,13 +320,18 @@ async def manual_input_nusabill(payload: dict, db: Session) -> dict:
     reset_location_cache()
 
     anomaly = payload.pop("inject_anomaly", None)
+    payload_before_anomaly = payload.copy()
     if anomaly:
         payload = _apply_anomaly_nusabill(payload, anomaly)
+    anomaly_changes = _build_anomaly_changes(payload_before_anomaly, payload)
+
+    # channel bukan kolom invoice_transactions, tetapi merupakan feature mapper.
+    channel = payload.pop("channel", "API")
 
     inv_repo    = InvoiceTransactionRepository(db)
     raw_invoice = inv_repo.create(payload)
 
-    normalized = map_nusabill(raw_invoice.__dict__)
+    normalized = map_nusabill({**raw_invoice.__dict__, "channel": channel})
     trx = process_transaction(normalized, db)
 
     if not trx:
@@ -267,7 +340,6 @@ async def manual_input_nusabill(payload: dict, db: Session) -> dict:
         )
 
     inv_repo.mark_processed(raw_invoice.id)
-    await process_transaction_ml_async(transaction_id=trx.id)
 
     return {
         "raw_id":          raw_invoice.id,
@@ -279,6 +351,7 @@ async def manual_input_nusabill(payload: dict, db: Session) -> dict:
         "risk_level":      trx.risk_level,
         "final_status":    trx.final_status.value if trx.final_status else "FLAGGED",
         "anomaly_injected": anomaly,
+        "anomaly_changes": anomaly_changes,
         "ml_triggered":    True,
     }
 
@@ -300,6 +373,7 @@ async def bulk_input_agenusa(
     results      = []
     succeeded    = 0
     failed       = 0
+    skipped      = 0
     delay_sec    = delay_ms / 1000
 
     for i, payload in enumerate(transactions):
@@ -312,6 +386,7 @@ async def bulk_input_agenusa(
             results.append({"index": i, "status": "failed", "error": str(e)})
             failed += 1
             if stop_on_error:
+                skipped = len(transactions) - i - 1
                 break
 
         if delay_sec > 0 and i < len(transactions) - 1:
@@ -321,6 +396,7 @@ async def bulk_input_agenusa(
         "total":      len(transactions),
         "succeeded":  succeeded,
         "failed":     failed,
+        "skipped":    skipped,
         "results":    results,
     }
 
@@ -341,6 +417,7 @@ async def bulk_input_nusabill(
     results   = []
     succeeded = 0
     failed    = 0
+    skipped   = 0
     delay_sec = delay_ms / 1000
 
     for i, payload in enumerate(transactions):
@@ -353,6 +430,7 @@ async def bulk_input_nusabill(
             results.append({"index": i, "status": "failed", "error": str(e)})
             failed += 1
             if stop_on_error:
+                skipped = len(transactions) - i - 1
                 break
 
         if delay_sec > 0 and i < len(transactions) - 1:
@@ -362,6 +440,7 @@ async def bulk_input_nusabill(
         "total":     len(transactions),
         "succeeded": succeeded,
         "failed":    failed,
+        "skipped":   skipped,
         "results":   results,
     }
 

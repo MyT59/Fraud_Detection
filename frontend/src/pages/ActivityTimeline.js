@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { FALLBACK_ACTIVITIES } from "../components/activity/activityData";
+import { getActivityGroup } from "../components/activity/activityData";
 import { ACTION_GROUPS } from "../services/activityLogService";
 import ActivityStatsBar from "../components/activity/ActivityStatsBar";
 import ActivityToolbar from "../components/activity/ActivityToolbar";
@@ -41,7 +41,7 @@ const ActivityTimeline = () => {
 
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [apiError, setApiError] = useState(false);
+  const [apiError, setApiError] = useState("");
 
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
@@ -49,7 +49,8 @@ const ActivityTimeline = () => {
   const [total, setTotal] = useState(0);
 
   // Stats — fetch sekali tanpa filter untuk total count per group
-  const [statsItems, setStatsItems] = useState([]);
+  const [statsGroupCounts, setStatsGroupCounts] = useState({});
+  const [statsTotal, setStatsTotal] = useState(0);
 
   const [activeFilter, setActiveFilter] = useState("all");
   const [timeFilter, setTimeFilter] = useState("all_time");
@@ -90,23 +91,26 @@ const ActivityTimeline = () => {
     setHasMore(true);
 
     try {
-      const res = await activityLogService.getTimelineLogs(buildParams(1));
+      const res = await activityLogService.getTimelineLogs({
+        ...buildParams(1),
+        signal: abortRef.current.signal,
+      });
       const fetched = res.items || [];
       setItems(fetched);
       setTotal(res.total || 0);
       setHasMore(
         fetched.length === PAGE_LIMIT && fetched.length < (res.total || 0),
       );
-      setApiError(false);
+      setApiError("");
     } catch (err) {
       if (err.name === "AbortError") return;
       console.warn(
         "ActivityTimeline: fetch gagal, pakai fallback.",
         err.message,
       );
-      setApiError(true);
-      setItems(FALLBACK_ACTIVITIES);
-      setTotal(FALLBACK_ACTIVITIES.length);
+      setApiError(err.message || "Activity Log tidak dapat dimuat.");
+      setItems([]);
+      setTotal(0);
       setHasMore(false);
     } finally {
       setInitialLoading(false);
@@ -120,7 +124,7 @@ const ActivityTimeline = () => {
     const nextPage = page + 1;
     try {
       const res = await activityLogService.getTimelineLogs(
-        buildParams(nextPage),
+        { ...buildParams(nextPage), signal: abortRef.current?.signal },
       );
       const fetched = res.items || [];
       setItems((prev) => {
@@ -147,9 +151,20 @@ const ActivityTimeline = () => {
   // Fetch stats sekali (tanpa filter) untuk ActivityStatsBar & SidePanel count
   useEffect(() => {
     activityLogService
-      .getTimelineLogs({ page: 1, limit: 200 })
-      .then((res) => setStatsItems(res.items || []))
-      .catch(() => setStatsItems(FALLBACK_ACTIVITIES));
+      .getSummary()
+      .then((res) => {
+        const counts = {};
+        Object.entries(res.action_counts || {}).forEach(([action, count]) => {
+          const group = getActivityGroup(action);
+          counts[group] = (counts[group] || 0) + count;
+        });
+        setStatsGroupCounts(counts);
+        setStatsTotal(res.total || 0);
+      })
+      .catch(() => {
+        setStatsGroupCounts({});
+        setStatsTotal(0);
+      });
   }, []);
 
   // IntersectionObserver untuk infinite scroll
@@ -187,6 +202,8 @@ const ActivityTimeline = () => {
   const handleFilterChange = (val) => setActiveFilter(val);
   const handleTimeFilterChange = (val) => setTimeFilter(val);
 
+  useEffect(() => () => clearTimeout(debounceTimer.current), []);
+
   if (initialLoading)
     return <PageLoader message="Memuat activity timeline..." />;
 
@@ -196,10 +213,16 @@ const ActivityTimeline = () => {
         <div className="activity-page-header-left">
           <h1 className="activity-page-title">
             <i className="bi bi-clock-history"></i>
-            Activity Timeline
+            {role === "FRAUD_ANALYST" ? "My Activity" : "Activity Timeline"}
           </h1>
           <p className="activity-page-subtitle">
+            {role === "FRAUD_ANALYST"
+              ? "Riwayat aktivitas yang dilakukan oleh akunmu."
+              : (
+                <>
             Full system activity log — fraud events, reviews, alerts, and more
+                </>
+              )}
           </p>
         </div>
 
@@ -215,7 +238,7 @@ const ActivityTimeline = () => {
           ) : (
             <span className="badge-static">
               <i className="bi bi-exclamation-triangle-fill"></i>
-              Static data only
+              Activity Log unavailable
             </span>
           )}
 
@@ -236,7 +259,14 @@ const ActivityTimeline = () => {
         </div>
       </div>
 
-      <ActivityStatsBar activities={statsItems} />
+      {apiError && (
+        <div className="alert alert-warning mb-3" role="alert">
+          <i className="bi bi-exclamation-triangle-fill me-2"></i>
+          {apiError}
+        </div>
+      )}
+
+      <ActivityStatsBar groupCounts={statsGroupCounts} />
 
       <ActivityToolbar
         activeFilter={activeFilter}
@@ -298,7 +328,9 @@ const ActivityTimeline = () => {
         </div>
 
         <ActivitySidePanel
-          activities={statsItems}
+          activities={items}
+          groupCounts={statsGroupCounts}
+          totalCount={statsTotal}
           activeFilter={activeFilter}
           onFilterChange={handleFilterChange}
         />

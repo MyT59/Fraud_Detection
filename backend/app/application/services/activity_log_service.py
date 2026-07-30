@@ -1,6 +1,7 @@
 from app.infrastructure.repositories.activity_log_repository import ActivityLogRepository
 from app.presentation.schemas.activity_log_schema import ActivityLogPaginatedResponse, ActivityLogResponse
 from app.infrastructure.database.models.activity_log_model import ActivityLog
+from app.core.rbac import get_role_name
 
 def log_activity(
     db,
@@ -47,7 +48,7 @@ def get_activity_logs(
     search=None,
 ):
     repo = ActivityLogRepository(db)
-    role = current_admin.role.role_name
+    role = get_role_name(current_admin)
     page = (skip // limit) + 1 if limit > 0 else 1
 
     if role in ["SUPER_ADMIN", "RISK_MANAGER"]:
@@ -91,3 +92,15 @@ def get_activity_logs(
         limit=limit,
         items=items,
     )
+
+
+def get_activity_log_summary(db, current_admin):
+    """Return exact action counts for the caller's permitted log scope."""
+    repo = ActivityLogRepository(db)
+    role = get_role_name(current_admin)
+    admin_id = None if role in ["SUPER_ADMIN", "RISK_MANAGER"] else current_admin.id
+    action_counts = repo.get_action_counts(admin_id=admin_id)
+    return {
+        "total": sum(action_counts.values()),
+        "action_counts": action_counts,
+    }

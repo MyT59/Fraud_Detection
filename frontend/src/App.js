@@ -5,7 +5,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { storage } from "./services/apiService";
+import { api, storage } from "./services/apiService";
 import { authService } from "./services/AuthService"; // ✅ FIX: dari AuthService
 
 import Navbar from "./components/Navbar";
@@ -26,6 +26,7 @@ import ActivityTimeline from "./pages/ActivityTimeline";
 import RetrainSchedule from "./pages/RetrainSchedule";
 import ChangePassword from "./pages/ChangePassword";
 import Login from "./pages/Login";
+import TransactionSimulator from "./pages/TransactionSimulator";
 import PageLoader from "./components/common/PageLoader";
 import { getRoleLabel } from "./utils/roleUi";
 import "./App.css";
@@ -43,14 +44,10 @@ const useAuthValidator = () => {
         return;
       }
       try {
-        const me = await fetch(
-          `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/accounts/me`,
-          {
-            headers: {
-              Authorization: `Bearer ${storage.getAccessToken()}`,
-            },
-          },
-        );
+        const me = {
+          ok: true,
+          json: () => api.get("/accounts/me"),
+        };
         if (!me.ok) {
           // Token invalid/expired → clear
           storage.clear();
@@ -242,6 +239,10 @@ function App() {
                     <Routes>
                       <Route path="/" element={<Dashboard />} />
                       <Route path="/dashboard" element={<Dashboard />} />
+                      <Route
+                        path="/transaction-simulator"
+                        element={<TransactionSimulator />}
+                      />
                       <Route path="/transactions" element={<Transactions />} />
                       <Route path="/analytics" element={<Analytics />} />
                       <Route

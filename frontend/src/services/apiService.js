@@ -172,6 +172,8 @@ export const api = {
   del: (endpoint, options = {}) => request("DELETE", endpoint, null, options),
   delete: (endpoint, options = {}) =>
     request("DELETE", endpoint, null, options),
+  deleteWithBody: (endpoint, body, options = {}) =>
+    request("DELETE", endpoint, body, options),
 
   postForm: async (endpoint, formData, options = {}) => {
     const url = `${API_BASE}${endpoint}`;

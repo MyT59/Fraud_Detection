@@ -19,6 +19,19 @@ class BlacklistTypeEnum(str, enum.Enum):
     VIRTUAL_ACCOUNT_NUMBER = "VIRTUAL_ACCOUNT_NUMBER"
 
 
+# Types that are actually evaluated by blacklist_cache.find_match_from_cache.
+# Keep legacy enum values above for existing database rows, but reject them for
+# newly created/imported entries instead of accepting entries that can never hit.
+BLACKLIST_ENGINE_TYPES = frozenset({
+    BlacklistTypeEnum.USER_ID,
+    BlacklistTypeEnum.CUSTOMER_ID,
+    BlacklistTypeEnum.ACCOUNT_NUMBER,
+    BlacklistTypeEnum.TERMINAL_ID,
+    BlacklistTypeEnum.IP_ADDRESS,
+    BlacklistTypeEnum.MERCHANT_ID,
+})
+
+
 class TransactionStatusEnum(str, enum.Enum):
     FLAGGED = "FLAGGED"
     PENDING = "PENDING"  # Legacy DB value; normalized to FLAGGED in API responses.
@@ -101,6 +114,7 @@ class ActivityActionEnum(str, enum.Enum):
     ACCOUNT_LOCKED = "ACCOUNT_LOCKED"
     ACCOUNT_ACTIVATED = "ACCOUNT_ACTIVATED"
     ACCOUNT_UPDATED = "ACCOUNT_UPDATED"
+    ACCOUNT_DELETED = "ACCOUNT_DELETED"
     PASSWORD_CHANGED = "PASSWORD_CHANGED"
     PASSWORD_RESET = "PASSWORD_RESET"
 

@@ -1,20 +1,19 @@
 """
 pattern_learning_service.py
 ===========================
-P4: save_generated_patterns() memanggil invalidate_pattern_cache()
-setelah insert agar cache FraudPattern di-refresh pada transaksi berikutnya.
+Pattern candidates are staged in the caller's transaction so model/history
+changes and audit logs can be committed atomically.
 """
 
 from app.infrastructure.database.enums import PatternSourceEnum
 from datetime import timedelta
-from sqlalchemy import func, distinct
+from sqlalchemy import func, distinct, text
 import json
 import hashlib
 
 from app.infrastructure.database.models.manual_review_model import ManualReview
 from app.infrastructure.database.models.transaction_model import Transaction
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
-from app.application.cache.fraud_cache import invalidate_pattern_cache
 from app.core.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
@@ -231,15 +230,55 @@ def generate_rules_hash(rules: dict):
     return hashlib.md5(normalized.encode()).hexdigest()
 
 
+def find_duplicate_pattern(
+    db,
+    rules_hash: str,
+    service_source: str,
+    exclude_id: int | None = None,
+    pattern_rules: dict | None = None,
+):
+    """Serialize duplicate checks per hash/service without changing the table."""
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        lock_key = int(rules_hash[:16], 16)
+        if lock_key >= 2**63:
+            lock_key -= 2**64
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_key)"),
+            {"lock_key": lock_key},
+        )
+
+    query = db.query(FraudPattern).filter(
+        FraudPattern.rules_hash == rules_hash,
+        FraudPattern.service_source == service_source,
+        FraudPattern.is_deleted == False,
+    )
+    if exclude_id is not None:
+        query = query.filter(FraudPattern.id != exclude_id)
+    duplicate = query.first()
+    if duplicate or pattern_rules is None:
+        return duplicate
+
+    legacy_query = db.query(FraudPattern).filter(
+        FraudPattern.rules_hash.is_(None),
+        FraudPattern.service_source == service_source,
+        FraudPattern.is_deleted == False,
+    )
+    if exclude_id is not None:
+        legacy_query = legacy_query.filter(FraudPattern.id != exclude_id)
+    for legacy_pattern in legacy_query.all():
+        if generate_rules_hash(legacy_pattern.pattern_rules) == rules_hash:
+            legacy_pattern.rules_hash = rules_hash
+            return legacy_pattern
+    return None
+
+
 @log_performance(label="PatternLearning.save_generated_patterns")
 def save_generated_patterns(db, patterns, source=PatternSourceEnum.MANUAL_CREATE):
     if not patterns:
         return 0
 
-    created_count    = 0
-    existing_patterns = db.query(FraudPattern.rules_hash, FraudPattern.service_source).all()
-    existing_map     = {(p.rules_hash, p.service_source): True for p in existing_patterns if p.rules_hash}
-    new_seen         = set()
+    created_count = 0
+    new_seen = set()
 
     for p in patterns:
         rules      = p["pattern_rules"]
@@ -247,7 +286,15 @@ def save_generated_patterns(db, patterns, source=PatternSourceEnum.MANUAL_CREATE
         service    = p.get("service_source", "ALL")
         key        = (rules_hash, service)
 
-        if key in existing_map or key in new_seen:
+        if key in new_seen:
+            continue
+
+        if find_duplicate_pattern(
+            db,
+            rules_hash,
+            service,
+            pattern_rules=rules,
+        ):
             continue
 
         new_seen.add(key)
@@ -269,9 +316,6 @@ def save_generated_patterns(db, patterns, source=PatternSourceEnum.MANUAL_CREATE
         db.add(new_pattern)
         created_count += 1
 
-    db.commit()
-
-    if created_count > 0:
-        invalidate_pattern_cache()   # ← cache invalidation
+    db.flush()
 
     return created_count

@@ -14,7 +14,10 @@ logger = get_logger(__name__)
 @log_performance
 def create_session(db, admin, access_token, refresh_token, ip, user_agent):
     repo = UserSessionRepository(db)
-    repo.deactivate_current_sessions(admin.id)
+    db.query(UserSession).filter(
+        UserSession.admin_id == admin.id,
+        UserSession.is_active == True,
+    ).update({"is_active": False, "is_current": False})
 
     device, browser = parse_device(user_agent)
 
@@ -29,15 +32,6 @@ def create_session(db, admin, access_token, refresh_token, ip, user_agent):
         is_current=True,
         last_used_at=datetime.now(timezone.utc)
     )
-
-    MAX_SESSIONS = 3
-    sessions = repo.get_active_sessions(admin.id)
-
-    if len(sessions) >= MAX_SESSIONS:
-        oldest = sorted(sessions, key=lambda x: x.created_at)[0]
-        oldest.is_active = False
-        oldest.is_current = False
-        db.flush() 
 
     return repo.create(session)
 
@@ -63,35 +57,41 @@ def get_sessions(db, current_admin):
 def revoke_session(db, session_id, current_admin):
     repo = UserSessionRepository(db)
 
-    # Guard: tidak boleh revoke session yang sedang aktif dipakai
-    session_record = db.query(UserSession).filter(UserSession.id == session_id).first()
+    session_record = db.query(UserSession).filter(
+        UserSession.id == session_id,
+        UserSession.admin_id == current_admin.id,
+        UserSession.is_active == True,
+    ).first()
+    if not session_record:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Active session not found")
 
-    if session_record and session_record.is_current:
+    # Guard: tidak boleh revoke session yang sedang aktif dipakai
+    if session_record.is_current:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Cannot revoke your current active session")
     
     repo.revoke(session_id, current_admin.id)
     db.flush()
 
-    if session_record:
-        # AUDIT: Catat administrative forced logout ke log 
-        log_activity(
-            db=db,
-            admin=current_admin, 
-            action_type=ActivityActionEnum.SESSION_REVOKED,
-            module_source=EventSourceEnum.AUTH,
-            severity=SeverityLevelEnum.WARNING, 
-            target_type="SESSION",
-            target_id=str(session_id),
-            ip_address=session_record.ip_address,
-            device=session_record.device,
-            browser=session_record.browser,
-            details={
-                "target_revoked_admin_id": session_record.admin_id,
-                "session_id": session_id,
-                "reason": "Forced administrative session termination via management dashboard"
-            }
-        )
+    # AUDIT: Catat administrative forced logout ke log
+    log_activity(
+        db=db,
+        admin=current_admin,
+        action_type=ActivityActionEnum.SESSION_REVOKED,
+        module_source=EventSourceEnum.AUTH,
+        severity=SeverityLevelEnum.WARNING,
+        target_type="SESSION",
+        target_id=str(session_id),
+        ip_address=session_record.ip_address,
+        device=session_record.device,
+        browser=session_record.browser,
+        details={
+            "target_revoked_admin_id": session_record.admin_id,
+            "session_id": session_id,
+            "reason": "Forced administrative session termination via management dashboard"
+        }
+    )
     
     # SINGLE TRANSACTION COMMIT
     db.commit()

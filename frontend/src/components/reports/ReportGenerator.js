@@ -505,8 +505,8 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
     if (isActivityLog) {
       // BE expect single action_type per request — kirim sebagai filter_criteria
       // Kalau ada multiple selections, kirim yang pertama saja (BE belum support array untuk activity log filter)
-      if (selectedActions.size === 1)
-        payload.action_type = [...selectedActions][0];
+      if (selectedActions.size > 0)
+        payload.action_types = [...selectedActions];
       if (moduleSource) payload.module_source = moduleSource;
       if (severity) payload.severity = severity;
     }

@@ -27,3 +27,8 @@ class ActivityLogPaginatedResponse(BaseModel):
     page: int
     limit: int
     items: List[ActivityLogResponse]
+
+
+class ActivityLogSummaryResponse(BaseModel):
+    total: int
+    action_counts: dict[str, int]

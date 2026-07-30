@@ -378,8 +378,285 @@ def generate_api_abuse() -> list[dict]:
 
 
 # ============================================================
+# ML SCENARIOS
+# REFUND_FLAG sengaja tidak disediakan karena Nusabill tidak punya fitur refund.
+# ============================================================
+def generate_ml_unknown_mixed_outlier() -> list[dict]:
+    """
+    ML Unexplained Anomaly: kombinasi nilai langka tanpa menyalakan heuristic
+    Nusabill yang dikenal. Hasil tetap bergantung pada model aktif.
+    """
+    now = datetime.now(timezone.utc)
+    inv = _base_invoice(time_override=now)
+    inv.update(
+        {
+            "tanggal_tagihan": now - timedelta(days=365),
+            "tanggal_pembayaran": now,
+            "total_tagihan": 4_900_000,
+            "payment_amount": 4_900_000,
+            "channel": "KIOSK_OFFLINE_UNSEEN",
+            "status_tagihan": "belum_bayar",
+            "sof": "UNSEEN_SETTLEMENT_RAIL",
+            "kode_pembayaran": "PAY-ML-UNSEEN-999",
+        }
+    )
+    return [inv]
+
+
+# ============================================================
 # PUBLIC API
 # ============================================================
+def get_scenario_catalog() -> dict[str, dict]:
+    """Metadata scenario pattern aktif; diselaraskan dengan fraud_patterns."""
+    return {
+        "normal": {
+            "title": "Nusabill - Normal Invoices",
+            "category": "Baseline",
+            "description": "Dua puluh pembayaran invoice normal ",
+            "target_engines": [],
+            "trigger_conditions": [],
+            "expected_result": "SAFE",
+            "transaction_count": 20,
+        },
+        "blacklist_customer": {
+            "title": "Nusabill - Blacklist CUSTOMER_ID",
+            "category": "Blacklist",
+            "description": "Pembayaran dilakukan oleh customer ID yang diblacklist.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["customer_id == 'CUST-BL-00001'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "blacklist_ip": {
+            "title": "Nusabill - Blacklist IP_ADDRESS",
+            "category": "Blacklist",
+            "description": "Pembayaran berasal dari alamat IP yang diblacklist.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["ip_address == '99.99.99.99'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "blacklist_merchant": {
+            "title": "Nusabill - Blacklist MERCHANT_ID",
+            "category": "Blacklist",
+            "description": "Pembayaran memakai kode pembayaran merchant yang diblacklist.",
+            "target_engines": ["Blacklist Engine"],
+            "trigger_conditions": ["kode_pembayaran == 'PAY-BL-00001'"],
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "smurfing": {
+            "title": "Nusabill - High-Velocity Split Payment Anomaly (Smurfing)",
+            "category": "Money Laundering & Split Transaction",
+            "description": (
+                "Enam pembayaran dari customer yang sama dengan akumulasi "
+                "lebih dari Rp24.999.998 dalam window delapan menit."
+            ),
+            "target_engines": ["Pattern Engine"],
+            "trigger_conditions": [
+                "tx_count >= 5",
+                "total_amount >= 24,999,998 dalam 8 menit",
+            ],
+            "fraud_pattern": {
+                "id": 3,
+                "risk_score": 80,
+                "priority": 7,
+                "action": "REVIEW",
+                "logic": "AND",
+                "time_window_minutes": 8,
+            },
+            "expected_result": "UNDER_REVIEW",
+            "transaction_count": 6,
+        },
+        "fake_invoice_blast": {
+            "title": "Nusabill - Tuned Fake Invoice Blast Detection (Low Nominal Trap)",
+            "category": "Billing Scam & Bulk Invoicing",
+            "description": (
+                "Dua puluh dua invoice untuk nama customer berbeda dengan "
+                "pembayaran minimal Rp250.000 dalam enam menit."
+            ),
+            "target_engines": ["Pattern Engine"],
+            "trigger_conditions": [
+                "distinct_customer_count >= 20",
+                "amount >= 250,000 dalam 6 menit",
+            ],
+            "fraud_pattern": {
+                "id": 6,
+                "risk_score": 85,
+                "priority": 5,
+                "action": "REVIEW",
+                "logic": "AND",
+                "time_window_minutes": 6,
+            },
+            "expected_result": "UNDER_REVIEW",
+            "transaction_count": 22,
+        },
+        "fan_out_spam": {
+            "title": "Nusabill - Fan-Out Spam (Fake Invoice Mass Blast)",
+            "category": "Phishing & Spam",
+            "description": (
+                "Satu customer ID digunakan untuk dua puluh dua nama customer "
+                "berbeda dan sedikitnya dua puluh transaksi dalam lima menit."
+            ),
+            "target_engines": ["Pattern Engine"],
+            "trigger_conditions": [
+                "distinct_customer_count >= 20",
+                "tx_count >= 20 dalam 5 menit",
+            ],
+            "fraud_pattern": {
+                "id": 12,
+                "risk_score": 80,
+                "priority": 7,
+                "action": "REVIEW",
+                "logic": "AND",
+                "time_window_minutes": 5,
+            },
+            "expected_result": "UNDER_REVIEW",
+            "transaction_count": 22,
+        },
+        "api_abuse": {
+            "title": "Nusabill - Velocity Burst (API Abuse / Bulk Anomaly)",
+            "category": "System Abuse & Rate Limit Evasion",
+            "description": (
+                "Seratus lima transaksi dari customer yang sama melalui "
+                "channel API dalam window lima menit."
+            ),
+            "target_engines": ["Pattern Engine"],
+            "trigger_conditions": ["tx_count >= 100 dalam 5 menit"],
+            "fraud_pattern": {
+                "id": 13,
+                "risk_score": 75,
+                "priority": 7,
+                "action": "REVIEW",
+                "logic": "AND",
+                "time_window_minutes": 5,
+            },
+            "expected_result": "UNDER_REVIEW",
+            "transaction_count": 105,
+        },
+        "ml_burst_payment": {
+            "title": "ML - Burst Payment",
+            "category": "ML Feature Anomaly",
+            "description": "Pembayaran berulang dari customer yang sama dengan gap maksimum lima menit.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": ["PAYMENT_GAP_MINUTES <= 5", "BURST_FLAG == 1"],
+            "ml_pattern": {"key": "burst_payment_pattern"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 6,
+        },
+        "ml_payment_spike": {
+            "title": "ML - Unusual High Payment",
+            "category": "ML Feature Anomaly",
+            "description": "Nominal pembayaran jauh melampaui nilai invoice.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": ["PAYMENT_TO_BILL_RATIO > 4"],
+            "ml_pattern": {"key": "payment_spike"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 3,
+        },
+        "ml_underpayment": {
+            "title": "ML - Underpayment Anomaly",
+            "category": "ML Feature Anomaly",
+            "description": "Pembayaran kurang dari tiga puluh persen nilai invoice.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": ["PAYMENT_TO_BILL_RATIO < 0.3"],
+            "ml_pattern": {"key": "underpayment"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 3,
+        },
+        "ml_channel_switch_to_api": {
+            "title": "ML - Sudden Channel Switch to API",
+            "category": "ML Feature Anomaly",
+            "description": "Customer beralih mendadak dari channel biasa ke API.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": ["previous channel != API", "current channel == API"],
+            "ml_pattern": {"key": "sudden_channel_switch_to_api"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 4,
+        },
+        "ml_early_payment_anomaly": {
+            "title": "ML - Early Payment Date Anomaly",
+            "category": "ML Feature Anomaly",
+            "description": "Pembayaran dilakukan lebih dari satu hari sebelum tanggal invoice.",
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": ["PAYMENT_DELAY_DAYS < -1"],
+            "ml_pattern": {"key": "payment_date_anomaly"},
+            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "transaction_count": 3,
+        },
+        "ml_unknown_mixed_outlier": {
+            # Key lama dipertahankan agar request/history simulator tetap kompatibel.
+            "title": "ML - Unexplained Anomaly",
+            "category": "Unexplained ML Anomaly",
+            "description": (
+                "ML menilai kombinasi umur tagihan, channel, payment rail, "
+                "merchant, dan nominal sebagai anomali, tetapi belum ada "
+                "pattern bernama yang menjelaskannya."
+            ),
+            "target_engines": ["ML Engine"],
+            "trigger_conditions": [
+                "kombinasi feature berada di luar distribusi training",
+                "is_anomaly == true dan patterns == []",
+            ],
+            "ml_pattern": {"key": None, "unknown": True},
+            "expected_result": "ML ANOMALY (MODEL-DEPENDENT)",
+            "transaction_count": 1,
+        },
+        "rule_nusabill_repayment_block": {
+            "title": "Nusabill - Penolakan Pembayaran Invoice Lunas",
+            "category": "VELOCITY",
+            "description": (
+                "Menolak transaksi Virtual Account yang mencoba membayar "
+                "invoice berstatus PAID untuk mencegah double payment."
+            ),
+            "target_engines": ["Rule Engine"],
+            "trigger_conditions": [
+                "transaction_details.bill_status = 'PAID'",
+            ],
+            "global_rule": {
+                "id": 4,
+                "rule_key": "rule_nusabill_repayment_block",
+                "rule_group": "VELOCITY",
+                "action": "BLOCK",
+                "severity": "CRITICAL",
+                "priority": 95,
+                "rule_config": {
+                    "field": "transaction_details.bill_status",
+                    "value": "PAID",
+                    "operator": "=",
+                },
+            },
+            "expected_result": "FRAUD",
+            "transaction_count": 1,
+        },
+        "rule_nusabill_max_unverified_bill": {
+            "title": "Nusabill - Batas Maksimum Tagihan Tanpa KYC",
+            "category": "KYC_COMPLIANCE",
+            "description": (
+                "Menandai pembayaran Virtual Account di atas Rp5.000.000 "
+                "untuk ditinjau sesuai kebijakan verifikasi KYC biller."
+            ),
+            "target_engines": ["Rule Engine"],
+            "trigger_conditions": ["amount > 5,000,000"],
+            "global_rule": {
+                "id": 5,
+                "rule_key": "rule_nusabill_max_unverified_bill",
+                "rule_group": "KYC_COMPLIANCE",
+                "action": "REVIEW",
+                "severity": "MEDIUM",
+                "priority": 50,
+                "rule_config": {
+                    "field": "amount",
+                    "value": 5_000_000,
+                    "operator": ">",
+                },
+            },
+            "expected_result": "UNDER_REVIEW",
+            "transaction_count": 1,
+        },
+    }
+
+
 def get_all_scenarios() -> dict[str, list[dict]]:
     """
     Kembalikan semua skenario simulasi dalam satu dict.
@@ -387,23 +664,22 @@ def get_all_scenarios() -> dict[str, list[dict]]:
     lalu diproses via DataAggregationService.process_nusabill().
     """
     return {
-        "normal":                 generate_normal(20),
-        "blacklist_ip":           generate_blacklist_ip(),
-        "blacklist_customer":     generate_blacklist_customer(),
-        "blacklist_merchant":     generate_blacklist_merchant(),
-        "fan_out_spam":           generate_fan_out_spam(),
-        "burst_payment":          generate_burst_payment(),
-        "high_spike":             generate_high_spike(),
-        "underpay":               generate_underpay(),
-        "channel_switch":         generate_channel_switch(),
-        "early_payment_anomaly":  generate_early_payment_anomaly(),
-        "velocity_burst":         generate_velocity_burst(),
-        "smurfing":               generate_smurfing(),
-        "fake_invoice_blast":     generate_fake_invoice_blast(),
-        "high_amount":            generate_high_amount(),
-        "api_abuse":              generate_api_abuse(),
-        "rule_nusabill_repayment_block":       generate_rule_nusabill_repayment_block(),
-        "rule_nusabill_max_unverified_bill":   generate_rule_nusabill_max_unverified_bill(),
+        "normal": generate_normal(),
+        "blacklist_customer": generate_blacklist_customer(),
+        "blacklist_ip": generate_blacklist_ip(),
+        "blacklist_merchant": generate_blacklist_merchant(),
+        "smurfing": generate_smurfing(),
+        "fake_invoice_blast": generate_fake_invoice_blast(),
+        "fan_out_spam": generate_fan_out_spam(),
+        "api_abuse": generate_api_abuse(),
+        "ml_burst_payment": generate_burst_payment(),
+        "ml_payment_spike": generate_high_spike(),
+        "ml_underpayment": generate_underpay(),
+        "ml_channel_switch_to_api": generate_channel_switch(),
+        "ml_early_payment_anomaly": generate_early_payment_anomaly(),
+        "ml_unknown_mixed_outlier": generate_ml_unknown_mixed_outlier(),
+        "rule_nusabill_repayment_block": generate_rule_nusabill_repayment_block(),
+        "rule_nusabill_max_unverified_bill": generate_rule_nusabill_max_unverified_bill(),
     }
 
 

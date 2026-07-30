@@ -19,6 +19,8 @@ const fmtRelative = (isoString) => {
 
 const ActivitySidePanel = ({
   activities = [],
+  groupCounts: providedCounts,
+  totalCount,
   activeFilter,
   onFilterChange,
 }) => {
@@ -68,8 +70,8 @@ const ActivitySidePanel = ({
                 </div>
                 <span className="type-filter-count">
                   {f.value === "all"
-                    ? activities.length
-                    : groupCounts[f.value] || 0}
+                    ? totalCount ?? activities.length
+                    : (providedCounts || groupCounts)[f.value] || 0}
                 </span>
               </div>
             ))}

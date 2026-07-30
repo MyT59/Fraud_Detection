@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import api, { authService } from "../../services/apiService";
+import api, { authService, storage } from "../../services/apiService";
 
 const SecuritySettings = () => {
   const [sessions, setSessions] = useState([]);
@@ -59,8 +59,14 @@ const SecuritySettings = () => {
       setPasswordError("Password baru tidak cocok!");
       return;
     }
-    if (passwordData.newPassword.length < 8) {
-      setPasswordError("Password minimal 8 karakter.");
+    if (
+      passwordData.newPassword.length < 8 ||
+      !/[A-Z]/.test(passwordData.newPassword) ||
+      !/[a-z]/.test(passwordData.newPassword) ||
+      !/[0-9]/.test(passwordData.newPassword) ||
+      !/[@$!%*?&]/.test(passwordData.newPassword)
+    ) {
+      setPasswordError("Password harus minimal 8 karakter serta memuat huruf besar/kecil, angka, dan simbol @$!%*?&.");
       return;
     }
 
@@ -72,13 +78,8 @@ const SecuritySettings = () => {
       );
       setPasswordSuccess(true);
       setTimeout(() => {
-        setPasswordSuccess(false);
-        setShowPasswordModal(false);
-        setPasswordData({
-          currentPassword: "",
-          newPassword: "",
-          confirmPassword: "",
-        });
+        storage.clear();
+        window.location.href = "/login?reason=password-changed";
       }, 1500);
     } catch (err) {
       setPasswordError(err.message || "Gagal mengubah password. Coba lagi.");
@@ -310,7 +311,7 @@ const SecuritySettings = () => {
                     minLength={8}
                     disabled={passwordSaving || passwordSuccess}
                   />
-                  <small className="text-muted">Minimal 8 karakter</small>
+                  <small className="text-muted">Minimal 8 karakter; wajib huruf besar/kecil, angka, dan simbol @$!%*?&.</small>
                 </div>
                 <div className="mb-3">
                   <label className="form-label">Confirm New Password</label>

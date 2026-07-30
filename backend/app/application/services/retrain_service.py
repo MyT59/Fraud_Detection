@@ -1,5 +1,4 @@
 import hashlib
-from sqlite3 import IntegrityError
 import logging
 import pandas as pd
 import json
@@ -10,6 +9,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from fastapi import UploadFile, HTTPException
 
 from app.paths import MODELS_DIR, DATA_DIR
@@ -27,7 +27,7 @@ def log_performance(func):
 from app.infrastructure.ml.domain_detector import detect_domain
 from app.infrastructure.ml.feature_builder import build_features
 from app.infrastructure.ml.training import train_from_dataframe 
-from app.infrastructure.ml.model_loader import load_isolation_model, load_isolation_meta, DOMAIN_ISO_CONFIG
+from app.infrastructure.ml.model_loader import DOMAIN_ISO_CONFIG, invalidate_model_cache
 from app.infrastructure.database.models.ml_feedback_log_model import MLFeedbackLog
 from app.application.services.pattern_discovery_service import PatternDiscoveryService
 from app.application.services.dataset_retention_service import DatasetRetentionService
@@ -72,15 +72,26 @@ class RetrainService:
         )
         self.db.add(new_log)
 
-    def _register_model(self, domain: str, model_path: str, anomalies_found: int, total_records: int, training_meta: dict = None) -> MLModel:
-        """Helper to handle model versioning, active switching, and metric tracking."""
+    def _register_model(
+        self,
+        domain: str,
+        model_path: str,
+        anomalies_found: int,
+        total_records: int,
+        training_meta: dict = None,
+        version_name: str | None = None,
+    ) -> MLModel:
+        """Stage model activation in the current transaction without committing it."""
         
         self.db.query(MLModel).filter(
             MLModel.target_service == domain,
             MLModel.is_active == True
         ).update({"is_active": False})
 
-        contamination = DOMAIN_ISO_CONFIG.get(domain, {}).get("contamination", 0.05)
+        contamination = (training_meta or {}).get(
+            "contamination",
+            DOMAIN_ISO_CONFIG.get(domain, {}).get("contamination", 0.05),
+        )
         anomaly_rate = round(anomalies_found / total_records, 4) if total_records > 0 else 0.0
         
         # Ambil thresholds dari meta training jika tersedia
@@ -90,7 +101,7 @@ class RetrainService:
         elif training_meta and "meta" in training_meta and "thresholds" in training_meta["meta"]:
             thresholds = training_meta["meta"]["thresholds"]
 
-        version_str = f"{domain}_v{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+        version_str = version_name or f"{domain}_v{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
 
         new_model = MLModel(
             version_name=version_str,
@@ -107,20 +118,32 @@ class RetrainService:
             }
         )
 
+        self.db.add(new_model)
         try:
-            self.db.add(new_model)
-            self.db.commit()
+            self.db.flush()
         except IntegrityError:
-            self.db.rollback()
-            
-            unique_version = f"{domain}_v{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-            new_model.version_name = unique_version
-            
-            self.db.add(new_model)
-            self.db.commit()
-            
-        self.db.refresh(new_model)
+            logger.exception("Model registration failed due to an integrity constraint")
+            raise
+
         return new_model
+
+    @staticmethod
+    def _feedback_to_training_row(feedback: MLFeedbackLog) -> Dict[str, Any]:
+        """Build a training row from the columns available on MLFeedbackLog."""
+        row = dict(feedback.transaction_details or {})
+        excluded = {
+            "id",
+            "review_id",
+            "transaction_id",
+            "transaction_details",
+            "score_breakdown",
+            "is_used_for_training",
+            "created_at",
+        }
+        for column in feedback.__table__.columns:
+            if column.name not in excluded:
+                row[column.name] = getattr(feedback, column.name)
+        return row
     
     # ==========================================
     # 📅 SCHEDULE CRUD OPERATIONS
@@ -291,10 +314,12 @@ class RetrainService:
             # Ambil nilai contamination sesuai domain
             contamination = DOMAIN_ISO_CONFIG.get(domain, {}).get("contamination", 0.05)
             # Gunakan training.py versi baru (Mendukung StandardScaler & Pipeline)
+            model_version = f"{domain}_v{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
             training_result = train_from_dataframe(
                 domain=domain,
                 df=feature_df, 
-                contamination=contamination
+                contamination=contamination,
+                model_version=model_version,
             )
             
             # Pattern Discovery
@@ -308,7 +333,8 @@ class RetrainService:
                 model_path=training_result["model_path"],
                 anomalies_found=training_result["anomalies_found"],
                 total_records=row_count,
-                training_meta=training_result.get("meta")
+                training_meta=training_result.get("meta"),
+                version_name=model_version,
             )
 
             # 5. Catat History (Menggunakan model_id dan dataset_id yang baru)
@@ -319,7 +345,8 @@ class RetrainService:
                 details={
                     "anomalies_found": training_result["anomalies_found"],
                     "new_patterns_discovered": new_patterns_count,
-                    "model_path": training_result["model_path"]
+                    "model_path": training_result["model_path"],
+                    "model_version": model_version,
                 },
                 admin_id=admin_id, 
                 dataset_id=dataset_record.id, 
@@ -338,6 +365,7 @@ class RetrainService:
 
             # Final Commit untuk semua rangkaian proses
             self.db.commit()
+            invalidate_model_cache(domain)
             
             return {
                 "status": "success", 
@@ -370,7 +398,13 @@ class RetrainService:
             raise HTTPException(status_code=500, detail=f"Training gagal: {str(e)}")
 
     @log_performance
-    def execute_retrain(self, domain: str, schedule_id: Optional[int] = None, trigger_source: str = "MANUAL", admin_id: Optional[int] = None) -> Dict[str, Any]:
+    def execute_retrain(
+        self,
+        domain: str,
+        schedule_id: Optional[Any] = None,
+        trigger_source: str = "MANUAL",
+        admin_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """
         Main entry point untuk menjalankan proses retraining dengan data bersih.
         """
@@ -378,6 +412,7 @@ class RetrainService:
 
         try:
             # 1. Validasi Domain
+            domain = domain.lower()
             if domain not in ["agenusa", "nusabill"]:
                 raise HTTPException(status_code=400, detail=f"Domain tidak dikenal: {domain}")
 
@@ -391,12 +426,12 @@ class RetrainService:
 
             # 3. Ambil Data Tambahan dari DB (Feedback)
             feedbacks = self.db.query(MLFeedbackLog).filter(
-                MLFeedbackLog.domain == domain,
-                MLFeedbackLog.is_used_in_retrain == False
+                MLFeedbackLog.service_source == domain.upper(),
+                MLFeedbackLog.is_used_for_training == False
             ).all()
 
             if feedbacks:
-                fb_data = [fb.features_snapshot for fb in feedbacks]
+                fb_data = [self._feedback_to_training_row(fb) for fb in feedbacks]
                 df_fb = pd.DataFrame(fb_data)
                 df_combined = pd.concat([df_base, df_fb], ignore_index=True)
             else:
@@ -417,26 +452,25 @@ class RetrainService:
 
             # 5. Jalankan Pelatihan
             contamination_rate = 0.05
+            model_version = f"{domain}_v{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
             training_result = train_from_dataframe(
                 domain=domain,
-                feature_df=feature_df,
-                contamination=contamination_rate
+                df=feature_df,
+                contamination=contamination_rate,
+                model_version=model_version,
             )
 
             # 6. Jalankan Pattern Discovery Auditing (Opsional)
             new_patterns_count = 0
             try:
-                trained_model = load_isolation_model(domain)
-                config = DOMAIN_ISO_CONFIG[domain]
-                x_eval = feature_df.drop(columns=["is_fraud", *config["drop_cols"]], errors="ignore")
-                
-                preds = trained_model.predict(x_eval)
-                feature_df["IS_ANOMALY"] = (preds == -1).astype(int)
-                anomaly_df = feature_df[feature_df["IS_ANOMALY"] == 1]
-
-                new_patterns_count = self.pattern_discovery.discover_patterns_from_anomalies(
-                    domain=domain,
-                    anomaly_df=anomaly_df
+                # Gunakan anomaly_df dari model yang baru saja dilatih. Jangan
+                # load model aktif dari cache karena model tersebut bisa masih
+                # versi sebelumnya.
+                anomaly_df = training_result["anomaly_df"]
+                new_patterns_count = self.pattern_discovery.extract_and_save_patterns(
+                    self.db,
+                    domain,
+                    anomaly_df,
                 )
             except Exception as e:
                 logger.warning(f"Pattern discovery skipped or failed during retrain: {str(e)}")
@@ -445,8 +479,16 @@ class RetrainService:
             # 7. Tandai Feedback di DB bahwa sudah sukses dipakai latihan
             if feedbacks:
                 for fb in feedbacks:
-                    fb.is_used_in_retrain = True
-                    fb.retrained_at = datetime.now(timezone.utc)
+                    fb.is_used_for_training = True
+
+            new_model = self._register_model(
+                domain=domain,
+                model_path=training_result["model_path"],
+                anomalies_found=training_result.get("anomalies_found", 0),
+                total_records=len(df_combined),
+                training_meta=training_result.get("meta"),
+                version_name=model_version,
+            )
 
             # 8. Catat Histori ke Database Audit Trail
             details = {
@@ -456,6 +498,7 @@ class RetrainService:
                 "feedback_records_used": len(feedbacks),
                 "anomalies_found": training_result.get("anomalies_found", 0),
                 "new_patterns_discovered": new_patterns_count,
+                "model_version": model_version,
                 "duration_seconds": (datetime.now() - start_time).total_seconds()
             }
             
@@ -464,10 +507,12 @@ class RetrainService:
                 trigger_source=trigger_source,
                 status="SUCCESS",
                 details=details,
-                admin_id=admin_id
+                admin_id=admin_id,
+                model_id=new_model.id,
             )
             
             self.db.commit()
+            invalidate_model_cache(domain)
             return details
 
         except Exception as e:
@@ -572,7 +617,7 @@ class RetrainService:
             anomalies_found=details.get("anomalies_found", 0),
             new_patterns_count=details.get("new_patterns_discovered", 0),
             log_details=details,
-            model_version=datetime.now().strftime("%Y.%m.%d.%H%M%S%f"),
+            model_version=details.get("model_version") or datetime.now().strftime("%Y.%m.%d.%H%M%S%f"),
             dataset_id=dataset_id,
             model_id=model_id
         )

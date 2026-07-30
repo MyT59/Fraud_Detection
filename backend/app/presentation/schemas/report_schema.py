@@ -39,6 +39,7 @@ class ReportGenerateRequest(BaseModel):
 
     # filters — activity log
     action_type: Optional[str] = None
+    action_types: Optional[List[str]] = None
     module_source: Optional[str] = None
     severity: Optional[str] = None
 

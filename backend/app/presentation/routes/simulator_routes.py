@@ -37,6 +37,7 @@ from typing import Literal
 
 from app.application.services.simulator_service import (
     run_live_simulation,
+    reserve_simulation_service,
     stop_simulation_service,
     get_simulation_status_service,
     manual_input_agenusa,
@@ -47,8 +48,14 @@ from app.application.services.simulator_service import (
     reset_simulator_data,
 )
 from app.infrastructure.database.session import get_db
-from simulator.agenusa_generator import get_all_scenarios as agenusa_scenarios
-from simulator.nusabill_generator import get_all_scenarios as nusabill_scenarios
+from simulator.agenusa_generator import (
+    get_all_scenarios as agenusa_scenarios,
+    get_scenario_catalog as agenusa_scenario_catalog,
+)
+from simulator.nusabill_generator import (
+    get_all_scenarios as nusabill_scenarios,
+    get_scenario_catalog as nusabill_scenario_catalog,
+)
 
 from app.presentation.schemas.simulator_schema import (
     AgenusaManualInput,
@@ -72,7 +79,7 @@ router = APIRouter(prefix="/simulator", tags=["Simulator"])
 # di get_all_scenarios() pada masing-masing generator.
 # ─────────────────────────────────────────────────────────────────────────────
 
-_SCENARIO_CATALOG = {
+_LEGACY_SCENARIO_CATALOG = {
 
     # ══════════════════════════════════════════════════════════════════════
     # AGENUSA
@@ -675,6 +682,13 @@ _SCENARIO_CATALOG = {
     },
 }
 
+# Sumber aktif scenario dan metadata berada di masing-masing generator.
+# Catalog lama di atas dipertahankan sementara sebagai referensi historis.
+_SCENARIO_CATALOG = {
+    "agenusa": agenusa_scenario_catalog(),
+    "nusabill": nusabill_scenario_catalog(),
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # EXISTING: Live Simulation
@@ -687,7 +701,7 @@ class SimulateRequest(BaseModel):
 
 @router.post("/generate", summary="Jalankan live simulation (background)")
 async def generate_live(payload: SimulateRequest, background_tasks: BackgroundTasks):
-    if get_simulation_status_service():
+    if not reserve_simulation_service():
         raise HTTPException(
             status_code=400,
             detail="Simulasi sedang berjalan. Harap stop terlebih dahulu."
@@ -695,7 +709,8 @@ async def generate_live(payload: SimulateRequest, background_tasks: BackgroundTa
     background_tasks.add_task(run_live_simulation, payload.domain, payload.scenario)
     return {
         "status": "success",
-        "message": f"Live simulation started for domain: {payload.domain}"
+        "message": f"Live simulation started for domain: {payload.domain}",
+        "data": get_simulation_status_service(),
     }
 
 
@@ -711,17 +726,49 @@ async def stop_simulation():
 def get_simulation_status():
     return {
         "status": "success",
-        "data": {"is_running": get_simulation_status_service()}
+        "data": get_simulation_status_service()
     }
 
 
 @router.get("/scenarios", summary="List scenario yang tersedia")
 def list_scenarios():
+    agenusa_catalog = agenusa_scenario_catalog()
+    nusabill_catalog = nusabill_scenario_catalog()
+
+    def scenario_type(info: dict) -> str:
+        if info.get("category") == "Blacklist":
+            return "BLACKLIST"
+        if info.get("category") == "Baseline":
+            return "BASELINE"
+        if info.get("global_rule"):
+            return "RULE"
+        if info.get("ml_pattern"):
+            return "ML"
+        return "PATTERN"
+
     return {
         "status": "success",
         "data": {
             "agenusa": list(agenusa_scenarios().keys()),
             "nusabill": list(nusabill_scenarios().keys()),
+            "scenario_details": {
+                "agenusa": [
+                    {
+                        "key": key,
+                        "scenario_type": scenario_type(agenusa_catalog[key]),
+                        **agenusa_catalog[key],
+                    }
+                    for key in agenusa_catalog
+                ],
+                "nusabill": [
+                    {
+                        "key": key,
+                        "scenario_type": scenario_type(nusabill_catalog[key]),
+                        **nusabill_catalog[key],
+                    }
+                    for key in nusabill_catalog
+                ],
+            },
         }
     }
 
@@ -781,6 +828,32 @@ def preview_scenario(
             "service":            service.upper(),
             **info,
             "sample_transaction": sample_transaction,
+        },
+    }
+
+
+@router.get(
+    "/scenarios/{scenario_name}/transactions",
+    summary="Ambil transaksi scenario sebagai template Bulk",
+)
+def get_scenario_transactions(
+    scenario_name: str,
+    service: Literal["agenusa", "nusabill"] = "agenusa",
+):
+    scenarios = agenusa_scenarios() if service == "agenusa" else nusabill_scenarios()
+    transactions = scenarios.get(scenario_name)
+    if transactions is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Scenario '{scenario_name}' tidak ditemukan untuk service '{service}'.",
+        )
+    return {
+        "status": "success",
+        "data": {
+            "service": service,
+            "scenario": scenario_name,
+            "count": len(transactions),
+            "transactions": transactions,
         },
     }
 
@@ -857,7 +930,7 @@ async def manual_nusabill(
     response_model=BulkSimulateResponse,
     summary="Bulk input transaksi Agenusa",
     description=(
-        "Insert banyak transaksi Agenusa sekaligus (maks 100 per request). "
+        "Insert banyak transaksi Agenusa sekaligus (maks 150 per request). "
         "Gunakan `delay_ms=0` + `inject_anomaly='RAPID_FIRE'` untuk simulasi velocity attack. "
         "Set `stop_on_error=true` jika ingin berhenti saat ada 1 transaksi yang gagal."
     ),
@@ -878,10 +951,11 @@ async def bulk_agenusa(
 
     return BulkSimulateResponse(
         status="success",
-        message=f"Bulk Agenusa selesai: {result['succeeded']} sukses, {result['failed']} gagal.",
+        message=f"Bulk Agenusa selesai: {result['succeeded']} sukses, {result['failed']} gagal, {result['skipped']} dilewati.",
         total=result["total"],
         succeeded=result["succeeded"],
         failed=result["failed"],
+        skipped=result["skipped"],
         results=result["results"],
     )
 
@@ -895,7 +969,7 @@ async def bulk_agenusa(
     response_model=BulkSimulateResponse,
     summary="Bulk input transaksi Nusabill",
     description=(
-        "Insert banyak transaksi Nusabill sekaligus (maks 100 per request). "
+        "Insert banyak transaksi Nusabill sekaligus (maks 150 per request). "
         "Tiap item di list bisa punya `inject_anomaly` yang berbeda-beda "
         "untuk simulasi mix pattern dalam satu batch."
     ),
@@ -916,10 +990,11 @@ async def bulk_nusabill(
 
     return BulkSimulateResponse(
         status="success",
-        message=f"Bulk Nusabill selesai: {result['succeeded']} sukses, {result['failed']} gagal.",
+        message=f"Bulk Nusabill selesai: {result['succeeded']} sukses, {result['failed']} gagal, {result['skipped']} dilewati.",
         total=result["total"],
         succeeded=result["succeeded"],
         failed=result["failed"],
+        skipped=result["skipped"],
         results=result["results"],
     )
 

@@ -22,6 +22,10 @@ from ...core.logging import get_logger, log_performance
 logger = get_logger(__name__)
 
 
+def _default_model_version(domain: str) -> str:
+    return f"{domain}_v{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+
+
 def _build_pipeline(feature_df: pd.DataFrame, contamination: float) -> tuple[Pipeline, list[str], list[str]]:
     numeric_cols = [col for col in feature_df.columns if pd.api.types.is_numeric_dtype(feature_df[col])]
     categorical_cols = [col for col in feature_df.columns if not pd.api.types.is_numeric_dtype(feature_df[col])]
@@ -73,7 +77,13 @@ def _round_threshold(value: float, decimals: int = 4) -> float:
 
 
 @log_performance(label="ML.train_one")
-def train_one(domain: str, csv_path: Path, contamination: float, output_dir: Path | None = None) -> dict[str, Any]:
+def train_one(
+    domain: str,
+    csv_path: Path,
+    contamination: float,
+    output_dir: Path | None = None,
+    model_version: str | None = None,
+) -> dict[str, Any]:
     output_dir = MODELS_DIR if output_dir is None else output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -108,6 +118,7 @@ def train_one(domain: str, csv_path: Path, contamination: float, output_dir: Pat
     joblib.dump(pipeline, model_path)
 
     meta = {
+        "version": model_version or _default_model_version(domain),
         "domain": domain,
         "dataset": str(csv_path.relative_to(PROJECT_ROOT)),
         "rows": int(len(x)),
@@ -162,7 +173,13 @@ def train_all(output_dir: Path | None = None) -> dict[str, Any]:
     return summary
 
 @log_performance(label="ML.train_from_dataframe")
-def train_from_dataframe(domain: str, df: pd.DataFrame, contamination: float, output_dir: Path | None = None) -> dict[str, Any]:
+def train_from_dataframe(
+    domain: str,
+    df: pd.DataFrame,
+    contamination: float,
+    output_dir: Path | None = None,
+    model_version: str | None = None,
+) -> dict[str, Any]:
     """Fungsi khusus untuk Retrain Service yang mengirimkan Dataframe gabungan (CSV + DB)"""
     output_dir = MODELS_DIR if output_dir is None else output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -197,6 +214,7 @@ def train_from_dataframe(domain: str, df: pd.DataFrame, contamination: float, ou
     joblib.dump(pipeline, model_path)
 
     meta = {
+        "version": model_version or _default_model_version(domain),
         "domain": domain,
         "dataset": "retrain_hybrid_dataset",
         "rows": int(len(x)),

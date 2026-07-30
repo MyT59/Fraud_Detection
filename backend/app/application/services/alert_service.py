@@ -402,11 +402,7 @@ def update_alert_status_service(db, alert_id: int, status: str, user_id: int,
         alert.resolved_at = datetime.now(timezone.utc)
 
     alert.status = target_status
-    db.commit()
-    db.refresh(alert)
-
-    background_tasks.add_task(
-        log_activity,
+    log_activity(
         db=db,
         admin=None,
         action_type=ActivityActionEnum.ALERT_UPDATED,
@@ -416,6 +412,8 @@ def update_alert_status_service(db, alert_id: int, status: str, user_id: int,
         target_id=alert.id,
         details={"status": target_status, "updated_by": user_id}
     )
+    db.commit()
+    db.refresh(alert)
     return {"message": f"Status alert {alert.id} berhasil diupdate menjadi {target_status}"}
 
 

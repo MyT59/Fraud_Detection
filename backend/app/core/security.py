@@ -78,6 +78,10 @@ def get_current_user(
     # cek blacklist
     if is_blacklisted(token):
         raise HTTPException(status_code=401, detail="Token revoked")
+
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="Invalid token")
     
     session = db.query(UserSession)\
         .filter(UserSession.access_token == token, UserSession.is_active == True)\
@@ -97,14 +101,19 @@ def get_current_user(
     session.last_used_at = datetime.now(timezone.utc)
     db.commit()
 
-    payload = decode_token(token)
-
-    if not payload or payload.get("type") != "access":
-        raise HTTPException(status_code=401, detail="Invalid token")
-
     admin = db.query(Admin).filter(Admin.id == int(payload["sub"])).first()
 
     if not admin or not admin.is_active or getattr(admin, "is_deleted", False):
         raise HTTPException(status_code=401, detail="Invalid user")
+
+    temporary_password_paths = {"/accounts/me", "/accounts/change-password", "/logout"}
+    if (
+        getattr(admin, "is_password_temporary", False)
+        and request.url.path not in temporary_password_paths
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Password change is required before accessing this resource",
+        )
 
     return admin

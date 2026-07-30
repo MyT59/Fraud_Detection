@@ -1,7 +1,14 @@
 from pydantic import BaseModel, field_validator
 from typing import List, Optional
 from datetime import datetime
-from app.infrastructure.database.enums import BlacklistTypeEnum
+from app.infrastructure.database.enums import BLACKLIST_ENGINE_TYPES, BlacklistTypeEnum
+
+
+def validate_engine_supported_type(value: BlacklistTypeEnum) -> BlacklistTypeEnum:
+    if value not in BLACKLIST_ENGINE_TYPES:
+        supported = ", ".join(item.value for item in sorted(BLACKLIST_ENGINE_TYPES, key=lambda item: item.value))
+        raise ValueError(f"Blacklist type must be checked by the engine: {supported}")
+    return value
 
 
 class BlacklistCreateRequest(BaseModel):
@@ -9,6 +16,8 @@ class BlacklistCreateRequest(BaseModel):
     type: BlacklistTypeEnum
     service_scope: Optional[str] = "ALL"
     reason: str
+
+    _validate_type = field_validator("type")(validate_engine_supported_type)
 
 class BlacklistReviewSchema(BaseModel):
     review_note: str
@@ -47,6 +56,8 @@ class BlacklistBulkItem(BaseModel):
     type: BlacklistTypeEnum
     service_scope: Optional[str] = "ALL"
     reason: str
+
+    _validate_type = field_validator("type")(validate_engine_supported_type)
 
 class BlacklistBulkRequest(BaseModel):
     items: List[BlacklistBulkItem]

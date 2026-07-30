@@ -127,7 +127,27 @@ const SCOPE_ICONS = {
   NUSABILL: "bi-receipt",
 };
 
-const flatTypes = (scope) => TYPE_MAP[scope].flatMap((g) => g.types);
+const typeGroups = (scope) => {
+  const groups = TYPE_MAP[scope];
+  if (scope !== "NUSABILL") return groups;
+
+  return [
+    {
+      group: "Aktif dicek",
+      types: [
+        groups[0].types.find((type) => type.v === "CUSTOMER_ID"),
+        {
+          v: "IP_ADDRESS",
+          l: "IP Address",
+          hint: "Format IPv4/IPv6 - disimpan lowercase",
+          cs: false,
+        },
+      ],
+    },
+  ];
+};
+
+const flatTypes = (scope) => typeGroups(scope).flatMap((g) => g.types);
 
 const getTypeInfo = (scope, typeVal) =>
   flatTypes(scope).find((t) => t.v === typeVal) || null;
@@ -139,17 +159,9 @@ const VALID_TYPES = [
   "USER_ID",
   "CUSTOMER_ID",
   "ACCOUNT_NUMBER",
-  "DEVICE_ID",
   "TERMINAL_ID",
   "IP_ADDRESS",
   "MERCHANT_ID",
-  "INVOICE_NUMBER",
-  "RRN",
-  "PAYMENT_CODE",
-  "BILLER_ID",
-  "CUSTOMER_PHONE",
-  "CUSTOMER_EMAIL",
-  "VIRTUAL_ACCOUNT_NUMBER",
 ];
 const VALID_SCOPES = ["ALL", "AGENUSA", "NUSABILL"];
 
@@ -159,7 +171,7 @@ const downloadTemplate = () => {
     "user123,USER_ID,ALL,Percobaan penipuan berulang",
     "1234567890,ACCOUNT_NUMBER,AGENUSA,Rekening mule",
     "192.168.1.1,IP_ADDRESS,ALL,IP mencurigakan",
-    "scam@gmail.com,CUSTOMER_EMAIL,NUSABILL,Email penipuan",
+    "customer123,CUSTOMER_ID,NUSABILL,Customer terindikasi fraud",
     "MRC001,MERCHANT_ID,AGENUSA,Merchant terlibat fraud",
   ].join("\n");
   const csv = `${header}\n${examples}`;
@@ -336,7 +348,7 @@ const AddForm = ({ onClose, onSubmit }) => {
                 onChange={(e) => handleType(e.target.value)}
               >
                 <option value="">Pilih tipe...</option>
-                {TYPE_MAP[scope].map((g) => (
+                {typeGroups(scope).map((g) => (
                   <optgroup key={g.group} label={g.group}>
                     {g.types.map((t) => (
                       <option key={t.v} value={t.v}>
@@ -420,23 +432,6 @@ const AddForm = ({ onClose, onSubmit }) => {
   );
 };
 
-const TYPE_OPTIONS = [
-  "USER_ID",
-  "CUSTOMER_ID",
-  "ACCOUNT_NUMBER",
-  "DEVICE_ID",
-  "TERMINAL_ID",
-  "IP_ADDRESS",
-  "MERCHANT_ID",
-  "INVOICE_NUMBER",
-  "RRN",
-  "PAYMENT_CODE",
-  "BILLER_ID",
-  "CUSTOMER_PHONE",
-  "CUSTOMER_EMAIL",
-  "VIRTUAL_ACCOUNT_NUMBER",
-];
-
 const SCOPE_OPTIONS = ["ALL", "AGENUSA", "NUSABILL"];
 
 const EMPTY_EDIT = {
@@ -447,12 +442,20 @@ const EMPTY_EDIT = {
 };
 
 const EditForm = ({ editData, onClose, onSubmit }) => {
-  const [form, setForm] = useState({
-    ...EMPTY_EDIT,
-    value: editData?.value || editData?.accountNumber || "",
-    type: editData?.type || editData?.bank || "ACCOUNT_NUMBER",
-    service_scope: editData?.service_scope || "ALL",
-    reason: editData?.reason || "",
+  const [form, setForm] = useState(() => {
+    const service_scope = editData?.service_scope || "ALL";
+    const requestedType = editData?.type || editData?.bank || "ACCOUNT_NUMBER";
+    const typeIsSupported = flatTypes(service_scope).some(
+      (item) => item.v === requestedType,
+    );
+
+    return {
+      ...EMPTY_EDIT,
+      value: editData?.value || editData?.accountNumber || "",
+      type: typeIsSupported ? requestedType : "",
+      service_scope,
+      reason: editData?.reason || "",
+    };
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -462,8 +465,22 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
     if (errors[f]) setErrors((p) => ({ ...p, [f]: undefined }));
   };
 
+  const handleScopeChange = (service_scope) => {
+    setForm((previous) => {
+      const typeStillSupported = flatTypes(service_scope).some(
+        (item) => item.v === previous.type,
+      );
+      return {
+        ...previous,
+        service_scope,
+        type: typeStillSupported ? previous.type : "",
+      };
+    });
+  };
+
   const validate = () => {
     const e = {};
+    if (!form.type) e.type = "Pilih tipe identifier yang didukung engine.";
     if (!form.value.trim()) e.value = "Nilai / Identifier wajib diisi.";
     if (!form.reason.trim()) e.reason = "Alasan wajib diisi.";
     return e;
@@ -516,17 +533,22 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
         </Field>
 
         <div className="bfm-row">
-          <Field label="Tipe Identifier" req>
+          <Field label="Tipe Identifier" req err={errors.type}>
             <div className="bfm-select-wrap">
               <select
                 className="bfm-select"
                 value={form.type}
                 onChange={(e) => set("type", e.target.value)}
               >
-                {TYPE_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
+                <option value="">Pilih tipe...</option>
+                {typeGroups(form.service_scope).map((group) => (
+                  <optgroup key={group.group} label={group.group}>
+                    {group.types.map((type) => (
+                      <option key={type.v} value={type.v}>
+                        {type.l}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -537,7 +559,7 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
               <select
                 className="bfm-select"
                 value={form.service_scope}
-                onChange={(e) => set("service_scope", e.target.value)}
+                onChange={(e) => handleScopeChange(e.target.value)}
               >
                 {SCOPE_OPTIONS.map((s) => (
                   <option key={s} value={s}>
@@ -663,7 +685,7 @@ const BulkForm = ({ onClose, onSubmit }) => {
             <i className="bi bi-info-circle" />
             <span>
               <strong>type</strong> valid: USER_ID, CUSTOMER_ID, ACCOUNT_NUMBER,
-              IP_ADDRESS, MERCHANT_ID, CUSTOMER_EMAIL, dll.{" "}
+              IP_ADDRESS, TERMINAL_ID, MERCHANT_ID.{" "}
               <strong>service_scope</strong>: ALL / AGENUSA / NUSABILL. Kolom
               type/scope opsional — default ACCOUNT_NUMBER / ALL.
             </span>
