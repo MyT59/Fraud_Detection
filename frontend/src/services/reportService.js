@@ -16,15 +16,21 @@ const reportService = {
     return api.get("/reports/fraud-analysts");
   },
 
+  /** GET /patterns/categories — categories from active, inactive, and custom patterns. */
+  getPatternCategories: async () => {
+    return api.get("/patterns/categories");
+  },
+
   /**
    * GET /reports
    */
-  getReports: async ({ report_type, status, page = 1, limit = 20 } = {}) => {
+  getReports: async ({ report_type, status, format, page = 1, limit = 20 } = {}) => {
     const params = new URLSearchParams();
     params.append("page", page);
     params.append("limit", limit);
     if (report_type) params.append("report_type", report_type);
     if (status) params.append("status", status);
+    if (format) params.append("format", format);
     return api.get(`/reports?${params.toString()}`);
   },
 

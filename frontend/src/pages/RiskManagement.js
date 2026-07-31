@@ -17,7 +17,6 @@ const normalizeMitigationAction = (action) => {
 };
 
 const ruleFromApi = (r) => {
-  console.log("[ruleFromApi] raw:", JSON.stringify(r, null, 2));
   return {
     id: r.id,
     name: r.rule_name || "Rule Tanpa Nama",
@@ -35,9 +34,6 @@ const ruleFromApi = (r) => {
     severity: r.severity || "MEDIUM",
     rule_group: r.rule_group || null,
     hitCount: r.hit_count ?? 0,
-    hitToday: 0,
-    hitWeek: 0,
-    hitMonth: 0,
     createdBy: r.created_by_name || null,
     createdByRole: r.created_by_role || null,
     createdById: r.created_by || null,
@@ -86,6 +82,7 @@ function buildConditionText(r) {
 
 const resolveBlStatus = (item) => {
   if (item.status === "PENDING") return "pending";
+  if (item.status === "REJECTED") return "rejected";
   if (item.status === "APPROVED" && item.is_active) return "active";
   return "inactive";
 };
@@ -249,17 +246,25 @@ const RiskManagement = () => {
     } catch (err) {
       console.warn("[RiskManagement] Gagal memuat patterns:", err.message);
       setPatterns([]);
+      setPatternCandidates([]);
+      setEffectiveness([]);
+      push(`Gagal memuat pattern: ${err.message}`, "error");
     } finally {
       setPatternsLoading(false);
     }
-  }, []);
+  }, [push]);
 
   const fetchBlacklist = useCallback(async () => {
     setBlLoading(true);
     setBlError(null);
     try {
-      const data = await api.get("/blacklist/?skip=0&limit=100");
-      const items = data?.data || [];
+      const firstPage = await api.get("/blacklist/?skip=0&limit=100");
+      const total = firstPage?.total || 0;
+      const items = [...(firstPage?.data || [])];
+      for (let skip = items.length; skip < total; skip += 100) {
+        const page = await api.get(`/blacklist/?skip=${skip}&limit=100`);
+        items.push(...(page?.data || []));
+      }
       setBlacklist(items.map(blFromApi));
     } catch (err) {
       console.warn("[RiskManagement] Gagal memuat blacklist:", err.message);
@@ -316,6 +321,22 @@ const RiskManagement = () => {
   const handleRuleDetail = (rule) => setRuleDetailModal({ open: true, rule });
 
   // ── Pattern handlers ───────────────────────────────────────────────────────
+  const placePatternInCorrectCollection = useCallback((pattern) => {
+    const isActive = pattern.is_active !== false;
+    setPatterns((previous) => {
+      const withoutPattern = previous.filter((item) => item.id !== pattern.id);
+      return isActive
+        ? [{ ...pattern, is_active: true }, ...withoutPattern]
+        : withoutPattern;
+    });
+    setPatternCandidates((previous) => {
+      const withoutPattern = previous.filter((item) => item.id !== pattern.id);
+      return isActive
+        ? withoutPattern
+        : [{ ...pattern, is_active: false }, ...withoutPattern];
+    });
+  }, []);
+
   const handlePatternActivate = async (id) => {
     const prevPatterns = patterns;
     const prevCandidates = patternCandidates;
@@ -399,13 +420,14 @@ const RiskManagement = () => {
         await api.put(`/blacklist/${item.id}`, blToApiPayload(item));
         await fetchBlacklist();
         push(
-          `Rekening ${item.accountNumber} diperbarui. Status kembali ke Needs Review.`,
+          `Identifier ${item.accountNumber} diperbarui. Status kembali ke Needs Review.`,
           "info",
         );
+        return true;
       } catch (err) {
         push(`Gagal memperbarui: ${err.message}`, "error");
+        return false;
       }
-      return;
     }
 
     if (mode === "single") {
@@ -414,44 +436,35 @@ const RiskManagement = () => {
         const created = await api.post("/blacklist/", blToApiPayload(item));
         setBlacklist((p) => [blFromApi(created), ...p]);
         push(
-          `Rekening ${item.accountNumber} ditambahkan dan menunggu validasi reviewer.`,
+          `Identifier ${item.accountNumber} ditambahkan dan menunggu validasi reviewer.`,
           "success",
         );
+        return true;
       } catch (err) {
         if (err.status === 409) {
           push(
-            `Rekening ${item.accountNumber} sudah ada di blacklist.`,
+            `Identifier ${item.accountNumber} sudah ada di blacklist.`,
             "warn",
           );
         } else {
           push(`Gagal menambahkan: ${err.message}`, "error");
         }
+        return false;
       }
-      return;
     }
 
     if (mode === "bulk") {
-      let success = 0;
-      let failed = 0;
-      for (const item of items) {
-        try {
-          await api.post("/blacklist/", blToApiPayload(item));
-          success++;
-        } catch {
-          failed++;
-        }
-      }
-      await fetchBlacklist();
-      if (failed === 0) {
-        push(
-          `${success} rekening berhasil diimport dan menunggu validasi reviewer.`,
-          "success",
-        );
-      } else {
-        push(
-          `${success} berhasil, ${failed} gagal (mungkin sudah terdaftar).`,
-          "warn",
-        );
+      try {
+        const result = await api.post("/blacklist/bulk", {
+          items: items.map(blToApiPayload),
+        });
+        await fetchBlacklist();
+        const message = `${result.success} identifier berhasil, ${result.skipped} duplikat, ${result.failed} gagal.`;
+        push(message, result.failed || result.skipped ? "warn" : "success");
+        return result.failed === 0;
+      } catch (err) {
+        push(`Gagal import bulk: ${err.message}`, "error");
+        return false;
       }
     }
   };
@@ -499,7 +512,7 @@ const RiskManagement = () => {
         b.id === id
           ? {
               ...b,
-              status: "inactive",
+              status: "rejected",
               _apiStatus: "REJECTED",
               _isActive: false,
             }
@@ -759,18 +772,17 @@ const RiskManagement = () => {
         editData={patternModal.editData}
         onClose={() => setPatternModal({ open: false, editData: null })}
         onSuccess={(pattern) => {
-          setPatterns((p) => [pattern, ...p]);
+          placePatternInCorrectCollection(pattern);
           push(`Pattern "${pattern.pattern_name}" berhasil dibuat.`, "success");
         }}
         onUpdate={(pattern) => {
-          setPatterns((p) =>
-            p.map((x) => (x.id === pattern.id ? { ...x, ...pattern } : x)),
-          );
+          placePatternInCorrectCollection(pattern);
           push(
             `Pattern "${pattern.pattern_name}" berhasil diperbarui.`,
             "info",
           );
         }}
+        onError={(message) => push(`Gagal menyimpan pattern: ${message}`, "error")}
       />
 
       <BlacklistFormModal
@@ -797,6 +809,7 @@ const RiskManagement = () => {
           );
           push(`Rule "${rule.rule_name}" berhasil diperbarui.`, "info");
         }}
+        onError={(message) => push(`Gagal menyimpan rule: ${message}`, "error")}
       />
 
       <RuleDetailModal

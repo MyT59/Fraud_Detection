@@ -34,8 +34,12 @@ const UploadDatasetModal = ({ isOpen, onClose, onSuccess }) => {
     setError(null);
     setResult(null);
     if (!f) return;
-    if (!f.name.endsWith(".csv")) {
+    if (!f.name.toLowerCase().endsWith(".csv")) {
       setError("Hanya file .csv yang diperbolehkan.");
+      return;
+    }
+    if (f.size > 25 * 1024 * 1024) {
+      setError("Ukuran CSV maksimal 25 MB.");
       return;
     }
     setFile(f);
@@ -311,7 +315,7 @@ const UploadDatasetModal = ({ isOpen, onClose, onSuccess }) => {
                     Drop file CSV di sini, atau klik untuk browse
                   </div>
                   <div style={{ fontSize: "0.775rem", color: "#94a3b8" }}>
-                    Hanya file .csv
+                    Hanya file .csv, maksimal 25 MB
                   </div>
                 </>
               )}

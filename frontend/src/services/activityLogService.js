@@ -88,6 +88,7 @@ const activityLogService = {
     end_date,
     severity,
     signal,
+    endpoint = "/activity-logs/",
   } = {}) => {
     const params = new URLSearchParams();
     params.append("page", page);
@@ -102,11 +103,12 @@ const activityLogService = {
     if (end_date) params.append("end_date", end_date);
     if (severity) params.append("severity", severity);
 
-    return api.get(`/activity-logs/?${params.toString()}`, { signal });
+    return api.get(`${endpoint}?${params.toString()}`, { signal });
   },
 
   getTimelineLogs: (params = {}) => activityLogService.getLogs(params),
-  getAuditLogs: (params = {}) => activityLogService.getLogs(params),
+  getAuditLogs: (params = {}) =>
+    activityLogService.getLogs({ ...params, endpoint: "/activity-logs/audit" }),
   getSummary: () => api.get("/activity-logs/summary"),
 
   exportToCSV: (logs, filename = "activity_log") => {

@@ -66,13 +66,13 @@ const PatternCard = ({ pattern, onViewDetail }) => {
           </div>
           <div className="fp-metric">
             <span className="fp-metric-value">{pattern.accuracy}%</span>
-            <span className="fp-metric-label">Accuracy</span>
+            <span className="fp-metric-label">Precision</span>
           </div>
           <div className="fp-metric">
             <span className="fp-metric-value">
               {pattern.falsePositiveRate}%
             </span>
-            <span className="fp-metric-label">False Pos.</span>
+            <span className="fp-metric-label">FDR</span>
           </div>
         </div>
 

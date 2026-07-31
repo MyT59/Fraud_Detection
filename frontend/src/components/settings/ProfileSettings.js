@@ -140,19 +140,26 @@ const ProfileSettings = ({ data, onSave, canEditDepartment = false }) => {
                 Department
               </label>
               {isEditing && canEditDepartment ? (
-                <select
-                  className="form-select"
+                <>
+                <input
+                  type="text"
+                  className="form-control"
+                  list="profile-department-options"
                   name="department"
                   value={formData.department || ""}
                   onChange={handleInputChange}
-                >
-                  <option value="">— Pilih Department —</option>
+                  placeholder="Pilih atau ketik department"
+                  maxLength={100}
+                />
+                <datalist id="profile-department-options">
                   {DEPARTMENT_OPTIONS.map((d) => (
                     <option key={d} value={d}>
                       {d}
                     </option>
                   ))}
-                </select>
+                </datalist>
+                <small className="text-muted">Pilih rekomendasi atau ketik departemen lain.</small>
+                </>
               ) : (
                 <input
                   type="text"

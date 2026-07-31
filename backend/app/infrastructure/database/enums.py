@@ -203,6 +203,7 @@ class ReportTypeEnum(str, Enum):
     BLACKLIST = "BLACKLIST"
     ACTIVITY_LOG = "ACTIVITY_LOG"
     ML_PERFORMANCE = "ML_PERFORMANCE"
+    GLOBAL_RULE = "GLOBAL_RULE"
 
 
 class ReportFormatEnum(str, Enum):

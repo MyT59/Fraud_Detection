@@ -22,7 +22,7 @@ const STATUS_FILTERS = [
 const SORT_OPTIONS = [
   { value: "occurrences_desc", label: "Most Detected" },
   { value: "occurrences_asc", label: "Least Detected" },
-  { value: "accuracy_desc", label: "Highest Accuracy" },
+  { value: "accuracy_desc", label: "Highest Precision" },
   { value: "name_asc", label: "Name A–Z" },
 ];
 

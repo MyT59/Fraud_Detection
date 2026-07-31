@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, text, Enum
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, text, Enum, Index
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -9,6 +9,15 @@ from app.infrastructure.database.enums import PatternSourceEnum
 
 class FraudPattern(Base):
     __tablename__ = "fraud_patterns"
+    __table_args__ = (
+        Index(
+            "uq_fraud_patterns_service_rules_hash_active",
+            "service_source",
+            "rules_hash",
+            unique=True,
+            postgresql_where=text("is_deleted = false AND rules_hash IS NOT NULL"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True)
 

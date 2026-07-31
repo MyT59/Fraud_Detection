@@ -30,6 +30,7 @@ const ROLES = [
 ];
 
 const DEPARTMENTS = ["Risk Management", "Fraud Prevention"];
+const CUSTOM_DEPARTMENT = "__CUSTOM_DEPARTMENT__";
 
 const EMPTY = {
   name: "",
@@ -73,6 +74,7 @@ const AddUserModal = ({
   const [showCpw, setShowCpw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState("");
+  const [departmentMode, setDepartmentMode] = useState("");
   const nameRef = useRef(null);
 
   const isEdit = Boolean(editData);
@@ -87,10 +89,16 @@ const AddUserModal = ({
 
   useEffect(() => {
     if (isOpen) {
+      const department = isEdit ? editData?.department || "" : "";
       setForm(
         isEdit
           ? { ...EMPTY, ...editData, password: "", confirmPassword: "" }
           : EMPTY,
+      );
+      setDepartmentMode(
+        !department || DEPARTMENTS.includes(department)
+          ? department
+          : CUSTOM_DEPARTMENT,
       );
       setErrors({});
       setApiError("");
@@ -106,6 +114,12 @@ const AddUserModal = ({
     setForm((p) => ({ ...p, [field]: value }));
     if (errors[field]) setErrors((p) => ({ ...p, [field]: undefined }));
     setApiError("");
+  };
+
+  const setDepartment = (value) => {
+    setDepartmentMode(value);
+    if (value !== CUSTOM_DEPARTMENT) set("department", value);
+    else if (DEPARTMENTS.includes(form.department)) set("department", "");
   };
 
   const validate = () => {
@@ -248,8 +262,8 @@ const AddUserModal = ({
               <div className="aum-select-wrap">
                 <select
                   className="aum-select"
-                  value={form.department}
-                  onChange={(e) => set("department", e.target.value)}
+                  value={departmentMode}
+                  onChange={(e) => setDepartment(e.target.value)}
                 >
                   <option value="">— Pilih Departemen —</option>
                   {DEPARTMENTS.map((d) => (
@@ -257,8 +271,20 @@ const AddUserModal = ({
                       {d}
                     </option>
                   ))}
+                  <option value={CUSTOM_DEPARTMENT}>+ Departemen lainnya…</option>
                 </select>
               </div>
+              {departmentMode === CUSTOM_DEPARTMENT && (
+                <input
+                  className="aum-input aum-custom-department"
+                  type="text"
+                  value={form.department}
+                  placeholder="Ketik nama departemen"
+                  maxLength={100}
+                  onChange={(e) => set("department", e.target.value)}
+                  autoFocus
+                />
+              )}
             </F>
           </div>
 

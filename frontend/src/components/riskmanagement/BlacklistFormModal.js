@@ -4,9 +4,8 @@ import "./BlacklistFormModal.css";
 const TYPE_MAP = {
   ALL: [
     {
-      group: "AGENUSA & NUSABILL",
+      group: "Global",
       types: [
-        { v: "USER_ID", l: "User ID", hint: "Disimpan lowercase", cs: false },
         {
           v: "CUSTOMER_ID",
           l: "Customer ID",
@@ -14,33 +13,10 @@ const TYPE_MAP = {
           cs: false,
         },
         {
-          v: "MERCHANT_ID",
-          l: "Merchant ID",
-          hint: "AGENUSA: merchant_id | NUSABILL: kode_pembayaran — case-sensitive",
-          cs: true,
-        },
-      ],
-    },
-    {
-      group: "AGENUSA only",
-      types: [
-        {
           v: "IP_ADDRESS",
           l: "IP Address",
-          hint: "Format IPv4/IPv6 — disimpan lowercase",
+          hint: "Format IPv4/IPv6 pada kedua layanan",
           cs: false,
-        },
-        {
-          v: "TERMINAL_ID",
-          l: "Terminal ID",
-          hint: "terminal_id dari payload AGENUSA — case-sensitive",
-          cs: true,
-        },
-        {
-          v: "ACCOUNT_NUMBER",
-          l: "Account Number",
-          hint: "account_number / issuer_account_number / dest_account_number — case-sensitive",
-          cs: true,
         },
       ],
     },
@@ -53,12 +29,6 @@ const TYPE_MAP = {
           v: "USER_ID",
           l: "User ID",
           hint: "customer_ref_number — lowercase",
-          cs: false,
-        },
-        {
-          v: "CUSTOMER_ID",
-          l: "Customer ID",
-          hint: "Alias user_account_id — lowercase",
           cs: false,
         },
         {
@@ -93,22 +63,16 @@ const TYPE_MAP = {
       group: "Aktif dicek",
       types: [
         {
-          v: "USER_ID",
-          l: "User ID",
-          hint: "customer_id dari payload NUSABILL — lowercase",
-          cs: false,
-        },
-        {
           v: "CUSTOMER_ID",
           l: "Customer ID",
-          hint: "Alias user_account_id — lowercase",
+          hint: "customer_id dari payload Nusabill — lowercase",
           cs: false,
         },
         {
-          v: "MERCHANT_ID",
-          l: "Merchant ID",
-          hint: "kode_pembayaran dari payload NUSABILL — case-sensitive",
-          cs: true,
+          v: "IP_ADDRESS",
+          l: "IP Address",
+          hint: "Format IPv4/IPv6 — lowercase",
+          cs: false,
         },
       ],
     },
@@ -128,23 +92,7 @@ const SCOPE_ICONS = {
 };
 
 const typeGroups = (scope) => {
-  const groups = TYPE_MAP[scope];
-  if (scope !== "NUSABILL") return groups;
-
-  return [
-    {
-      group: "Aktif dicek",
-      types: [
-        groups[0].types.find((type) => type.v === "CUSTOMER_ID"),
-        {
-          v: "IP_ADDRESS",
-          l: "IP Address",
-          hint: "Format IPv4/IPv6 - disimpan lowercase",
-          cs: false,
-        },
-      ],
-    },
-  ];
+  return TYPE_MAP[scope] || TYPE_MAP.ALL;
 };
 
 const flatTypes = (scope) => typeGroups(scope).flatMap((g) => g.types);
@@ -168,7 +116,7 @@ const VALID_SCOPES = ["ALL", "AGENUSA", "NUSABILL"];
 const downloadTemplate = () => {
   const header = "value,type,service_scope,reason";
   const examples = [
-    "user123,USER_ID,ALL,Percobaan penipuan berulang",
+    "customer123,CUSTOMER_ID,ALL,Customer terindikasi fraud",
     "1234567890,ACCOUNT_NUMBER,AGENUSA,Rekening mule",
     "192.168.1.1,IP_ADDRESS,ALL,IP mencurigakan",
     "customer123,CUSTOMER_ID,NUSABILL,Customer terindikasi fraud",
@@ -184,12 +132,79 @@ const downloadTemplate = () => {
   URL.revokeObjectURL(url);
 };
 
+const parseCsvLine = (line) => {
+  const values = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char === "," && !quoted) {
+      values.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  values.push(current.trim());
+  return quoted ? null : values;
+};
+
 const parseBulkText = (text) => {
   const lines = text
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith("value,") && !l.startsWith("#"));
 
+  const items = [];
+  const errors = [];
+  lines.forEach((line, i) => {
+      const parts = parseCsvLine(line);
+      if (!parts) {
+        errors.push(`Baris ${i + 1}: tanda kutip CSV tidak lengkap.`);
+        return;
+      }
+      const [value = "", rawType = "", rawScope = "", ...reasonParts] = parts;
+      const type = rawType.toUpperCase();
+      const service_scope = rawScope.toUpperCase();
+      const reason = reasonParts.join(",").trim();
+      if (!value) {
+        errors.push(`Baris ${i + 1}: value wajib diisi.`);
+      } else if (!VALID_TYPES.includes(type)) {
+        errors.push(`Baris ${i + 1}: type tidak didukung.`);
+      } else if (!VALID_SCOPES.includes(service_scope)) {
+        errors.push(`Baris ${i + 1}: service_scope tidak valid.`);
+      } else if (!reason) {
+        errors.push(`Baris ${i + 1}: reason wajib diisi.`);
+      } else if (service_scope === "NUSABILL" && !["CUSTOMER_ID", "IP_ADDRESS"].includes(type)) {
+        errors.push(`Baris ${i + 1}: Nusabill hanya mendukung CUSTOMER_ID atau IP_ADDRESS.`);
+      } else if (service_scope === "ALL" && !["CUSTOMER_ID", "IP_ADDRESS"].includes(type)) {
+        errors.push(`Baris ${i + 1}: scope ALL hanya mendukung CUSTOMER_ID atau IP_ADDRESS.`);
+      } else if (service_scope === "AGENUSA" && type === "CUSTOMER_ID") {
+        errors.push(`Baris ${i + 1}: untuk Agenusa gunakan USER_ID, bukan CUSTOMER_ID.`);
+      } else {
+        items.push({
+          id: Date.now() + i,
+          value,
+          accountNumber: value,
+          type,
+          service_scope,
+          reason,
+          source: "import",
+          status: "pending",
+          hitCount: 0,
+        });
+      }
+    });
+
+  return { items, errors };
+  /*
   return lines
     .map((line, i) => {
       const parts = line.split(",").map((s) => s.trim());
@@ -217,6 +232,7 @@ const parseBulkText = (text) => {
       };
     })
     .filter(Boolean);
+  */
 };
 
 const Field = ({ label, req, opt, err, hint, children }) => (
@@ -295,9 +311,8 @@ const AddForm = ({ onClose, onSubmit }) => {
       return;
     }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 420));
     const finalValue = normVal(value, typeInfo);
-    onSubmit("single", [
+    const succeeded = await onSubmit("single", [
       {
         id: Date.now(),
         value: finalValue,
@@ -310,7 +325,7 @@ const AddForm = ({ onClose, onSubmit }) => {
       },
     ]);
     setLoading(false);
-    onClose();
+    if (succeeded) onClose();
   };
 
   const isValid = type && value.trim() && reason.trim();
@@ -493,11 +508,7 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
       return;
     }
     setLoading(true);
-
-    // Simulasi loading sebentar
-    await new Promise((r) => setTimeout(r, 300));
-
-    onSubmit("edit", [
+    const succeeded = await onSubmit("edit", [
       {
         ...editData,
         value: form.value,
@@ -510,7 +521,7 @@ const EditForm = ({ editData, onClose, onSubmit }) => {
       },
     ]);
     setLoading(false);
-    onClose();
+    if (succeeded) onClose();
   };
 
   return (
@@ -631,11 +642,12 @@ const BulkForm = ({ onClose, onSubmit }) => {
     setBulkError("");
     if (text.trim()) {
       const parsed = parseBulkText(text);
-      setBulkParsed(parsed);
-      if (!parsed.length)
-        setBulkError(
-          "Tidak ada data valid. Format: NoRekening,Nama,Bank,Alasan",
-        );
+      setBulkParsed(parsed.items);
+      if (parsed.errors.length) {
+        setBulkError(parsed.errors.slice(0, 3).join(" "));
+      } else if (!parsed.items.length) {
+        setBulkError("Tidak ada data valid. Format: value,type,service_scope,reason");
+      }
     } else {
       setBulkParsed([]);
     }
@@ -647,10 +659,9 @@ const BulkForm = ({ onClose, onSubmit }) => {
       return;
     }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 520));
-    onSubmit("bulk", bulkParsed);
+    const succeeded = await onSubmit("bulk", bulkParsed);
     setLoading(false);
-    onClose();
+    if (succeeded) onClose();
   };
 
   return (
@@ -677,7 +688,7 @@ const BulkForm = ({ onClose, onSubmit }) => {
           </code>
           <div className="bfm-format-example">
             <span>Contoh baris:</span>
-            <code>user123,USER_ID,ALL,Percobaan penipuan berulang</code>
+            <code>customer123,CUSTOMER_ID,ALL,Customer terindikasi fraud</code>
             <code>1234567890,ACCOUNT_NUMBER,AGENUSA,Rekening mule</code>
             <code>192.168.1.1,IP_ADDRESS,ALL,IP mencurigakan</code>
           </div>
@@ -697,7 +708,7 @@ const BulkForm = ({ onClose, onSubmit }) => {
             ref={firstRef}
             className={`bfm-textarea bfm-textarea-bulk bfm-mono${bulkError ? " err" : ""}`}
             placeholder={
-              "value,type,service_scope,reason\nuser123,USER_ID,ALL,Percobaan penipuan berulang\n1234567890,ACCOUNT_NUMBER,AGENUSA,Rekening mule\n..."
+              "value,type,service_scope,reason\ncustomer123,CUSTOMER_ID,ALL,Customer terindikasi fraud\n1234567890,ACCOUNT_NUMBER,AGENUSA,Rekening mule\n..."
             }
             value={bulkText}
             onChange={(e) => handleChange(e.target.value)}
@@ -761,7 +772,7 @@ const BulkForm = ({ onClose, onSubmit }) => {
         <button
           className="bfm-btn-submit"
           onClick={handleSubmit}
-          disabled={loading || bulkParsed.length === 0}
+          disabled={loading || bulkParsed.length === 0 || Boolean(bulkError)}
         >
           {loading ? (
             <>

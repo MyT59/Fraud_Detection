@@ -20,12 +20,12 @@ from sklearn.metrics import (
 # Setup paths
 ROOT_DIR = Path(__file__).resolve().parents[2]
 BACKEND_DIR = ROOT_DIR / "backend"
-DATA_DIR = ROOT_DIR / "Playground" / "Data"
+DATA_DIR = ROOT_DIR / "Playground" / "Data" / "datasets"
 MODELS_DIR = ROOT_DIR / "Playground" / "models"
 
-# Add backend to path so we can import app modules.
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
+# Add the repository root to path so we can import backend.app modules.
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from backend.app.infrastructure.ml.feature_builder import build_features
 from backend.app.infrastructure.ml.model_loader import DOMAIN_ISO_CONFIG, load_isolation_model, load_isolation_meta

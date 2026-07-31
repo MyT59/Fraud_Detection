@@ -52,6 +52,8 @@ const STATUS_MAP = {
   OPEN: "OPEN",
   IN_PROGRESS: "IN_PROGRESS",
   RESOLVED: "RESOLVED",
+  REOPENED: "REOPENED",
+  OVERRIDDEN: "OVERRIDDEN",
 };
 
 // ─── Normalisasi data BE → format internal FE ─────────────────────
@@ -64,7 +66,9 @@ const normalizeAlert = (raw) => ({
   severity: (raw.severity || "LOW").toUpperCase(),
   status: (raw.status || "OPEN").toUpperCase(),
   title: raw.title || "Alert",
-  message: raw.message || "",
+  // List endpoint returns `description`; detail endpoint returns `message`.
+  // Support both so alert cards never discard a valid backend message.
+  message: raw.message || raw.description || raw.message_raw || "",
   transaction_id: raw.transaction_id ?? null,
   created_at: raw.created_at || null,
   priority: raw.priority ?? 0,
@@ -84,6 +88,7 @@ const AlertsLog = () => {
   const currentUser = storage.getUser();
   const currentRole = String(currentUser?.role || "").toUpperCase();
   const canClaimAlerts = currentRole === "FRAUD_ANALYST";
+  const canResolveAlerts = currentRole === "FRAUD_ANALYST";
 
   // Tab: "all" | "open"
   // My Queue DIHAPUS dari halaman ini — pindah ke ManualReview
@@ -100,6 +105,7 @@ const AlertsLog = () => {
   const [apiStats, setApiStats] = useState(null);
   const [priorityStats, setPriorityStats] = useState(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [openAlertCount, setOpenAlertCount] = useState(0);
 
   // State Loading & Error
   const [loading, setLoading] = useState(true);
@@ -142,6 +148,8 @@ const AlertsLog = () => {
             severity:
               openFilters.severity !== "all" ? openFilters.severity : undefined,
             type: openFilters.type !== "all" ? openFilters.type : undefined,
+            search: openFilters.search || undefined,
+            sortBy: openFilters.sortBy,
           });
         } else {
           // All Alerts: semua alert dengan filter
@@ -151,6 +159,8 @@ const AlertsLog = () => {
             severity: SEVERITY_MAP[filters.severity] || undefined,
             status: STATUS_MAP[filters.status] || undefined,
             type: filters.type !== "all" ? filters.type : undefined,
+            search: filters.search || undefined,
+            sortBy: filters.sortBy,
             signal,
           };
           feedData = await fetchAlertsService(queryParams);
@@ -170,6 +180,7 @@ const AlertsLog = () => {
 
         setApiAlerts(items.map(normalizeAlert));
         setTotalCount(feedData?.total ?? countData?.count ?? items.length);
+        setOpenAlertCount(countData?.count ?? 0);
         setApiStats(metricsData?.data ?? metricsData ?? null);
         setPriorityStats(priorityData?.data ?? priorityData ?? null);
       } catch (err) {
@@ -191,8 +202,12 @@ const AlertsLog = () => {
       filters.severity,
       filters.status,
       filters.type,
+      filters.search,
+      filters.sortBy,
       openFilters.severity,
       openFilters.type,
+      openFilters.search,
+      openFilters.sortBy,
     ],
   );
 
@@ -371,67 +386,11 @@ const AlertsLog = () => {
 
   const visibleAlerts = combined.filter((a) => !a._hidden);
 
-  const filteredAlerts = visibleAlerts.filter((a) => {
-    if (filters.type !== "all" && a.type !== filters.type) return false;
-    if (filters.severity !== "all" && a.severity !== filters.severity)
-      return false;
-    if (filters.status !== "all" && a.status !== filters.status) return false;
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      if (
-        !a.title?.toLowerCase().includes(q) &&
-        !a.message?.toLowerCase().includes(q) &&
-        !String(a.transaction_id || "")
-          .toLowerCase()
-          .includes(q)
-      ) {
-        return false;
-      }
-    }
-    return true;
-  });
-
-  // Filter & Sort untuk Open Queue (client-side)
-  const filteredOpenAlerts = (activeTab === "open" ? visibleAlerts : []).filter(
-    (a) => {
-      if (openFilters.severity !== "all" && a.severity !== openFilters.severity)
-        return false;
-      if (openFilters.type !== "all" && a.type !== openFilters.type)
-        return false;
-      if (openFilters.search) {
-        const q = openFilters.search.toLowerCase();
-        if (
-          !a.title?.toLowerCase().includes(q) &&
-          !a.message?.toLowerCase().includes(q) &&
-          !String(a.transaction_id || "").includes(q)
-        )
-          return false;
-      }
-      return true;
-    },
-  );
-
-  // Sorting
-  const activeSortBy =
-    activeTab === "open" ? openFilters.sortBy : filters.sortBy;
-  const sortedAlerts = [
-    ...(activeTab === "open" ? filteredOpenAlerts : filteredAlerts),
-  ].sort((a, b) => {
-    switch (activeSortBy) {
-      case "oldest":
-        return new Date(a.created_at) - new Date(b.created_at);
-      case "priority_desc":
-        return (b.priority || 0) - (a.priority || 0);
-      case "priority_asc":
-        return (a.priority || 0) - (b.priority || 0);
-      case "newest":
-      default:
-        return new Date(b.created_at) - new Date(a.created_at);
-    }
-  });
+  // Search, filters, and sorting are executed server-side before pagination.
+  const sortedAlerts = visibleAlerts;
 
   const totalPages = Math.max(1, Math.ceil(totalCount / LIMIT));
-  const totalUnread = visibleAlerts.filter((a) => a.status === "OPEN").length;
+  const totalUnread = openAlertCount;
 
   const getVisiblePages = () => {
     const delta = 2;
@@ -452,7 +411,7 @@ const AlertsLog = () => {
 
   return (
     <div className="alerts-page">
-      <AlertsHeader totalUnread={totalUnread} isLive={!apiError} />
+      <AlertsHeader totalUnread={totalUnread} />
 
       <AlertsStats stats={apiStats} priorityData={priorityStats} />
 
@@ -516,7 +475,7 @@ const AlertsLog = () => {
           filters={filters}
           onFilterChange={handleFilterChange}
           onReset={handleFilterReset}
-          totalResults={sortedAlerts.length}
+          totalResults={totalCount}
         />
       )}
 
@@ -576,6 +535,7 @@ const AlertsLog = () => {
               <option value="RULE_ML">Rule + ML</option>
               <option value="PATTERN_ML">Pattern + ML</option>
               <option value="COMBINED_ML">Combined + ML</option>
+              <option value="SYSTEM">System</option>
             </select>
 
             {/* Sort */}
@@ -602,7 +562,7 @@ const AlertsLog = () => {
           </div>
 
           <div className="alerts-filter-meta">
-            Menampilkan <strong>{sortedAlerts.length}</strong> alert tersedia
+            Menampilkan <strong>{totalCount}</strong> alert tersedia
             {canClaimAlerts
               ? " untuk di-claim"
               : " yang belum diklaim analis"}
@@ -621,7 +581,7 @@ const AlertsLog = () => {
         <AlertsFeed
           alerts={sortedAlerts}
           pendingOps={pendingOps}
-          onResolve={handleResolve}
+          onResolve={canResolveAlerts ? handleResolve : null}
           onClaim={activeTab === "open" && canClaimAlerts ? handleClaim : null}
           onViewDetail={handleOpenDetail}
           mode={activeTab}
@@ -690,7 +650,7 @@ const AlertsLog = () => {
         loading={modalLoading}
         error={modalError}
         onClose={handleCloseModal}
-        onResolve={handleResolve}
+        onResolve={canResolveAlerts ? handleResolve : null}
         onClaim={canClaimAlerts ? handleClaim : null}
         pendingOp={modalPendingOp}
         onStatusUpdated={(alertId, newStatus) => {

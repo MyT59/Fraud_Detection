@@ -26,7 +26,6 @@ SOF_POOL = ["VIRTUAL_ACCOUNT", "EWALLET", "CREDIT_CARD"]
 # ⚠️ Pastikan sudah ada di tabel blacklist_items sebelum demo
 BLACKLISTED_IP       = "99.99.99.99"    # type = IP_ADDRESS
 BLACKLISTED_CUSTOMER = "CUST-BL-00001"  # type = CUSTOMER_ID
-BLACKLISTED_MERCHANT = "PAY-BL-00001"   # type = MERCHANT_ID (kode_pembayaran)
 
 
 # ============================================================
@@ -62,13 +61,15 @@ def _base_invoice(time_override=None) -> dict:
         "biaya_admin":        2_500.00,
         "utc_reference":      "REF" + "".join(random.choices(string.digits, k=8)),
         "kode_pembayaran":    "PAY" + "".join(random.choices(string.digits, k=4)),
-        "status_tagihan":     "terbayar",
+        # Pembayaran normal harus berawal dari invoice yang belum dibayar.
+        # Status `PAID`/`terbayar` khusus untuk skenario double-payment.
+        "status_tagihan":     "belum_terbayar",
         "status_akhir":       "SUCCESS",
         "tanggal_rekon":      now + timedelta(hours=1),
         "keterangan":         "Simulasi Nusabill",
         "ip_address":         random.choice(IP_POOL),
         # channel: BUKAN kolom DB, tapi dibaca map_nusabill() → transaction_details
-        "channel":            random.choice(["MOBILE", "WEB", "ATM"]),
+        "channel":            random.choice(["MOBILE_BANKING", "WEB", "ATM"]),
     }
 
 
@@ -114,12 +115,6 @@ def generate_blacklist_customer() -> list[dict]:
 # Target engine : Blacklist Engine → MERCHANT_ID
 # map_nusabill() → merchant_id = kode_pembayaran
 # ============================================================
-def generate_blacklist_merchant() -> list[dict]:
-    inv = _base_invoice()
-    inv["kode_pembayaran"] = BLACKLISTED_MERCHANT
-    return [inv]
-
-
 # ============================================================
 # SCENARIO 5 — FAN-OUT SPAM BILLING
 # Target engine : Pattern Engine (NETWORK_FAN_OUT)
@@ -211,7 +206,7 @@ def generate_channel_switch() -> list[dict]:
     for i in range(3):
         inv = _base_invoice(time_override=base_time - timedelta(hours=3 - i))
         inv["customer_id"] = customer_id
-        inv["channel"]     = random.choice(["MOBILE", "WEB"])
+        inv["channel"]     = random.choice(["MOBILE_BANKING", "WEB"])
         records.append(inv)
 
     inv_api = _base_invoice(time_override=base_time)
@@ -332,13 +327,6 @@ def generate_high_amount() -> list[dict]:
 # Target rule : rule_nusabill_repayment_block (Global Rule)
 # Trigger     : status_tagihan == "PAID"
 # ============================================================
-def generate_rule_nusabill_repayment_block() -> list[dict]:
-    """Mencoba membayar invoice dengan status yang sudah PAID (Double Payment)."""
-    inv = _base_invoice()
-    inv["status_tagihan"] = "PAID"
-    return [inv]
-
-
 # ============================================================
 # SCENARIO 16 — RULE: NUSABILL MAX UNVERIFIED BILL
 # Target rule : rule_nusabill_max_unverified_bill (Global Rule)
@@ -408,7 +396,7 @@ def generate_ml_unknown_mixed_outlier() -> list[dict]:
 # ============================================================
 def get_scenario_catalog() -> dict[str, dict]:
     """Metadata scenario pattern aktif; diselaraskan dengan fraud_patterns."""
-    return {
+    catalog = {
         "normal": {
             "title": "Nusabill - Normal Invoices",
             "category": "Baseline",
@@ -436,15 +424,6 @@ def get_scenario_catalog() -> dict[str, dict]:
             "expected_result": "FRAUD",
             "transaction_count": 1,
         },
-        "blacklist_merchant": {
-            "title": "Nusabill - Blacklist MERCHANT_ID",
-            "category": "Blacklist",
-            "description": "Pembayaran memakai kode pembayaran merchant yang diblacklist.",
-            "target_engines": ["Blacklist Engine"],
-            "trigger_conditions": ["kode_pembayaran == 'PAY-BL-00001'"],
-            "expected_result": "FRAUD",
-            "transaction_count": 1,
-        },
         "smurfing": {
             "title": "Nusabill - High-Velocity Split Payment Anomaly (Smurfing)",
             "category": "Money Laundering & Split Transaction",
@@ -465,7 +444,7 @@ def get_scenario_catalog() -> dict[str, dict]:
                 "logic": "AND",
                 "time_window_minutes": 8,
             },
-            "expected_result": "UNDER_REVIEW",
+            "expected_result": "FLAGGED",
             "transaction_count": 6,
         },
         "fake_invoice_blast": {
@@ -488,7 +467,7 @@ def get_scenario_catalog() -> dict[str, dict]:
                 "logic": "AND",
                 "time_window_minutes": 6,
             },
-            "expected_result": "UNDER_REVIEW",
+            "expected_result": "FLAGGED",
             "transaction_count": 22,
         },
         "fan_out_spam": {
@@ -511,7 +490,7 @@ def get_scenario_catalog() -> dict[str, dict]:
                 "logic": "AND",
                 "time_window_minutes": 5,
             },
-            "expected_result": "UNDER_REVIEW",
+            "expected_result": "FLAGGED",
             "transaction_count": 22,
         },
         "api_abuse": {
@@ -531,7 +510,7 @@ def get_scenario_catalog() -> dict[str, dict]:
                 "logic": "AND",
                 "time_window_minutes": 5,
             },
-            "expected_result": "UNDER_REVIEW",
+            "expected_result": "FLAGGED",
             "transaction_count": 105,
         },
         "ml_burst_payment": {
@@ -541,7 +520,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["PAYMENT_GAP_MINUTES <= 5", "BURST_FLAG == 1"],
             "ml_pattern": {"key": "burst_payment_pattern"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 6,
         },
         "ml_payment_spike": {
@@ -551,7 +530,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["PAYMENT_TO_BILL_RATIO > 4"],
             "ml_pattern": {"key": "payment_spike"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 3,
         },
         "ml_underpayment": {
@@ -561,7 +540,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["PAYMENT_TO_BILL_RATIO < 0.3"],
             "ml_pattern": {"key": "underpayment"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 3,
         },
         "ml_channel_switch_to_api": {
@@ -571,7 +550,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["previous channel != API", "current channel == API"],
             "ml_pattern": {"key": "sudden_channel_switch_to_api"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 4,
         },
         "ml_early_payment_anomaly": {
@@ -581,7 +560,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["PAYMENT_DELAY_DAYS < -1"],
             "ml_pattern": {"key": "payment_date_anomaly"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 3,
         },
         "ml_unknown_mixed_outlier": {
@@ -602,46 +581,19 @@ def get_scenario_catalog() -> dict[str, dict]:
             "expected_result": "ML ANOMALY (MODEL-DEPENDENT)",
             "transaction_count": 1,
         },
-        "rule_nusabill_repayment_block": {
-            "title": "Nusabill - Penolakan Pembayaran Invoice Lunas",
-            "category": "VELOCITY",
-            "description": (
-                "Menolak transaksi Virtual Account yang mencoba membayar "
-                "invoice berstatus PAID untuk mencegah double payment."
-            ),
-            "target_engines": ["Rule Engine"],
-            "trigger_conditions": [
-                "transaction_details.bill_status = 'PAID'",
-            ],
-            "global_rule": {
-                "id": 4,
-                "rule_key": "rule_nusabill_repayment_block",
-                "rule_group": "VELOCITY",
-                "action": "BLOCK",
-                "severity": "CRITICAL",
-                "priority": 95,
-                "rule_config": {
-                    "field": "transaction_details.bill_status",
-                    "value": "PAID",
-                    "operator": "=",
-                },
-            },
-            "expected_result": "FRAUD",
-            "transaction_count": 1,
-        },
         "rule_nusabill_max_unverified_bill": {
-            "title": "Nusabill - Batas Maksimum Tagihan Tanpa KYC",
-            "category": "KYC_COMPLIANCE",
+            "title": "Nusabill - Pembayaran Bernilai Tinggi",
+            "category": "NUSABILL_HIGH_PAYMENT",
             "description": (
                 "Menandai pembayaran Virtual Account di atas Rp5.000.000 "
-                "untuk ditinjau sesuai kebijakan verifikasi KYC biller."
+                "untuk pemeriksaan Fraud Analyst."
             ),
             "target_engines": ["Rule Engine"],
             "trigger_conditions": ["amount > 5,000,000"],
             "global_rule": {
                 "id": 5,
                 "rule_key": "rule_nusabill_max_unverified_bill",
-                "rule_group": "KYC_COMPLIANCE",
+                "rule_group": "NUSABILL_HIGH_PAYMENT",
                 "action": "REVIEW",
                 "severity": "MEDIUM",
                 "priority": 50,
@@ -651,10 +603,16 @@ def get_scenario_catalog() -> dict[str, dict]:
                     "operator": ">",
                 },
             },
-            "expected_result": "UNDER_REVIEW",
+            "expected_result": "FLAGGED",
             "transaction_count": 1,
         },
     }
+    for scenario in catalog.values():
+        for target_key in ("fraud_pattern", "global_rule"):
+            target = scenario.get(target_key)
+            if target and target.get("action") == "REVIEW":
+                target["action"] = "FLAG"
+    return catalog
 
 
 def get_all_scenarios() -> dict[str, list[dict]]:
@@ -667,7 +625,6 @@ def get_all_scenarios() -> dict[str, list[dict]]:
         "normal": generate_normal(),
         "blacklist_customer": generate_blacklist_customer(),
         "blacklist_ip": generate_blacklist_ip(),
-        "blacklist_merchant": generate_blacklist_merchant(),
         "smurfing": generate_smurfing(),
         "fake_invoice_blast": generate_fake_invoice_blast(),
         "fan_out_spam": generate_fan_out_spam(),
@@ -678,7 +635,6 @@ def get_all_scenarios() -> dict[str, list[dict]]:
         "ml_channel_switch_to_api": generate_channel_switch(),
         "ml_early_payment_anomaly": generate_early_payment_anomaly(),
         "ml_unknown_mixed_outlier": generate_ml_unknown_mixed_outlier(),
-        "rule_nusabill_repayment_block": generate_rule_nusabill_repayment_block(),
         "rule_nusabill_max_unverified_bill": generate_rule_nusabill_max_unverified_bill(),
     }
 

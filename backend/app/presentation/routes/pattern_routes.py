@@ -71,13 +71,35 @@ def generate_patterns(
 # =========================
 # GET ACTIVE PATTERNS
 # =========================
+@router.get("/categories", dependencies=[Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST"))])
+def get_pattern_categories(db: Session = Depends(get_db)):
+    """Return every category currently used by a non-deleted fraud pattern.
+
+    Reports need this list to include custom categories and inactive patterns,
+    not just the categories represented by the active-engine cache.
+    """
+    rows = (
+        db.query(FraudPattern.pattern_category)
+        .filter(
+            FraudPattern.is_deleted == False,
+            FraudPattern.pattern_category.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    return sorted(
+        {str(row[0]).strip() for row in rows if str(row[0]).strip()},
+        key=str.casefold,
+    )
+
+
 @router.get("/", dependencies=[Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST"))])
 @log_performance(label="PatternRoutes.get_active_patterns")
 def get_active_patterns(db: Session = Depends(get_db)):
     patterns = db.query(FraudPattern).filter(
         FraudPattern.is_active == True,
         FraudPattern.is_deleted == False,
-    ).all()
+    ).order_by(FraudPattern.priority.desc(), FraudPattern.id.asc()).all()
 
     return [
         {
@@ -116,7 +138,7 @@ def get_candidates(db: Session = Depends(get_db)):
     patterns = db.query(FraudPattern).filter(
         FraudPattern.is_active == False,
         FraudPattern.is_deleted == False,
-    ).all()
+    ).order_by(FraudPattern.priority.desc(), FraudPattern.id.asc()).all()
 
     return [
         {
@@ -330,6 +352,14 @@ def update_pattern(
 
     for key, value in update_data.items():
         setattr(pattern, key, value)
+
+    # Keep lifecycle metadata consistent when the general edit form changes
+    # status instead of using the dedicated activate/deactivate endpoints.
+    if "is_active" in update_data:
+        if pattern.is_active:
+            pattern.disabled_at = None
+        elif snapshot_before["is_active"]:
+            pattern.disabled_at = datetime.now(timezone.utc)
 
     db.flush()
 

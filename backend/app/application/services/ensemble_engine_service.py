@@ -37,12 +37,12 @@ def run_ensemble_engine(
     
     if "BLOCK" in rule_actions:
         logger.warning(
-            f"[ENSEMBLE] tx_id={transaction_id} RULE_BLOCK — final_score=95 final_status=FRAUD "
+            f"[ENSEMBLE] tx_id={transaction_id} RULE_BLOCK — final_score=100 final_status=FRAUD "
             f"rule_score={rule_score} pattern_score={pattern_score} ml_score={ml_score} "
             f"rule_actions={rule_actions}"
         )
         return {
-            "final_score": 95,
+            "final_score": 100,
             "final_status": "FRAUD",
             "reason": "RULE_BLOCK"
         }

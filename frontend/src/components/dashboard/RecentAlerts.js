@@ -12,7 +12,7 @@ const getSeverityColor = (t) =>
       : "severity-low";
 
 const getSeverityLabel = (t) =>
-  t === "high" ? "High Risk" : t === "medium" ? "Medium Risk" : "Safe";
+  t === "high" ? "High Risk" : t === "medium" ? "Medium Risk" : "Low Risk";
 
 const RecentAlerts = ({ alerts, summary, variant = "card" }) => {
   const navigate = useNavigate();

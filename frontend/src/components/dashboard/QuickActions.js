@@ -46,13 +46,6 @@ const QuickActions = () => {
       route: "/transactions",
     },
     {
-      id: 4,
-      title: "Analytics",
-      icon: "bi-graph-up",
-      color: "info",
-      route: "/analytics",
-    },
-    {
       id: 11,
       title: "Activity Timeline",
       icon: "bi-activity",
@@ -81,7 +74,7 @@ const QuickActions = () => {
           },
         ]
       : []),
-    ...(canManage
+    ...(isSuperAdmin
       ? [
           {
             id: 7,

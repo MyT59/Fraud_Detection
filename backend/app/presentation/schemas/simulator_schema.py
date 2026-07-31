@@ -28,6 +28,9 @@ def _now_utc() -> datetime:
 def _gen_rrn() -> str:
     return str(random.randint(100_000_000_000, 999_999_999_999))
 
+def _gen_stan() -> str:
+    return f"{random.randint(0, 999_999):06d}"
+
 def _gen_invoice() -> str:
     ts     = datetime.now().strftime("%Y%m%d%H%M%S")
     suffix = uuid.uuid4().hex[:6].upper()
@@ -73,8 +76,8 @@ class AgenusaManualInput(BaseModel):
         description="Retrieval Reference Number (12 digit). Auto-generate jika kosong.",
         example="240618123456"
     )
-    stan: Optional[str] = Field(default=None, description="System Trace Audit Number.", example="001234")
-    fep_id: Optional[str] = Field(default=None, description="Front-End Processor ID.", example="FEP-001")
+    stan: Optional[str] = Field(default=None, description="System Trace Audit Number. Dibuat otomatis oleh simulator.", example="001234")
+    fep_id: Optional[str] = Field(default=None, description="Front-End Processor ID. Diisi node simulator otomatis.", example="FEP-SIM-01")
 
     # === WAKTU ===
     timestamp_db: datetime = Field(
@@ -83,7 +86,7 @@ class AgenusaManualInput(BaseModel):
     )
 
     # === AMOUNT (WAJIB) ===
-    amount: float = Field(..., gt=0, description="Nominal transaksi (Rupiah).", example=500_000)
+    amount: float = Field(..., ge=0, description="Nominal transaksi (Rupiah).", example=500_000)
 
     # === TIPE TRANSAKSI (WAJIB) ===
     msg_type: Literal["TRANSFER", "CEK_SALDO", "TARIK_SALDO"] = Field(
@@ -148,16 +151,25 @@ class AgenusaManualInput(BaseModel):
     def derive_iso_fields(self) -> "AgenusaManualInput":
         _MTI = {"TRANSFER": "0200", "TARIK_SALDO": "0200", "CEK_SALDO": "0100"}
         _PC  = {"TRANSFER": "200000", "TARIK_SALDO": "010000", "CEK_SALDO": "310000"}
-        if not self.mti:
-            self.mti = _MTI.get(self.msg_type, "0200")
-        if not self.processing_code:
-            self.processing_code = _PC.get(self.msg_type, "200000")
+        # ISO technical fields are owned by the simulator so a user cannot
+        # construct an inconsistent combination with msg_type.
+        self.mti = _MTI.get(self.msg_type, "0200")
+        # Processing code is defined by the requested service, not by the
+        # response outcome. Always derive it to prevent inconsistent ISO 8583
+        # simulator payloads (for example CEK_SALDO with transfer code).
+        self.processing_code = _PC.get(self.msg_type, "200000")
+        self.stan = _gen_stan()
+        self.fep_id = "FEP-SIM-01"
         return self
 
     @model_validator(mode="after")
     def validate_transfer_dest(self) -> "AgenusaManualInput":
         if self.msg_type == "TRANSFER" and not self.dest_account_number:
             raise ValueError("dest_account_number wajib diisi untuk transaksi TRANSFER.")
+        if self.msg_type == "CEK_SALDO":
+            self.amount = 0
+        elif self.amount <= 0:
+            raise ValueError("amount harus lebih dari 0 untuk transfer atau tarik saldo.")
         return self
 
 
@@ -177,7 +189,7 @@ class NusabillManualInput(BaseModel):
     no_invoice: str = Field(default_factory=_gen_invoice, description="Nomor invoice. Auto-generate jika kosong.", example="INV-20240618120000-AB12CD")
     customer_id: str = Field(default_factory=_gen_customer_id, description="ID customer (→ user_account_id).", example="CUST-AB12CD34")
     utc_reference: Optional[str] = Field(default=None, description="Referensi UTC dari payment gateway.", example="UTC-REF-001")
-    kode_pembayaran: Optional[str] = Field(default=None, description="Kode VA / kode pembayaran bank (→ merchant_id).", example="8812345678901234")
+    kode_pembayaran: Optional[str] = Field(default=None, description="Kode VA / kode pembayaran bank untuk invoice; bukan merchant_id/biller_id.", example="8812345678901234")
 
     # === WAKTU ===
     tanggal_tagihan: datetime    = Field(default_factory=_now_utc, description="Tanggal tagihan dibuat. Default: sekarang.")

@@ -95,6 +95,14 @@ const STATUS_OPTIONS = [
   },
 ];
 
+const ALLOWED_STATUS_TRANSITIONS = {
+  OPEN: ["RESOLVED", "OVERRIDDEN"],
+  IN_PROGRESS: ["OPEN", "RESOLVED", "OVERRIDDEN"],
+  RESOLVED: ["REOPENED", "OVERRIDDEN"],
+  REOPENED: ["OPEN", "RESOLVED", "OVERRIDDEN"],
+  OVERRIDDEN: ["REOPENED"],
+};
+
 const fmt = (amount) =>
   amount != null
     ? new Intl.NumberFormat("id-ID", {
@@ -330,7 +338,9 @@ const UpdateStatusDropdown = ({
             Status
           </div>
 
-          {STATUS_OPTIONS.map((opt) => {
+          {STATUS_OPTIONS.filter((opt) =>
+            (ALLOWED_STATUS_TRANSITIONS[(currentStatus || "").toUpperCase()] || []).includes(opt.value),
+          ).map((opt) => {
             const isCurrent = opt.value === (currentStatus || "").toUpperCase();
             return (
               <button
@@ -424,7 +434,7 @@ const AlertDetailModal = ({
   pendingOp,
   onStatusUpdated, // callback ke parent setelah status berhasil diubah
 }) => {
-  const { canManage } = useRole();
+  const { canManage, canOverride } = useRole();
   const overlayRef = useRef(null);
 
   const isMLAlert = detail?.type?.includes("ML");
@@ -433,6 +443,8 @@ const AlertDetailModal = ({
   const claimedByName = detail?.claimed_by_name;
   const resolvedByName = detail?.resolved_by_name;
   const review = detail?.review ?? null;
+  const isTransactionAlert = Boolean(detail?.transaction_id);
+  const hasCompletedReview = Boolean(review?.decision && review?.reviewed_at);
   const violationList =
     detail?.transaction?.violation_reason?.split(" | ") ?? [];
 
@@ -475,7 +487,14 @@ const AlertDetailModal = ({
   };
 
   const canClaim = displayStatus === "OPEN" && typeof onClaim === "function";
-  const canResolve = displayStatus === "IN_PROGRESS";
+  const canResolve =
+    displayStatus === "IN_PROGRESS" &&
+    typeof onResolve === "function" &&
+    (!isTransactionAlert || hasCompletedReview);
+  const canOverrideTransaction =
+    canOverride &&
+    isTransactionAlert &&
+    ["OPEN", "IN_PROGRESS", "RESOLVED", "REOPENED"].includes(displayStatus);
   const caseType = getAlertCaseType({
     ...(detail || {}),
     transactionFinalStatus:
@@ -484,6 +503,20 @@ const AlertDetailModal = ({
       detail?.final_status,
     transaction: detail?.transaction,
   });
+
+  const handleOverride = async () => {
+    const reason = window.prompt(
+      "Alasan override wajib diisi. Contoh: duplicate alert atau approved business exception.",
+    );
+    if (!reason?.trim()) return;
+
+    try {
+      await updateAlertStatus(detail.id, "OVERRIDDEN", reason.trim());
+      handleStatusUpdated("OVERRIDDEN");
+    } catch (err) {
+      window.alert(err.message || "Gagal override alert.");
+    }
+  };
 
   return (
     <div
@@ -1262,13 +1295,25 @@ const AlertDetailModal = ({
 
             <div className="adm-footer__actions">
               {/* Update Status — hanya RISK_MANAGER & SUPER_ADMIN */}
-              {canManage && (
+              {canManage && !isTransactionAlert && (
                 <UpdateStatusDropdown
                   currentStatus={displayStatus}
                   alertId={detail.id}
                   onStatusUpdated={handleStatusUpdated}
                   disabled={!!pendingOp}
                 />
+              )}
+
+              {canOverrideTransaction && (
+                <button
+                  className="adm-btn adm-btn--ghost"
+                  onClick={handleOverride}
+                  disabled={!!pendingOp}
+                  title="Tutup kasus khusus dengan alasan audit"
+                  style={{ borderColor: "#dc2626", color: "#b91c1c" }}
+                >
+                  <i className="bi bi-shield-fill-exclamation" /> Override
+                </button>
               )}
 
               {/* Claim — semua role, hanya jika status OPEN */}
@@ -1291,7 +1336,7 @@ const AlertDetailModal = ({
                 </button>
               )}
 
-              {/* Resolve — semua role, hanya jika status IN_PROGRESS */}
+              {/* Alert transaksi hanya dapat resolve setelah Manual Review selesai. */}
               {canResolve && (
                 <button
                   className="adm-btn adm-btn--resolve"

@@ -23,8 +23,6 @@ from app.presentation.schemas.blacklist_schema import (
 
 router = APIRouter(prefix="/blacklist", tags=["Blacklist"])
 
-from sqlalchemy.exc import IntegrityError
-
 # =========================
 # ADD BLACKLIST
 # =========================
@@ -292,18 +290,20 @@ def bulk_import_blacklist(
 @router.get("/", response_model=BlacklistListResponse)
 def get_blacklist(
     value: str | None = Query(None),
-    type: str | None = Query(None),
+    type: BlacklistTypeEnum | None = Query(None),
     service_scope: str | None = Query(None),
     is_active: bool | None = Query(None),
     source: str | None = Query(None),
     status: str | None = Query(None),
     sort_by_hit: str | None = Query(None),  # asc / desc
     skip: int = 0,
-    limit: int = 10,
+    limit: int = 50,
     db: Session = Depends(get_db),
     current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))
 ):
-    limit = max(1, min(limit, 50))
+    if skip < 0:
+        raise HTTPException(status_code=422, detail="skip tidak boleh negatif")
+    limit = max(1, min(limit, 100))
 
     query = db.query(BlacklistItem).filter(BlacklistItem.is_deleted == False)
 
@@ -315,7 +315,7 @@ def get_blacklist(
         query = query.filter(BlacklistItem.value.ilike(f"%{normalized_value}%"))
 
     if type:
-        query = query.filter(BlacklistItem.type == BlacklistTypeEnum(type))
+        query = query.filter(BlacklistItem.type == type)
 
     if service_scope:
         query = query.filter(
@@ -443,8 +443,13 @@ def activate_blacklist(item_id: int, db: Session = Depends(get_db), current_admi
     if not item:
         raise HTTPException(status_code=404, detail="Blacklist not found")
 
+    if item.status != "APPROVED":
+        raise HTTPException(
+            status_code=409,
+            detail="Hanya blacklist yang sudah APPROVED dapat diaktifkan. Gunakan proses approve untuk item pending atau rejected.",
+        )
+
     item.is_active = True
-    item.status = "APPROVED"
 
     log_activity(
         db,

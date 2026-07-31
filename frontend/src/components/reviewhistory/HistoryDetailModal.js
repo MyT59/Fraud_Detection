@@ -343,6 +343,7 @@ const HistoryDetailModal = ({ item, onClose }) => {
     reviewedBy: item.reviewedBy ?? item.reviewed_by,
     reviewNote: cleanStr(item.reviewNote ?? item.review_note),
     isOverridden: item.isOverridden ?? item.is_overridden,
+    originalDecision: item.originalDecision ?? item.original_decision,
     overriddenBy: item.overriddenBy ?? item.overridden_by,
     overriddenAt: item.overriddenAt ?? item.overridden_at,
     overrideReason: cleanStr(item.overrideReason ?? item.override_reason),
@@ -518,6 +519,8 @@ const HistoryDetailModal = ({ item, onClose }) => {
               variant="alert"
             >
               <div className="hdm-grid-2">
+                <Field label="Keputusan Awal" value={data.originalDecision || "â€”"} />
+                <Field label="Keputusan Setelah Override" value={data.decision || "â€”"} />
                 <Field
                   label="Override oleh"
                   value={`User #${data.overriddenBy || "—"}`}

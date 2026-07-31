@@ -1,12 +1,5 @@
-"""
-rule_engine_service.py
-======================
-Optimasi P2 + P4:
-  - GlobalRule diambil dari cache (get_cached_rules) bukan query per transaksi
-  - Hapus db.commit() — commit dilakukan sekali di process_transaction()
-  - logger.info → logger.debug untuk per-rule evaluation log
-"""
-
+from datetime import datetime, time, timezone
+from zoneinfo import ZoneInfo
 from sqlalchemy import func
 
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
@@ -16,6 +9,7 @@ from app.application.cache.fraud_cache import get_cached_rules
 from app.core.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
+BUSINESS_TIMEZONE = ZoneInfo("Asia/Jakarta")
 
 
 def normalize_rule_action(action):
@@ -40,15 +34,48 @@ def evaluate_simple_rule(value, operator, threshold):
         if operator == ">=": return val >= th
         if operator == "<=": return val <= th
     except (ValueError, TypeError):
-        # Beberapa rule operasional membandingkan kode/string dengan operator
-        # berurutan (contoh issuer_bank >= BANK_CADANGAN_X).
-        val = str(value).strip()
-        th = str(threshold).strip()
-        if operator in (">", "gt"): return val > th
-        if operator in ("<", "lt"): return val < th
-        if operator in (">=", "gte"): return val >= th
-        if operator in ("<=", "lte"): return val <= th
+        return False
+    return False
 
+
+def _evaluate_datetime(value, operator, threshold):
+    """Compare timestamps using WIB for business-time conditions."""
+    if not isinstance(value, datetime):
+        return None
+
+    # PostgreSQL preserves UTC offsets, while some local/dev databases return
+    # a naive UTC datetime. Normalize both forms before applying a time rule.
+    left_business = value
+    if left_business.tzinfo is None:
+        left_business = left_business.replace(tzinfo=timezone.utc)
+    left_business = left_business.astimezone(BUSINESS_TIMEZONE)
+
+    raw = str(threshold).strip()
+    try:
+        target = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=BUSINESS_TIMEZONE)
+        else:
+            target = target.astimezone(BUSINESS_TIMEZONE)
+        left, right = left_business, target
+    except ValueError:
+        # `24:00` is a common business-rule notation for the end of a day,
+        # but Python's time type only accepts 00:00 through 23:59:59.
+        if raw in {"24:00", "24:00:00"}:
+            target_time = time.max
+        else:
+            try:
+                target_time = time.fromisoformat(raw)
+            except ValueError:
+                return False
+        left, right = left_business.timetz().replace(tzinfo=None), target_time
+
+    if operator == "=": return left == right
+    if operator == "!=": return left != right
+    if operator in (">", "gt"): return left > right
+    if operator in ("<", "lt"): return left < right
+    if operator in (">=", "gte"): return left >= right
+    if operator in ("<=", "lte"): return left <= right
     return False
 
 
@@ -65,13 +92,30 @@ def evaluate_json_rule(config, trx):
     elif hasattr(config, "dict"):
         config = config.dict(exclude_none=True)
 
-    if "AND" in config:
-        conditions = config.get("AND") or []
-        return all(evaluate_json_rule(c, trx) for c in conditions if c)
+    group_keys = [
+        key for key in ("AND", "OR")
+        if isinstance(config.get(key), list)
+    ]
+    if group_keys:
+        # Older rows were serialized as {"AND": [...], "OR": null}.
+        # Treat null as absent, but still fail closed if both groups contain
+        # conditions or if the selected group is empty.
+        if len(group_keys) != 1:
+            return False
+        logic = group_keys[0]
+        conditions = config[logic]
+        if not isinstance(conditions, list) or not conditions:
+            return False
+        if logic == "AND":
+            return all(evaluate_json_rule(condition, trx) for condition in conditions)
+        return any(evaluate_json_rule(condition, trx) for condition in conditions)
 
-    if "OR" in config:
-        conditions = config.get("OR") or []
-        return any(evaluate_json_rule(c, trx) for c in conditions if c)
+    if "AND" in config or "OR" in config:
+        return False
+
+    if not {"field", "operator", "value"}.issubset(config):
+        logger.warning("[RULE] Ignoring malformed rule_config: %s", config)
+        return False
 
     field    = config["field"]
     operator = config["operator"]
@@ -93,6 +137,10 @@ def evaluate_json_rule(config, trx):
     if trx_value is None:
         return False
 
+    datetime_result = _evaluate_datetime(trx_value, operator, value)
+    if datetime_result is not None:
+        return datetime_result
+
     if operator == "=":  return str(trx_value).strip() == str(value).strip()
     if operator == "!=": return str(trx_value).strip() != str(value).strip()
 
@@ -104,14 +152,7 @@ def evaluate_json_rule(config, trx):
         if operator in (">=", "gte"): return val >= th
         if operator in ("<=", "lte"): return val <= th
     except (ValueError, TypeError):
-        # Dukung rule kode/string yang memakai operator berurutan.
-        val = str(trx_value).strip()
-        th = str(value).strip()
-        if operator in (">", "gt"): return val > th
-        if operator in ("<", "lt"): return val < th
-        if operator in (">=", "gte"): return val >= th
-        if operator in ("<=", "lte"): return val <= th
-
+        return False
     return False
 
 
@@ -137,7 +178,6 @@ def run_rule_engine(db, trx):
     rule_groups    = set()
     rule_actions   = []
 
-    # ── P4: ambil dari cache, bukan query DB per transaksi ──
     rules = get_cached_rules(db)
 
     seen_groups = set()
@@ -161,13 +201,19 @@ def run_rule_engine(db, trx):
         if not is_match:
             continue
 
-        group = rule.rule_group if rule.rule_group else rule.condition_field or "GENERAL"
-        if group in seen_groups:
+        # Only an explicit group is mutually exclusive. JSON rules have no
+        # condition_field, so treating all of them as GENERAL hides valid hits.
+        group = rule.rule_group.strip() if rule.rule_group else None
+        if group and group in seen_groups:
             continue
 
-        seen_groups.add(group)
+        if group:
+            seen_groups.add(group)
         db.query(GlobalRule).filter(GlobalRule.id == rule.id).update(
-            {"hit_count": func.coalesce(GlobalRule.hit_count, 0) + 1},
+            {
+                "hit_count": func.coalesce(GlobalRule.hit_count, 0) + 1,
+                GlobalRule.updated_at: GlobalRule.updated_at,
+            },
             synchronize_session=False,
         )
 
@@ -215,5 +261,4 @@ def run_rule_engine(db, trx):
 
     risk_score = min(risk_score, 100)
 
-    # ── TIDAK ada db.commit() di sini ──
     return violations, risk_score, rule_actions

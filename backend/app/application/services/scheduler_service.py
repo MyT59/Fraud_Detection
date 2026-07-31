@@ -1,5 +1,7 @@
 from datetime import datetime, timezone, timedelta
 import logging
+import uuid
+from zoneinfo import ZoneInfo
 from typing import Dict, Any, List
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -14,6 +16,17 @@ from app.infrastructure.database.models.retrain_schedule_model import RetrainSch
 from app.core.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
+SCHEDULER_TIMEZONE = ZoneInfo("Asia/Jakarta")
+
+
+def _next_run_time(schedule_id: uuid.UUID):
+    """Read APScheduler's current next run time for a persisted schedule."""
+    # Local import prevents a module-import cycle: core.scheduler imports this
+    # service to construct SchedulerService.
+    from app.core.scheduler import get_scheduler_service
+
+    job = get_scheduler_service().scheduler.get_job(str(schedule_id))
+    return job.next_run_time if job else None
 
 @log_performance
 def run_sla_escalation_task():
@@ -63,33 +76,51 @@ def run_sla_escalation_task():
 @log_performance
 def scheduled_retrain_task(schedule_dict: Dict[str, Any]):
     db = SessionLocal()
-    schedule_id = str(schedule_dict.get('id')) 
+    schedule_id = uuid.UUID(str(schedule_dict["id"]))
     
     try:
-        logger.info(f"[Scheduler] Memulai retrain otomatis untuk: {schedule_dict.get('name')} ({schedule_id})")
+        # A queued job may be stale if its schedule was paused, deleted, or
+        # edited after it was registered in APScheduler.
+        schedule_obj = (
+            db.query(RetrainSchedule)
+            .filter(
+                RetrainSchedule.id == schedule_id,
+                RetrainSchedule.is_active == True,
+                RetrainSchedule.is_deleted == False,
+            )
+            .first()
+        )
+        if not schedule_obj:
+            logger.info("[Scheduler] Melewati schedule %s karena sudah tidak aktif atau dihapus.", schedule_id)
+            return
+
+        logger.info("[Scheduler] Memulai retrain otomatis untuk: %s (%s)", schedule_obj.name, schedule_id)
         
         retrain_service = RetrainService(db)
         result = retrain_service.execute_retrain(
-            domain=schedule_dict.get("domain"),
-            schedule_id=schedule_dict.get("id"),
+            domain=schedule_obj.domain,
+            schedule_id=schedule_id,
             trigger_source="scheduled",
         )
         schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
         if schedule_obj:
             schedule_obj.last_run_at = datetime.now(timezone.utc)
             schedule_obj.last_run_status = "SUCCESS" if result.get("status") == "success" else "FAILED"
+            schedule_obj.next_run_at = _next_run_time(schedule_id)
             db.commit()
 
-        logger.info(f"[Scheduler] Retrain {schedule_id} selesai dengan status: {schedule_obj.last_run_status}")
+        logger.info(f"[Scheduler] Retrain {schedule_id} selesai dengan status: {schedule_obj.last_run_status if schedule_obj else 'UNKNOWN'}")
         
     except Exception as e:
         logger.error(f"[Scheduler] Error saat menjalankan job {schedule_id}: {e}")
+        db.rollback()
         
         # 🔥 UPDATE CACHE DASHBOARD (Gagal Sistem)
         schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
         if schedule_obj:
             schedule_obj.last_run_at = datetime.now(timezone.utc)
             schedule_obj.last_run_status = "FAILED"
+            schedule_obj.next_run_at = _next_run_time(schedule_id)
             db.commit()
     finally:
         db.close()
@@ -123,6 +154,12 @@ class SchedulerService:
         self.scheduler = scheduler
 
     @log_performance
+    def validate_cron_expr(self, cron_expr: str) -> None:
+        if not cron_expr or not cron_expr.strip():
+            raise ValueError("Cron expression wajib diisi")
+        CronTrigger.from_crontab(cron_expr.strip(), timezone=SCHEDULER_TIMEZONE)
+
+    @log_performance
     def register_job(self, schedule_dict: Dict[str, Any]) -> None:
         schedule_id = str(schedule_dict.get("id"))
         cron_expr = schedule_dict.get("cron_expr")
@@ -131,18 +168,22 @@ class SchedulerService:
             logger.error(f"❌ Schedule {schedule_id} tidak punya cron expression.")
             return
         try:
-            trigger = CronTrigger.from_crontab(cron_expr)
+            self.validate_cron_expr(cron_expr)
+            trigger = CronTrigger.from_crontab(cron_expr, timezone=SCHEDULER_TIMEZONE)
             job = self.scheduler.add_job(
                 func=scheduled_retrain_task,
                 trigger=trigger,
                 args=[schedule_dict],
                 id=schedule_id,
                 replace_existing=True,
-                name=f"Retrain Job - {schedule_dict.get('name', schedule_id)}"
+                name=f"Retrain Job - {schedule_dict.get('name', schedule_id)}",
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=300,
             )
             db = SessionLocal()
             try:
-                schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
+                schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == uuid.UUID(schedule_id)).first()
                 if schedule_obj:
                     schedule_obj.next_run_at = job.next_run_time
                     db.commit()
@@ -160,19 +201,20 @@ class SchedulerService:
         try:
             if self.scheduler.get_job(schedule_id):
                 self.scheduler.remove_job(schedule_id)
-                
-                db = SessionLocal()
-                try:
-                    schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == schedule_id).first()
-                    if schedule_obj:
-                        schedule_obj.next_run_at = None
-                        db.commit()
-                finally:
-                    db.close()
-                    
                 logger.info(f"🗑️ Job {schedule_id} berhasil dihapus dari scheduler.")
             else:
                 logger.warning(f"⚠️ Job {schedule_id} tidak ditemukan di scheduler memori.")
+
+            # The scheduler may have restarted and lost the in-memory job.
+            # Clear the persisted value in either case.
+            db = SessionLocal()
+            try:
+                schedule_obj = db.query(RetrainSchedule).filter(RetrainSchedule.id == uuid.UUID(schedule_id)).first()
+                if schedule_obj:
+                    schedule_obj.next_run_at = None
+                    db.commit()
+            finally:
+                db.close()
         except Exception as e:
             logger.error(f"❌ Gagal menghapus job {schedule_id}: {e}")
             raise e

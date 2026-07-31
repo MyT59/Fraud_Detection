@@ -2634,6 +2634,70 @@
   color: #dc2626;
 }
 
+.false-negative-search-state {
+  display: block;
+  margin-top: 0.4rem;
+  color: #64748b;
+}
+
+.false-negative-candidates {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.false-negative-candidate {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #fed7aa;
+  border-radius: 7px;
+  background: #fff;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+}
+
+.false-negative-candidate:hover {
+  border-color: #f97316;
+  background: #fff7ed;
+}
+
+.false-negative-candidate strong,
+.false-negative-candidate span,
+.false-negative-selected strong,
+.false-negative-selected span {
+  display: block;
+}
+
+.false-negative-candidate span,
+.false-negative-selected span {
+  margin-top: 0.15rem;
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.false-negative-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.55rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #86efac;
+  border-radius: 7px;
+  background: #f0fdf4;
+}
+
+.false-negative-selected button {
+  border: 0;
+  background: transparent;
+  color: #b45309;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .false-negative-actions {
   display: flex;
   justify-content: flex-end;

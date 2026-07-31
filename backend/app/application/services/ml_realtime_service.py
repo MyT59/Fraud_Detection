@@ -11,7 +11,7 @@ from app.application.services.transaction_feature_snapshot_service import (
     build_transaction_snapshot,
 )
 from app.infrastructure.ml.scoring import score_transaction_snapshot
-from app.application.services.alert_service import create_alert
+from app.application.services.alert_service import create_alert, format_alert_message
 from app.application.services.activity_log_service import log_activity
 from app.infrastructure.database.session import SessionLocal
 from app.infrastructure.database.enums import (
@@ -62,7 +62,10 @@ def _log_ml_scoring_activity(db: Session, transaction, scoring_result: dict[str,
                 "risk_level": risk_level,
                 "patterns": scoring_result.get("patterns", []),
                 "domain": scoring_result.get("domain"),
-                "model_version": scoring_result.get("metadata", {}).get("model_version"),
+                "model_version": (
+                    scoring_result.get("metadata", {}).get("model_version")
+                    or scoring_result.get("metadata", {}).get("version")
+                ),
                 "scored_at": scoring_result.get("metadata", {}).get("scored_at"),
             },
         )
@@ -75,13 +78,6 @@ def _log_ml_scoring_activity(db: Session, transaction, scoring_result: dict[str,
 # =====================================================================
 # CONCURRENCY LIMITER
 # =====================================================================
-# Batasi ML task yang jalan bersamaan.
-# Harus match dengan pool_size di connection.py agar tidak QueuePool overflow.
-# Rumus aman: semaphore <= pool_size (bukan pool_size + max_overflow)
-# karena setiap ML task pegang 1 koneksi selama durasi processing.
-#
-# connection.py: pool_size=10 → ML_SEMAPHORE = 8
-# Sisanya (2 slot) untuk request API non-ML yang tetap butuh DB.
 ML_SEMAPHORE = asyncio.Semaphore(8)
 
 
@@ -423,7 +419,6 @@ class MLRealtimeService:
         # ===== ALERT ESCALATION =====
         if is_anomaly:
             try:
-                # ── Opsi B: ML update final_status ───────────────────────
                 # Jika ML deteksi anomali dan final_status masih SAFE/FLAGGED,
                 # tandai untuk review pasca-transaksi tanpa memblokir transaksi.
                 # Jika sudah FRAUD (dari Rule/Pattern), tidak di-downgrade.
@@ -482,6 +477,7 @@ class MLRealtimeService:
                     # Jika sudah ada (misal dari Rule/Pattern), naikkan level menjadi COMBINED_ML
                     existing_alert.alert_type = "COMBINED_ML"
                     existing_alert.title = "Fraud & ML Anomaly Detected"
+                    existing_alert.message = format_alert_message(transaction.violation_reason)
                     logger.info(f"[ML_REALTIME] tx_id={transaction_id} alert di-upgrade ke COMBINED_ML")
                 else:
                     # Jika belum ada alert sama sekali, buat alert baru khusus ML
@@ -491,6 +487,16 @@ class MLRealtimeService:
                         background_tasks=None
                     )
                     logger.info(f"[ML_REALTIME] tx_id={transaction_id} alert ML baru di-escalate")
+
+                synced_alert = self.db.query(FraudAlert).filter(
+                    FraudAlert.transaction_id == transaction.id
+                ).first()
+                if synced_alert:
+                    synced_alert.severity = transaction.risk_level or synced_alert.severity
+                    synced_alert.priority = max(
+                        float(synced_alert.priority or 0), float(transaction.risk_score or 0)
+                    )
+                    synced_alert.is_escalated = True
 
                 existing_breakdown.update(
                     {
@@ -635,6 +641,7 @@ class MLRealtimeService:
                 if existing_alert:
                     existing_alert.alert_type = "COMBINED_ML"
                     existing_alert.title = "Fraud & ML Anomaly Detected"
+                    existing_alert.message = format_alert_message(transaction.violation_reason)
                     logger.info(f"[ML_REALTIME][SYNC] tx_id={transaction.id} alert di-upgrade ke COMBINED_ML")
                 else:
                     create_alert(
@@ -643,6 +650,16 @@ class MLRealtimeService:
                         background_tasks=None
                     )
                     logger.info(f"[ML_REALTIME][SYNC] tx_id={transaction.id} alert ML baru di-escalate")
+
+                synced_alert = self.db.query(FraudAlert).filter(
+                    FraudAlert.transaction_id == transaction.id
+                ).first()
+                if synced_alert:
+                    synced_alert.severity = transaction.risk_level or synced_alert.severity
+                    synced_alert.priority = max(
+                        float(synced_alert.priority or 0), float(transaction.risk_score or 0)
+                    )
+                    synced_alert.is_escalated = True
 
                 existing_breakdown.update(
                     {

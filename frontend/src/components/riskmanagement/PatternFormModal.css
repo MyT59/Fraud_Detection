@@ -458,41 +458,62 @@
 
 .pfm-cond-row {
   display: grid;
-  grid-template-columns: minmax(220px, 2fr) 78px minmax(140px, 1.3fr) minmax(130px, 0.9fr) 34px;
-  align-items: start;
-  gap: 10px;
-  background: #f8fafc;
-  padding: 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  grid-template-columns: minmax(220px, 1.8fr) 104px minmax(150px, 1fr) 38px;
+  grid-template-areas:
+    "metric operator value remove"
+    "help help help remove";
+  align-items: end;
+  gap: 10px 12px;
+  background: linear-gradient(135deg, #f8fafc, #ffffff);
+  padding: 14px;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
-/* 1. Alokasi Dropdown Pilihan Indikator/Field */
-.pfm-cond-row > select.pfm-select:first-child {
+.pfm-cond-control {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.pfm-cond-control--metric { grid-area: metric; }
+.pfm-cond-control--operator { grid-area: operator; }
+.pfm-cond-control--value { grid-area: value; }
+
+.pfm-cond-control .pfm-select,
+.pfm-cond-control .pfm-input {
+  min-height: 39px;
+}
+
+.pfm-cond-control--metric .pfm-select {
   min-width: 0;
 }
 
-/* 2. Alokasi Dropdown Operator (==, >=, dll) */
-.pfm-cond-row .pfm-select--op {
+.pfm-cond-control .pfm-select--op {
   text-align: center;
   font-weight: 700;
 }
 
-/* 3. Alokasi Pembungkus Input Nilai (Value) - DI-BOOST AGAR LUAS */
-.pfm-cond-row .pfm-val-wrap {
+.pfm-cond-control .pfm-val-wrap {
   display: flex;
 }
 
-/* Pastikan elemen input/select di dalam wrap mengisi penuh ruangnya */
-.pfm-cond-row .pfm-val-wrap .pfm-input,
-.pfm-cond-row .pfm-val-wrap .pfm-select {
+.pfm-cond-control .pfm-val-wrap .pfm-input,
+.pfm-cond-control .pfm-val-wrap .pfm-select {
   width: 100%;
-  font-weight: 600; /* Menebalkan angka agar lebih scannable */
+  font-weight: 600;
   color: #0f172a;
 }
 
-/* 4. Alokasi Tombol Hapus */
 .pfm-cond-row .pfm-remove-btn {
+  grid-area: remove;
   background: #fef2f2;
   border: 1px solid #fee2e2;
   color: #ef4444;
@@ -507,16 +528,16 @@
 }
 
 .pfm-cond-meta {
-  min-width: 0;
-  min-height: 40px;
+  align-self: start;
+  min-width: 132px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 3px;
-  padding: 6px 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
+  padding: 5px 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  background: #eff6ff;
 }
 
 .pfm-cond-meta span {
@@ -526,11 +547,57 @@
 }
 
 .pfm-cond-meta code {
-  color: #b91c1c;
+  color: #1d4ed8;
   font-size: 0.68rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.pfm-cond-help {
+  grid-area: help;
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.pfm-cond-help p {
+  flex: 1;
+  margin: 0;
+  color: #475569;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.pfm-cond-help small {
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 0.71rem;
+}
+
+.pfm-cond-help strong { color: #0f172a; }
+
+.pfm-condition-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.77rem;
+  line-height: 1.45;
+}
+
+.pfm-condition-intro i {
+  margin-top: 1px;
+  color: #d97706;
 }
 
 .pfm-remove-btn:hover {
@@ -742,6 +809,17 @@
   .pfm-cond-row {
     grid-template-columns: 1fr;
   }
+
+  .pfm-cond-row {
+    grid-template-areas:
+      "metric"
+      "operator"
+      "value"
+      "help"
+      "remove";
+  }
+
+  .pfm-cond-help { flex-direction: column; }
 
   .pfm-field--full {
     grid-column: 1;

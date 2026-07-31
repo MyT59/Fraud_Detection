@@ -431,6 +431,12 @@
   padding-right: 44px;
 }
 
+/* The custom toggle is the single password visibility control. */
+.login-input-password::-ms-reveal,
+.login-input-password::-ms-clear {
+  display: none;
+}
+
 .login-password-toggle {
   position: absolute;
   right: 12px;

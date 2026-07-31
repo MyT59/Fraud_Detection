@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Any, Dict, Optional, List
 from enum import Enum
 from datetime import datetime
@@ -15,18 +15,42 @@ class ConfidenceEnum(str, Enum):
 
 
 class ReviewRequest(BaseModel):
-    alert_id: int
+    alert_id: int = Field(..., gt=0)
     decision: ReviewDecision
     note: Optional[str] = Field(None, max_length=500)
     decision_confidence: ConfidenceEnum
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
 
 
 class ReviewOverrideRequest(BaseModel):
     new_decision: ReviewDecision
     reason: str = Field(..., min_length=10, max_length=1000)
 
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("reason must contain at least 10 non-whitespace characters")
+        return value
+
 class FalseNegativeReportRequest(BaseModel):
     reason: str = Field(..., min_length=10, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("reason must contain at least 10 non-whitespace characters")
+        return value
 
 class ReviewMetricsResponse(BaseModel):
     total_reviews: int
@@ -86,6 +110,7 @@ class ReviewHistoryItem(BaseModel):
 
     # Override info — hanya terisi jika SUPER_ADMIN/RISK_MANAGER override vonis
     is_overridden: Optional[bool] = False
+    original_decision: Optional[str] = None
     overridden_by: Optional[int] = None
     overridden_at: Optional[datetime] = None
     override_reason: Optional[str] = None

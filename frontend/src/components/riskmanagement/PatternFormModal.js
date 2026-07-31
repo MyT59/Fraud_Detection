@@ -8,55 +8,40 @@ const FIELD_GROUPS = [
     group: "Metrik Finansial Umum (Universal)",
     services: ["ALL", "AGENUSA", "NUSABILL"],
     items: [
-      { l: "Jumlah Transaksi (tx_count)", f: "tx_count", t: "number", w: true },
-      {
-        l: "Nominal Per Transaksi (amount)",
-        f: "amount",
-        t: "number",
-        w: false,
-      },
-      {
-        l: "Akumulasi Nominal Window (total_amount)",
-        f: "total_amount",
-        t: "number",
-        w: true,
-      },
+      { l: "Jumlah Transaksi (tx_count)", f: "tx_count", t: "number", w: true, hint: "Jumlah transaksi dalam Time Window. Contoh: >= 3 dalam 5 menit.", example: ">= 3" },
+      { l: "Nominal Per Transaksi (amount)", f: "amount", t: "number", w: false, hint: "Nominal transaksi yang sedang dievaluasi. Contoh: >= 500000.", example: ">= 500000" },
+      { l: "Akumulasi Nominal Window (total_amount)", f: "total_amount", t: "number", w: true, hint: "Total nominal seluruh transaksi dalam Time Window. Contoh: >= 2000000.", example: ">= 2000000" },
     ],
   },
   {
     group: "Metrik Perangkat Mini ATM (Khusus Agenusa)",
     services: ["AGENUSA"],
     items: [
-      {
-        l: "Jumlah Gagal Beruntun (failure_count)",
-        f: "failure_count",
-        t: "number",
-        w: true,
-      },
-      {
-        l: "Jumlah Kartu Unik di EDC (distinct_account_count)",
-        f: "distinct_account_count",
-        t: "number",
-        w: true,
-      },
-      {
-        l: "Ada Sukses Setelah Gagal (has_success_after_failure)",
-        f: "has_success_after_failure",
-        t: "bool",
-        w: true,
-      },
+      { l: "Jumlah Gagal Beruntun (failure_count)", f: "failure_count", t: "number", w: true, hint: "Jumlah transaksi gagal beruntun dalam Time Window. Contoh: >= 3.", example: ">= 3" },
+      { l: "Jumlah Kartu Unik di EDC (distinct_account_count)", f: "distinct_account_count", t: "number", w: true, hint: "Jumlah rekening/kartu unik pada terminal EDC yang sama. Contoh: >= 5 dalam 10 menit.", example: ">= 5" },
+      { l: "Ada Sukses Setelah Gagal (has_success_after_failure)", f: "has_success_after_failure", t: "bool", w: true, hint: "Pilih true bila harus ada transaksi sukses setelah rangkaian kegagalan.", op: "==", value: "true" },
+      { l: "Processing Code", f: "PROCESSING_CODE", t: "text", w: false, hint: "Kode jenis transaksi ISO 8583. Isi persis seperti data, misalnya 200000 untuk transfer.", op: "==" },
+      { l: "Response Code", f: "RESPONSE_CODE", t: "text", w: false, hint: "00 berarti berhasil. Gunakan != 00 untuk mendeteksi transaksi gagal.", example: "!= 00" },
+      { l: "Transaksi Malam", f: "IS_NIGHT_TX", t: "number", w: false, hint: "Nilai 1 = transaksi malam, 0 = bukan. Gunakan == 1.", op: "==", value: "1" },
+      { l: "Rasio Nominal vs Rata-rata", f: "AMOUNT_OVER_AVG_RATIO", t: "number", w: false, hint: "Nominal transaksi dibanding rata-rata sebelumnya. Contoh: >= 3 berarti tiga kali rata-rata.", example: ">= 3" },
+      { l: "Transaksi Ditolak", f: "IS_DECLINED", t: "number", w: false, hint: "Nilai 1 = ditolak, 0 = berhasil. Gunakan == 1.", op: "==", value: "1" },
+      { l: "Jeda Transaksi (menit)", f: "GAP_MINUTES", t: "number", w: false, hint: "Jarak dari transaksi sebelumnya dalam menit. Contoh burst: <= 5.", example: "<= 5" },
+      { l: "Rekening Tujuan", f: "dest_account_number", t: "text", w: false, hint: "Nomor rekening tujuan transfer. Gunakan == untuk mencocokkan rekening tertentu.", op: "==" },
+      { l: "Pindah Terminal Cepat", f: "TERMINAL_SWITCH_FAST", t: "number", w: false, hint: "Nilai 1 = terminal berubah cepat, 0 = tidak. Gunakan == 1.", op: "==", value: "1" },
+      { l: "Rantai Decline lalu Burst Sukses", f: "chain_decline_success_burst", t: "bool", w: true, hint: "Pilih true untuk rangkaian transaksi gagal yang diikuti burst transaksi sukses.", op: "==", value: "true" },
     ],
   },
   {
     group: "Metrik Distribusi Invoice & VA (Khusus Nusabill)",
     services: ["NUSABILL"],
     items: [
-      {
-        l: "Jumlah Customer Unik Tagihan (distinct_customer_count)",
-        f: "distinct_customer_count",
-        t: "number",
-        w: true,
-      },
+      { l: "Jumlah Customer Unik Tagihan (distinct_customer_count)", f: "distinct_customer_count", t: "number", w: true, hint: "Jumlah customer tagihan berbeda dalam Time Window. Contoh: >= 20 dalam 5 menit.", example: ">= 20" },
+      { l: "Jeda Pembayaran (menit)", f: "PAYMENT_GAP_MINUTES", t: "number", w: false, hint: "Jarak dari pembayaran sebelumnya. Untuk mendeteksi burst, gunakan <= 5.", example: "<= 5" },
+      { l: "Rasio Pembayaran vs Tagihan", f: "PAYMENT_TO_BILL_RATIO", t: "number", w: false, hint: "1 = sesuai tagihan; < 0.3 = underpayment; > 4 = overpayment mencurigakan.", example: "< 0.3 atau > 4" },
+      { l: "Channel Pembayaran", f: "CHANNEL", t: "text", w: false, hint: "Isi persis sesuai channel transaksi, misalnya API, WEB, MOBILE, atau ATM.", op: "==", example: "== API" },
+      { l: "Channel API", f: "CHANNEL_API_FLAG", t: "number", w: false, hint: "Nilai 1 = channel saat ini API, 0 = bukan API. Gunakan == 1.", op: "==", value: "1" },
+      { l: "Keterlambatan Pembayaran (hari)", f: "PAYMENT_DELAY_DAYS", t: "number", w: false, hint: "Negatif berarti bayar sebelum tanggal tagihan. Anomali dini: < -1.", example: "< -1" },
+      { l: "Pindah Channel ke API", f: "CHANNEL_SWITCH_TO_API", t: "number", w: false, hint: "Nilai 1 bila channel sebelumnya bukan API lalu transaksi sekarang API. Gunakan == 1; >= 0 selalu benar.", op: "==", value: "1" },
     ],
   },
 ];
@@ -86,6 +71,16 @@ const normalizeMitigationAction = (action) => {
   return normalized === "BLOCK" ? "BLOCK" : "FLAG";
 };
 
+const PATTERN_CATEGORY_OPTIONS = [
+  { value: "VELOCITY", label: "Velocity & Transaksi Berulang" },
+  { value: "AMOUNT_ANOMALY", label: "Anomali Nominal" },
+  { value: "NETWORK", label: "Network, Merchant & Terminal" },
+  { value: "CREDENTIAL", label: "Credential & Account Takeover" },
+  { value: "LOCATION_DEVICE", label: "Lokasi & Perangkat" },
+  { value: "BEHAVIORAL_TIME", label: "Perilaku & Waktu" },
+  { value: "COMPOSITE", label: "Pola Gabungan / Syndicate" },
+];
+
 // ─── Komponen Row Kondisi Dinamis ─────────────────────────────────────────────
 const CondRow = ({ cond, currentService, onChange, onRemove, showRemove }) => {
   const availableGroups = FIELD_GROUPS.filter((g) =>
@@ -95,16 +90,19 @@ const CondRow = ({ cond, currentService, onChange, onRemove, showRemove }) => {
 
   const handleFieldChange = (f) => {
     const newMeta = ALL_FIELDS_FLAT.find((x) => x.f === f);
-    onChange({ ...cond, field: f, value: newMeta?.t === "bool" ? "true" : "" });
+    onChange({
+      ...cond,
+      field: f,
+      operator: newMeta?.op || ">=",
+      value: newMeta?.value ?? (newMeta?.t === "bool" ? "true" : ""),
+    });
   };
 
   return (
     <div className="pfm-cond-row">
-      <select
-        className="pfm-select"
-        value={cond.field}
-        onChange={(e) => handleFieldChange(e.target.value)}
-      >
+      <label className="pfm-cond-control pfm-cond-control--metric">
+        <span>Indikator</span>
+        <select className="pfm-select" value={cond.field} onChange={(e) => handleFieldChange(e.target.value)}>
         <option value="" disabled>
           — Pilih Indikator Matriks —
         </option>
@@ -117,21 +115,23 @@ const CondRow = ({ cond, currentService, onChange, onRemove, showRemove }) => {
             ))}
           </optgroup>
         ))}
-      </select>
+        </select>
+      </label>
 
-      <select
-        className="pfm-select pfm-select--op"
-        value={cond.operator}
-        onChange={(e) => onChange({ ...cond, operator: e.target.value })}
-      >
+      <label className="pfm-cond-control pfm-cond-control--operator">
+        <span>Operator</span>
+        <select className="pfm-select pfm-select--op" value={cond.operator} onChange={(e) => onChange({ ...cond, operator: e.target.value })}>
         {OPS.map((op) => (
           <option key={op} value={op}>
             {op}
           </option>
         ))}
-      </select>
+        </select>
+      </label>
 
-      <div className="pfm-val-wrap">
+      <label className="pfm-cond-control pfm-cond-control--value">
+        <span>Nilai</span>
+        <div className="pfm-val-wrap">
         {meta?.t === "bool" ? (
           <select
             className="pfm-select"
@@ -146,18 +146,23 @@ const CondRow = ({ cond, currentService, onChange, onRemove, showRemove }) => {
         ) : (
           <input
             className="pfm-input"
-            type="number"
+            type={meta?.t === "text" ? "text" : "number"}
             placeholder="Nilai..."
             value={cond.value}
             onChange={(e) => onChange({ ...cond, value: e.target.value })}
           />
         )}
-      </div>
+        </div>
+      </label>
 
       {meta && (
-        <div className="pfm-cond-meta">
-          <span>{meta.w ? "Window metric" : "Static field"}</span>
-          <code>{meta.f}</code>
+        <div className="pfm-cond-help">
+          <div className="pfm-cond-meta">
+            <span>{meta.w ? "Butuh Time Window" : "Nilai transaksi saat ini"}</span>
+            <code>{meta.f}</code>
+          </div>
+          <p>{meta.hint || "Isi operator dan nilai sesuai indikator yang dipilih."}</p>
+          {meta.example && <small>Contoh: <strong>{meta.example}</strong></small>}
         </div>
       )}
 
@@ -180,6 +185,7 @@ const PatternFormModal = ({
   onClose,
   onSuccess,
   onUpdate,
+  onError,
   editData,
 }) => {
   const isEdit = Boolean(editData);
@@ -210,7 +216,13 @@ const PatternFormModal = ({
         );
 
         if (!isFieldValidForNewService) {
-          return { ...c, field: fallbackField, value: "" };
+          const fallbackMeta = ALL_FIELDS_FLAT.find((item) => item.f === fallbackField);
+          return {
+            ...c,
+            field: fallbackField,
+            operator: fallbackMeta?.op || ">=",
+            value: fallbackMeta?.value ?? "",
+          };
         }
         return c;
       }),
@@ -340,6 +352,7 @@ const PatternFormModal = ({
       }
     } catch (err) {
       console.error("Error saving fraud pattern:", err);
+      onError?.(err.message || "Gagal menyimpan pattern.");
       setLoading(false);
     }
   };
@@ -410,30 +423,32 @@ const PatternFormModal = ({
               {/* Ruangan Input Kategori Menggunakan Fitur DataList */}
               <div className="pfm-field">
                 <label className="pfm-label">
-                  Label Kategori Analisis <span className="pfm-req">*</span>
+                  Kategori Pattern <span className="pfm-req">*</span>
                 </label>
-                <input
-                  className="pfm-input"
-                  type="text"
-                  list="category-suggestions" // <-- Disambungkan ke ID datalist di bawah
-                  placeholder="Misal: Money Laundering & Split Transaction"
+                <select
+                  className="pfm-select"
                   value={form.pattern_category}
                   onChange={(e) => set("pattern_category", e.target.value)}
-                />
-
-                {/* Koleksi data cadangan untuk mempermudah kemasukan data */}
-                <datalist id="category-suggestions">
-                  <option value="Money Laundering & Split Transaction" />
-                  <option value="Velocity Spike Attack" />
-                  <option value="Amount Threshold Anomaly" />
-                  <option value="Decline Velocity Anomaly" />
-                  <option value="High Risk Card Testing" />
-                  <option value="Account Takeover Suspect" />
-                </datalist>
+                >
+                  <option value="" disabled>
+                    Pilih kategori pattern
+                  </option>
+                  {!PATTERN_CATEGORY_OPTIONS.some(
+                    (option) => option.value === form.pattern_category,
+                  ) && form.pattern_category && (
+                    <option value={form.pattern_category}>
+                      Kategori lama: {form.pattern_category}
+                    </option>
+                  )}
+                  {PATTERN_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
 
                 <div className="pfm-field-hint">
-                  Boleh pilih cadangan industri atau taip terus jenis fraud
-                  baharu.
+                  Gunakan kategori standar; detail skenario tetap ditulis pada nama pattern.
                 </div>
               </div>
 
@@ -586,9 +601,13 @@ const PatternFormModal = ({
 
           <div className="pfm-section-head">
             <div className="pfm-step-badge">C</div>
-            <span>Advanced Condition Builder ({form.service_source})</span>
+            <span>Susun Kondisi Pattern ({form.service_source})</span>
           </div>
           <div className="pfm-card">
+            <div className="pfm-condition-intro">
+              <i className="bi bi-lightbulb" />
+              <span>Pilih indikator, operator, lalu nilai. Untuk field bernilai 0/1, gunakan <strong>== 1</strong> agar kondisi tidak selalu terpenuhi.</span>
+            </div>
             <div className="pfm-cond-list">
               {conditions.map((cond) => (
                 <CondRow

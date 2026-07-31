@@ -119,6 +119,7 @@ def train_one(
 
     meta = {
         "version": model_version or _default_model_version(domain),
+        "model_version": model_version or _default_model_version(domain),
         "domain": domain,
         "dataset": str(csv_path.relative_to(PROJECT_ROOT)),
         "rows": int(len(x)),
@@ -215,6 +216,7 @@ def train_from_dataframe(
 
     meta = {
         "version": model_version or _default_model_version(domain),
+        "model_version": model_version or _default_model_version(domain),
         "domain": domain,
         "dataset": "retrain_hybrid_dataset",
         "rows": int(len(x)),
@@ -239,6 +241,7 @@ def train_from_dataframe(
     return {
         "meta": meta,
         "model_path": str(model_path),
+        "meta_path": str(meta_path),
         "anomaly_df": anomaly_df,
         "anomalies_found": len(anomaly_df)
     }

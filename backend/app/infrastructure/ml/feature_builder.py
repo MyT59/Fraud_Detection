@@ -2,10 +2,12 @@ import numpy as np
 import pandas as pd
 from typing import Any, Optional
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from ...core.logging import get_logger
 
 logger = get_logger(__name__)
+BUSINESS_TIMEZONE = ZoneInfo("Asia/Jakarta")
 
 # ========================================================================
 # SNAPSHOT-BASED FEATURE ENGINEERING (NEW)
@@ -126,8 +128,9 @@ def build_agenusa_features_from_snapshot(snapshot: dict) -> dict:
     
     # ===== TIME-BASED FEATURES =====
     if features["TIMESTAMP_DB"]:
-        features["TX_HOUR"] = features["TIMESTAMP_DB"].hour
-        features["TX_DAYOFWEEK"] = features["TIMESTAMP_DB"].weekday()
+        business_time = features["TIMESTAMP_DB"].astimezone(BUSINESS_TIMEZONE)
+        features["TX_HOUR"] = business_time.hour
+        features["TX_DAYOFWEEK"] = business_time.weekday()
         features["IS_NIGHT_TX"] = 1 if features["TX_HOUR"] in [0, 1, 2, 3, 4] else 0
     else:
         features["TX_HOUR"] = -1
@@ -169,8 +172,7 @@ def build_agenusa_features_from_snapshot(snapshot: dict) -> dict:
     
     features["IS_BRUTE_PATTERN"] = (
         1 if (
-            str(current_tx.get("processing_code", "")) == "300000"
-            and str(current_tx.get("response_code", "00")) == "55"
+            str(current_tx.get("response_code", "00")) == "55"
         ) else 0
     )
     
@@ -354,11 +356,12 @@ def build_agenusa_features(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     # 🚀 3. FEATURE ENGINEERING
-    data["TIMESTAMP_DB"] = pd.to_datetime(data["TIMESTAMP_DB"], errors="coerce")
+    data["TIMESTAMP_DB"] = pd.to_datetime(data["TIMESTAMP_DB"], errors="coerce", utc=True)
     data = data.sort_values(["ACCOUNT_NUMBER", "TIMESTAMP_DB"]).reset_index(drop=True)
 
-    data["TX_HOUR"] = data["TIMESTAMP_DB"].dt.hour.fillna(-1).astype(int)
-    data["TX_DAYOFWEEK"] = data["TIMESTAMP_DB"].dt.dayofweek.fillna(-1).astype(int)
+    business_time = data["TIMESTAMP_DB"].dt.tz_convert(BUSINESS_TIMEZONE)
+    data["TX_HOUR"] = business_time.dt.hour.fillna(-1).astype(int)
+    data["TX_DAYOFWEEK"] = business_time.dt.dayofweek.fillna(-1).astype(int)
     data["IS_NIGHT_TX"] = data["TX_HOUR"].isin([0, 1, 2, 3, 4]).astype(int)
 
     data["PREV_TIMESTAMP"] = data.groupby("ACCOUNT_NUMBER")["TIMESTAMP_DB"].shift(1)
@@ -382,7 +385,7 @@ def build_agenusa_features(df: pd.DataFrame) -> pd.DataFrame:
 
     data["IS_DECLINED"] = (data["RESPONSE_CODE"].astype(str) != "00").astype(int)
     data["IS_BRUTE_PATTERN"] = (
-        (data["PROCESSING_CODE"].astype(str) == "300000") & (data["RESPONSE_CODE"].astype(str) == "55")
+        data["RESPONSE_CODE"].astype(str) == "55"
     ).astype(int)
     data["IS_MONEY_MULE_DEST"] = (data["DEST_ACCOUNT_NUMBER"] == "DST999999").astype(int)
     data["IS_HIGH_AMOUNT_PATTERN"] = (data["AMOUNT_OVER_AVG_RATIO"] >= 8.0).astype(int)
@@ -401,7 +404,6 @@ def build_nusabill_features(df: pd.DataFrame) -> pd.DataFrame:
     COLUMN_ALIASES = {
         "bill_date": "BILL_DATE",
         "payment_date": "PAYMENT_DATE",
-        "customer_id": "CUSTOMER_ID",
         "payment_amount": "PAYMENT_AMOUNT",
         "bill_amount": "BILL_AMOUNT",
         "channel": "CHANNEL"
@@ -410,6 +412,17 @@ def build_nusabill_features(df: pd.DataFrame) -> pd.DataFrame:
     for old_col, new_col in COLUMN_ALIASES.items():
         if old_col in data.columns and new_col not in data.columns:
             data[new_col] = data[old_col]
+
+    # Dataset Nusabill lama tidak selalu menyediakan customer_id eksplisit.
+    # Untuk data legacy, gunakan nama customer sebagai fallback grouping. Nomor
+    # rekening dan kode pembayaran/VA bukan feature maupun identitas ML.
+    customer_id = data["CUSTOMER_ID"] if "CUSTOMER_ID" in data.columns else pd.Series(pd.NA, index=data.index)
+    for candidate in ("customer_id", "user_account_id", "nama_customer"):
+        if candidate in data.columns:
+            values = data[candidate].replace("", pd.NA)
+            customer_id = customer_id.fillna(values)
+    if customer_id.notna().any():
+        data["CUSTOMER_ID"] = customer_id
 
     # ✅ 2. VALIDATION
     required_cols = [

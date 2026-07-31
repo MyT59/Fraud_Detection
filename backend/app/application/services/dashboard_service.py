@@ -1,4 +1,6 @@
 import builtins
+from collections import Counter
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import case, func
@@ -7,6 +9,8 @@ from app.core.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
 from datetime import datetime, timedelta, timezone
+
+DASHBOARD_TIMEZONE = ZoneInfo("Asia/Jakarta")
 
 from app.infrastructure.database.models.transaction_model import Transaction
 from app.infrastructure.database.models.fraud_alert_model import FraudAlert
@@ -85,7 +89,7 @@ class DashboardService:
         fraud_agenusa = int(row.fraud_agenusa or 0)
         fraud_nusabill = int(row.fraud_nusabill or 0)
 
-        total_tx    = agenusa + nusabill
+        total_tx    = int(row.total or 0)
         total_fraud = fraud_agenusa + fraud_nusabill
         fraud_rate  = (total_fraud / total_tx * 100) if total_tx else 0
 
@@ -117,7 +121,7 @@ class DashboardService:
     
     @staticmethod
     def get_transaction_trend(db: Session):
-        return TransactionRepository(db).get_today_hourly_trend()
+        return DashboardService.get_transaction_trend_detail(db, range="today")
 
     @staticmethod
     def get_transaction_trend_detail(
@@ -126,7 +130,7 @@ class DashboardService:
         start: str = None,
         end: str = None,
     ):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(DASHBOARD_TIMEZONE)
         anchor = now
         range_key = (range or "today").lower()
 
@@ -134,19 +138,21 @@ class DashboardService:
             if not value:
                 return fallback
             try:
-                return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            except ValueError:
-                return fallback
+                return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=DASHBOARD_TIMEZONE)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Format tanggal harus YYYY-MM-DD") from exc
 
         def is_fraud_expr():
             return case((Transaction.final_status == "FRAUD", 1), else_=0)
+
+        local_transaction_time = func.timezone("Asia/Jakarta", Transaction.transaction_time)
 
         if range_key == "today":
             start_dt = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
             end_dt = anchor.replace(hour=23, minute=59, second=59, microsecond=999999)
             rows = (
                 db.query(
-                    func.extract("hour", Transaction.transaction_time).label("hour"),
+                    func.extract("hour", local_transaction_time).label("hour"),
                     func.count(Transaction.id).label("total"),
                     func.sum(is_fraud_expr()).label("fraud"),
                 )
@@ -179,6 +185,8 @@ class DashboardService:
                 hour=0, minute=0, second=0, microsecond=0
             )
         elif range_key == "custom":
+            if not start or not end:
+                raise ValueError("Tanggal awal dan akhir wajib diisi untuk rentang kustom")
             default_start = (anchor - timedelta(days=7)).replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
@@ -190,7 +198,10 @@ class DashboardService:
                 start_dt, end_dt = end_dt.replace(hour=0, minute=0, second=0, microsecond=0), start_dt.replace(
                     hour=23, minute=59, second=59, microsecond=999999
                 )
-            days = min((end_dt.date() - start_dt.date()).days + 1, 366)
+            requested_days = (end_dt.date() - start_dt.date()).days + 1
+            if requested_days > 366:
+                raise ValueError("Rentang kustom maksimal 366 hari")
+            days = requested_days
         elif range_key in ("yearly", "1y"):
             month_starts = []
             for offset in builtins.range(11, -1, -1):
@@ -199,13 +210,13 @@ class DashboardService:
                 while month <= 0:
                     month += 12
                     year -= 1
-                month_starts.append(datetime(year, month, 1, tzinfo=timezone.utc))
+                month_starts.append(datetime(year, month, 1, tzinfo=DASHBOARD_TIMEZONE))
             start_dt = month_starts[0]
             end_dt = anchor.replace(hour=23, minute=59, second=59, microsecond=999999)
             rows = (
                 db.query(
-                    func.extract("year", Transaction.transaction_time).label("year"),
-                    func.extract("month", Transaction.transaction_time).label("month"),
+                    func.extract("year", local_transaction_time).label("year"),
+                    func.extract("month", local_transaction_time).label("month"),
                     func.count(Transaction.id).label("total"),
                     func.sum(is_fraud_expr()).label("fraud"),
                 )
@@ -230,16 +241,12 @@ class DashboardService:
                 for month_start in month_starts
             ]
         else:
-            days = 7
-            end_dt = anchor.replace(hour=23, minute=59, second=59, microsecond=999999)
-            start_dt = (end_dt - timedelta(days=days - 1)).replace(
-                hour=0, minute=0, second=0, microsecond=0
-            )
+            raise ValueError("Range tidak didukung")
 
         def fetch_daily_rows(start_range, end_range):
             return (
                 db.query(
-                    func.date(Transaction.transaction_time).label("date"),
+                    func.date(local_transaction_time).label("date"),
                     func.count(Transaction.id).label("total"),
                     func.sum(is_fraud_expr()).label("fraud"),
                 )
@@ -268,9 +275,18 @@ class DashboardService:
 
     @staticmethod
     def get_fraud_distribution(db: Session):
-        fraud = db.query(func.count(Transaction.id)).filter(Transaction.final_status == "FRAUD").scalar()
-        legit = db.query(func.count(Transaction.id)).filter(Transaction.final_status != "FRAUD").scalar()
-        return {"total": (fraud or 0) + (legit or 0), "fraud": fraud or 0, "legit": legit or 0}
+        row = db.query(
+            func.count(Transaction.id).label("total"),
+            func.sum(case((Transaction.final_status == "FRAUD", 1), else_=0)).label("fraud"),
+            func.sum(case((Transaction.final_status == "FLAGGED", 1), else_=0)).label("flagged"),
+            func.sum(case((Transaction.final_status == "SAFE", 1), else_=0)).label("safe"),
+        ).one()
+        return {
+            "total": int(row.total or 0),
+            "fraud": int(row.fraud or 0),
+            "flagged": int(row.flagged or 0),
+            "safe": int(row.safe or 0),
+        }
 
     @staticmethod
     def get_recent_alerts(db: Session):
@@ -300,42 +316,38 @@ class DashboardService:
     @staticmethod
     @log_performance
     def get_top_patterns(db: Session):
-        raw_data = db.query(
-            Transaction.violation_pattern_ids,
-            func.count(Transaction.id)
-        ).filter(Transaction.violation_pattern_ids.isnot(None))\
-         .group_by(Transaction.violation_pattern_ids)\
-         .order_by(func.count(Transaction.id).desc()).limit(5).all()
-        resolved_results = []
-        pattern_master = {p.id: p for p in db.query(FraudPattern).all()}
+        pattern_hits = Counter()
+        rows = db.query(Transaction.violation_pattern_ids).filter(
+            Transaction.violation_pattern_ids.isnot(None)
+        ).all()
+        for (pattern_ids,) in rows:
+            if isinstance(pattern_ids, list):
+                for pattern_id in pattern_ids:
+                    try:
+                        pattern_hits.update([int(pattern_id)])
+                    except (TypeError, ValueError):
+                        logger.warning("Ignoring invalid pattern ID in transaction history: %r", pattern_id)
 
-        for row in raw_data:
-            pattern_ids = row[0]
-            count = row[1]
-            
-            if isinstance(pattern_ids, list) and len(pattern_ids) > 0:
-                pid = pattern_ids[0]
-                pattern_obj = pattern_master.get(pid)
-                
-                if pattern_obj:
-                    resolved_results.append({
-                        "pattern_id": pattern_obj.id,
-                        "pattern_name": pattern_obj.pattern_name,
-                        "category": pattern_obj.pattern_category,
-                        "risk_score": pattern_obj.risk_score,
-                        "count": count
-                    })
-                    continue
-            
-            resolved_results.append({
-                "pattern_id": None,
-                "pattern_name": f"Unknown Discovered Pattern {str(pattern_ids)}",
-                "category": "UNKNOWN",
-                "risk_score": 50,
-                "count": count
+        if not pattern_hits:
+            return []
+
+        pattern_master = {
+            pattern.id: pattern
+            for pattern in db.query(FraudPattern).filter(FraudPattern.is_deleted == False).all()
+        }
+        result = []
+        for pattern_id, count in pattern_hits.most_common(5):
+            pattern = pattern_master.get(pattern_id)
+            if not pattern:
+                continue
+            result.append({
+                "pattern_id": pattern.id,
+                "pattern_name": pattern.pattern_name,
+                "category": pattern.pattern_category,
+                "risk_score": pattern.risk_score,
+                "count": count,
             })
-
-        return resolved_results
+        return result
     
     @staticmethod
     def get_alert_trend(db: Session):
@@ -358,7 +370,7 @@ class DashboardService:
         avg_latency = int(sum([s["latency"] or 0 for s in services]) / total) if total > 0 else 0
 
         return {
-            "summary": {"status": overall, "uptime": 99.98, "avg_latency": avg_latency},
+            "summary": {"status": overall, "uptime": None, "avg_latency": avg_latency},
             "counts": {"operational": operational, "degraded": degraded, "down": down},
             "updated_at": datetime.now(timezone.utc),
             "services": services
@@ -368,19 +380,19 @@ class DashboardService:
     @log_performance
     def get_activity_timeline(db: Session, type: str = None):
         timeline = []
-        fraud_trx = TransactionRepository(db).get_recent_fraud()        
+        fraud_trx = TransactionRepository(db).get_recent_fraud(limit=20)
         alerts = db.query(FraudAlert).filter(FraudAlert.status == "OPEN")\
-                   .order_by(FraudAlert.created_at.desc()).limit(5).all()
+                   .order_by(FraudAlert.created_at.desc()).limit(20).all()
         reviews = db.query(ManualReview).options(joinedload(ManualReview.admin))\
-                    .order_by(ManualReview.created_at.desc()).limit(5).all()
+                    .order_by(ManualReview.created_at.desc()).limit(20).all()
         logs = db.query(ActivityLog).options(joinedload(ActivityLog.admin))\
-                 .order_by(ActivityLog.created_at.desc()).limit(10).all()
+                 .order_by(ActivityLog.created_at.desc()).limit(20).all()
 
         for t in fraud_trx:
             timeline.append({
                 "type": TimelineTypeEnum.TIMELINE_FRAUD.value, 
-                "title": "High-Risk Transaction Blocked",
-                "description": f"Transaction {t.original_trx_id} automatically blocked by system",
+                "title": "Transaction Confirmed as Fraud",
+                "description": f"Transaction {t.original_trx_id} is marked as fraud",
                 "created_at": t.created_at,
                 "time": format_time(t.created_at),
                 "actor": "System",
@@ -432,8 +444,17 @@ class DashboardService:
 
         timeline.sort(key=lambda x: x["created_at"], reverse=True)
         if type:
-            type = type.upper()
-            timeline = [t for t in timeline if t["type"] == type]
+            aliases = {
+                "FRAUD": TimelineTypeEnum.TIMELINE_FRAUD.value,
+                "FRAUD_DETECTED": TimelineTypeEnum.TIMELINE_FRAUD.value,
+                "ALERT": TimelineTypeEnum.TIMELINE_ALERT.value,
+                "REVIEW": TimelineTypeEnum.TIMELINE_REVIEW.value,
+                "MANUAL_REVIEW": TimelineTypeEnum.TIMELINE_REVIEW.value,
+                "SECURITY": TimelineTypeEnum.TIMELINE_SECURITY.value,
+                "SYSTEM": TimelineTypeEnum.TIMELINE_SYSTEM.value,
+            }
+            normalized_type = aliases.get(type.upper(), type.upper())
+            timeline = [t for t in timeline if t["type"] == normalized_type]
 
         for t in timeline:
             del t["created_at"]

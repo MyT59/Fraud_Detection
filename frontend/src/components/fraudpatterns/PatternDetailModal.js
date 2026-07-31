@@ -106,11 +106,11 @@ const PatternDetailModal = ({ pattern, onClose }) => {
             </div>
             <div className="pdm-metric">
               <div className="pdm-metric-val">{pattern.accuracy}%</div>
-              <div className="pdm-metric-lbl">Accuracy</div>
+              <div className="pdm-metric-lbl">Precision</div>
             </div>
             <div className="pdm-metric">
               <div className="pdm-metric-val">{pattern.falsePositiveRate}%</div>
-              <div className="pdm-metric-lbl">False Positive Rate</div>
+              <div className="pdm-metric-lbl">False Discovery Rate</div>
             </div>
             <div className="pdm-metric">
               <div className="pdm-metric-val">{pattern.avgLossIDR}</div>
@@ -148,18 +148,16 @@ const PatternDetailModal = ({ pattern, onClose }) => {
 
           <div className="pdm-section">
             <div className="pdm-section-title">
-              <i className="bi bi-bar-chart-line"></i>Detection Share
+              <i className="bi bi-bar-chart-line"></i>Kontribusi Deteksi Pattern
             </div>
             <div className="pdm-trend-row">
               {/*
-                [FIX] Label sebelumnya "This month vs last month" tidak sesuai
-                dengan data dari BE. Field `trend` dihitung BE sebagai:
-                (tx_count_pattern_ini / total_flagged_transactions) * 100
-                yaitu proporsi pattern ini terhadap seluruh transaksi yang
-                ter-flag, bukan perbandingan antar bulan.
+                `trend` adalah proporsi occurrence pattern ini terhadap semua
+                occurrence pattern. Metrik ini bukan akurasi dan satu transaksi
+                dapat memicu lebih dari satu pattern.
               */}
               <span className="pdm-trend-label">
-                Share dari total transaksi flagged
+                Proporsi dari seluruh pemicu pattern
               </span>
               <span className="pdm-trend-val up">
                 <i className="bi bi-pie-chart-fill"></i>

@@ -11,6 +11,7 @@ from app.infrastructure.database.enums import TransactionStatusEnum
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import String, cast, or_
 from fastapi import HTTPException
 from sqlalchemy.orm.exc import StaleDataError
 from datetime import datetime, timezone
@@ -40,18 +41,17 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
                             detail=f"Invalid confidence level: {confidence}. Allowed: {allowed_confidence}")
 
     try:
-        alert_repo = AlertRepository(db)
-        alert = alert_repo.get_by_id(alert_id)
+        alert = db.query(FraudAlert).filter(
+            FraudAlert.id == alert_id
+        ).with_for_update().first()
         if not alert:
             raise HTTPException(status_code=404, 
                                 detail="Alert not found")
         
-        if alert.status == "RESOLVED":
-            raise HTTPException(400, "Alert already resolved")
-            
-        if alert.status == "OPEN":
+        alert_status = alert.status.value if hasattr(alert.status, "value") else str(alert.status)
+        if alert_status != "IN_PROGRESS":
             raise HTTPException(status_code=400, 
-                                detail="Alert must be claimed before submitting a review. Please claim it first.")
+                                detail="Alert must be IN_PROGRESS and claimed before submitting a review.")
             
         if alert.claimed_by != reviewer_id:
             raise HTTPException(status_code=403, 
@@ -63,8 +63,9 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
             raise HTTPException(status_code=400, 
                                 detail="Alert already reviewed")
 
-        trx_repo = TransactionRepository(db)
-        trx = trx_repo.get_by_id(alert.transaction_id)
+        trx = db.query(Transaction).filter(
+            Transaction.id == alert.transaction_id
+        ).with_for_update().first()
         if not trx:
             raise HTTPException(status_code=404, 
                                 detail="Transaction not found")
@@ -119,19 +120,18 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
             previous_status=str(trx.final_status.value),
             final_status=target_status,
             transaction_snapshot=transaction_snapshot,
-            review_started_at=alert.created_at,
+            review_started_at=alert.claimed_at or now_utc,
             review_completed_at=now_utc
         )
-        review_repo.create(review)
-        
         try:
+            db.add(review)
             db.flush()
         except IntegrityError:
             db.rollback()
-            raise HTTPException(status_code=400, detail="Alert already reviewed")
+            raise HTTPException(status_code=409, detail="Alert already reviewed")
         
         feedback_log = MLFeedbackLog(
-            review_id=None,
+            review_id=review.id,
             transaction_id=trx.id,
             original_trx_id=trx.original_trx_id,
             service_source=trx.service_source,
@@ -201,14 +201,32 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
         raise HTTPException(status_code=500, 
                             detail="Internal Server Error")
 
-@log_performance(label="ReviewService.get_review_history")
-def get_review_history(db, page: int = 1, limit: int = 10, reviewed_by: int | None = None):
-    query = db.query(ManualReview).join(Transaction).filter(ManualReview.is_deleted == False)
+def _apply_history_filters(query, reviewed_by=None, decision=None, search=None, sort_by="newest"):
     if reviewed_by is not None:
         query = query.filter(ManualReview.reviewer_id == reviewed_by)
+    if decision:
+        query = query.filter(ManualReview.decision == decision)
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.filter(or_(
+            cast(ManualReview.transaction_id, String).ilike(term),
+            cast(ManualReview.alert_id, String).ilike(term),
+            cast(ManualReview.reviewer_id, String).ilike(term),
+            ManualReview.reviewer_name.ilike(term),
+        ))
+    return query.order_by(
+        ManualReview.created_at.asc() if sort_by == "oldest" else ManualReview.created_at.desc()
+    )
+
+
+@log_performance(label="ReviewService.get_review_history")
+def get_review_history(db, page: int = 1, limit: int = 10, reviewed_by: int | None = None,
+                       decision: str | None = None, search: str | None = None, sort_by: str = "newest"):
+    query = db.query(ManualReview).join(Transaction).filter(ManualReview.is_deleted == False)
+    query = _apply_history_filters(query, reviewed_by, decision, search, sort_by)
     total = query.count()
 
-    reviews = query.order_by(ManualReview.created_at.desc()) \
+    reviews = query \
         .offset((page - 1) * limit) \
         .limit(limit) \
         .all()
@@ -233,6 +251,7 @@ def get_review_history(db, page: int = 1, limit: int = 10, reviewed_by: int | No
                 "review_started_at": r.review_started_at,
                 "review_completed_at": r.review_completed_at,
                 "is_overridden": r.is_overridden or False,
+                "original_decision": ((r.transaction_snapshot or {}).get("_review_decision_history") or [{}])[0].get("decision"),
                 "overridden_by": r.overridden_by,
                 "overridden_at": r.overridden_at,
                 "override_reason": r.override_reason,
@@ -244,13 +263,19 @@ def get_review_history(db, page: int = 1, limit: int = 10, reviewed_by: int | No
 
 
 @log_performance(label="ReviewService.get_my_review_history")
-def get_my_review_history(db, reviewer_id: int, page: int = 1, limit: int = 10):
+def get_my_review_history(db, reviewer_id: int, page: int = 1, limit: int = 10,
+                          decision: str | None = None, search: str | None = None, sort_by: str = "newest"):
     """
     Riwayat review milik analis yang sedang login.
     FRAUD_ANALYST hanya bisa lihat history miliknya sendiri.
     """
-    review_repo = ReviewRepository(db)
-    total, reviews = review_repo.get_history_by_reviewer(reviewer_id, page, limit)
+    query = db.query(ManualReview).join(Transaction).filter(
+        ManualReview.reviewer_id == reviewer_id,
+        ManualReview.is_deleted == False,
+    )
+    query = _apply_history_filters(query, decision=decision, search=search, sort_by=sort_by)
+    total = query.count()
+    reviews = query.offset((page - 1) * limit).limit(limit).all()
 
     return {
         "total": total,
@@ -272,6 +297,7 @@ def get_my_review_history(db, reviewer_id: int, page: int = 1, limit: int = 10):
                 "review_started_at": r.review_started_at,
                 "review_completed_at": r.review_completed_at,
                 "is_overridden": r.is_overridden or False,
+                "original_decision": ((r.transaction_snapshot or {}).get("_review_decision_history") or [{}])[0].get("decision"),
                 "overridden_by": r.overridden_by,
                 "overridden_at": r.overridden_at,
                 "override_reason": r.override_reason,
@@ -388,6 +414,10 @@ def undo_pattern_accuracy(db, trx, was_fraud: bool):
             pattern.accuracy_score = None
             pattern.false_positive_rate = None
 
+        # Decision override can change lifecycle eligibility. Re-evaluate so
+        # action/status and the active-pattern cache match the corrected counts.
+        apply_pattern_lifecycle(db, pattern)
+
 @log_performance(label="ReviewService.get_review_metrics_service")
 def get_review_metrics_service(db):
     review_repo = ReviewRepository(db)
@@ -473,7 +503,7 @@ def soft_delete_review_service(db, review_id: int, admin_id: int):
 @log_performance(label="ReviewService.override_review_decision_service")
 def override_review_decision_service(db, review_id: int, admin_id: int, new_decision: str, reason: str):
     review = db.query(ManualReview).filter(ManualReview.id == review_id, 
-                                           ManualReview.is_deleted == False).first()
+                                           ManualReview.is_deleted == False).with_for_update().first()
     if not review:
         raise HTTPException(status_code=404,
                              detail="Review history tidak ditemukan")
@@ -484,13 +514,26 @@ def override_review_decision_service(db, review_id: int, admin_id: int, new_deci
                             detail=f"Vonis saat ini sudah berstatus {new_decision}. Tidak ada perubahan keputusan.")
 
     try:
-        trx = db.query(Transaction).filter(Transaction.id == review.transaction_id).first()
-        alert = db.query(FraudAlert).filter(FraudAlert.id == review.alert_id).first()
+        trx = db.query(Transaction).filter(Transaction.id == review.transaction_id).with_for_update().first()
+        alert = db.query(FraudAlert).filter(FraudAlert.id == review.alert_id).with_for_update().first()
+        if not trx:
+            raise HTTPException(status_code=404, detail="Transaction terkait review tidak ditemukan")
         
         snapshot_before = {
             "decision": review.decision,
             "final_status": str(review.final_status.value) if review.final_status else None
         }
+        audit_snapshot = dict(review.transaction_snapshot or {})
+        decision_history = list(audit_snapshot.get("_review_decision_history") or [])
+        decision_history.append({
+            "decision": review.decision,
+            "final_status": snapshot_before["final_status"],
+            "overridden_at": datetime.now(timezone.utc).isoformat(),
+            "overridden_by": admin_id,
+            "reason": reason,
+        })
+        audit_snapshot["_review_decision_history"] = decision_history
+        review.transaction_snapshot = audit_snapshot
 
         if new_decision == "FRAUD":
             # [FIX] Undo counter keputusan lama sebelum tambah yang baru.
@@ -518,7 +561,22 @@ def override_review_decision_service(db, review_id: int, admin_id: int, new_deci
         if trx:
             trx.final_status = target_status
         if alert:
-            alert.status = "OVERRIDDEN" 
+            alert.status = "OVERRIDDEN"
+            alert.resolved_by = admin_id
+            alert.resolved_at = datetime.now(timezone.utc)
+            alert.claimed_by = None
+            alert.claimed_at = None
+
+        # Feedback harus mengikuti keputusan akhir agar dataset retraining tidak
+        # mempertahankan label sebelum override. Review baru sudah menyimpan FK
+        # review_id; record lama tanpa FK dibiarkan untuk menghindari mutasi data
+        # yang tidak dapat dipastikan asalnya.
+        db.query(MLFeedbackLog).filter(
+            MLFeedbackLog.review_id == review.id
+        ).update({
+            "analyst_decision": new_decision,
+            "decision_confidence": "HIGH",
+        }, synchronize_session=False)
         snapshot_after = {
             "decision": review.decision,
             "final_status": str(review.final_status.value) if review.final_status else None
@@ -544,24 +602,46 @@ def override_review_decision_service(db, review_id: int, admin_id: int, new_deci
         
     except StaleDataError:
         db.rollback()
-        raise HTTPException(status_code=404, detail="Locking Error: Data ini baru saja diubah oleh proses paralel lain.")
+        raise HTTPException(status_code=409, detail="Data ini baru saja diubah oleh proses paralel lain.")
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error("[REVIEW OVERRIDE ERROR] review_id=%s error=%s", review_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
     
 @log_performance(label="ReviewService.log_false_negative_service")
 def log_false_negative_service(db, transaction_id: int, admin_id: int, reason: str):
     """
     Fitur khusus pimpinan untuk menandai transaksi sukses yang ternyata lolos dari ML (False Negative).
     """
-    trx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    trx = db.query(Transaction).filter(Transaction.id == transaction_id).with_for_update().first()
     if not trx:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
         
-    if trx.final_status == TransactionStatusEnum.FRAUD:
-        raise HTTPException(status_code=400, detail="Transaksi ini memang sudah berstatus FRAUD")
+    current_status = (
+        trx.final_status.value
+        if isinstance(trx.final_status, TransactionStatusEnum)
+        else str(trx.final_status or "").replace("TransactionStatusEnum.", "").upper()
+    )
+    if current_status != TransactionStatusEnum.SAFE.value:
+        raise HTTPException(
+            status_code=400,
+            detail="False Negative hanya dapat dilaporkan untuk transaksi berstatus SAFE yang lolos dari deteksi.",
+        )
+
+    existing_review = db.query(ManualReview).filter(
+        ManualReview.transaction_id == trx.id,
+        ManualReview.is_deleted == False
+    ).with_for_update().first()
 
     trx.final_status = TransactionStatusEnum.FRAUD
+    trx.risk_level = "CRITICAL"
+    trx.risk_score = max(float(trx.risk_score or 0), 90.0)
     trx.violation_reason = f"[FALSE_NEGATIVE_REPORT] {reason}"
     feedback_log = MLFeedbackLog(
-        review_id=None, 
+        review_id=existing_review.id if existing_review else None,
         transaction_id=trx.id,
         original_trx_id=trx.original_trx_id,
         service_source=trx.service_source,
@@ -587,20 +667,43 @@ def log_false_negative_service(db, transaction_id: int, admin_id: int, reason: s
         analyst_decision="FRAUD", 
         decision_confidence="HIGH" 
     )
-    db.add(feedback_log)
-
-    # [FIX] Cek apakah sudah ada review sebelumnya dengan decision FRAUD.
-    # Kalau sudah, skip update_pattern_accuracy untuk hindari TP di-increment
-    # dua kali untuk transaksi yang sama (sekali dari review, sekali dari
-    # false negative report ini).
-    existing_fraud_review = db.query(ManualReview).filter(
-        ManualReview.transaction_id == trx.id,
-        ManualReview.decision == "FRAUD",
-        ManualReview.is_deleted == False
-    ).first()
-
-    if not existing_fraud_review:
+    if existing_review:
+        # Koreksi label feedback dan counter hasil keputusan SAFE sebelumnya.
+        db.query(MLFeedbackLog).filter(
+            MLFeedbackLog.review_id == existing_review.id
+        ).update({
+            "analyst_decision": "FRAUD",
+            "decision_confidence": "HIGH",
+            # Keputusan SAFE sebelumnya telah berubah menjadi FRAUD. Tandai ulang
+            # agar fraud feedback tersebut masuk jalur pattern discovery berikutnya.
+            "is_used_for_training": False,
+        }, synchronize_session=False)
+        if existing_review.decision == "SAFE":
+            undo_pattern_accuracy(db, trx, was_fraud=False)
+        if existing_review.decision != "FRAUD":
+            update_pattern_accuracy(db, trx, is_fraud=True)
+    else:
+        db.add(feedback_log)
         update_pattern_accuracy(db, trx, is_fraud=True)
+
+    # Pastikan confirmed fraud terlihat kembali di Alert Center. Jika alert lama
+    # sudah terminal, buka kembali sebagai REOPENED dan hapus kepemilikan lama.
+    alert = db.query(FraudAlert).filter(
+        FraudAlert.transaction_id == trx.id
+    ).with_for_update().first()
+    if alert:
+        alert.status = "REOPENED"
+        alert.resolved_at = None
+        alert.resolved_by = None
+        alert.claimed_at = None
+        alert.claimed_by = None
+        alert.severity = "CRITICAL"
+        alert.priority = max(float(alert.priority or 0), float(trx.risk_score or 90))
+        alert.title = "Confirmed False Negative"
+        alert.message = f"Transaction was confirmed as fraud after bypassing initial detection: {reason}"
+    else:
+        from app.application.services.alert_service import create_alert
+        create_alert(db, trx)
 
     log_activity(
         db=db,

@@ -18,6 +18,9 @@ tools/
 outputs/
 .codex_context_extracted/
 report_assets/
+backend/tests/
+backend/pytest-cache-files-auild1qm/
+backend/pytest-cache-files-t0xayu04/
 
 # Specific files
 build_report.js
@@ -26,3 +29,4 @@ Individual_Report_Full_Template.docx
 Mapper_Based_Schema_Unification_IEEE_Paper.docx
 Mapper_Based_Schema_Unification_IEEE_Paper_Submission_No_Em_Dash.docx
 Mapper_Based_Schema_Unification_IEEE_Paper_Submission_Novelty_Enhanced.docx
+Mapper_Based_Schema_Unification_IEEE_Paper_Humanized_Intermediate.docx

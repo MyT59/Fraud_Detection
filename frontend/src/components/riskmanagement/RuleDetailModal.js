@@ -237,6 +237,20 @@ const RuleDetailModal = ({
             <span className="rdm-condition-text">{rule.condition || "—"}</span>
           </div>
 
+          {rule.rule_config && (
+            <pre
+              className="rdm-condition-box"
+              style={{
+                marginTop: 10,
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+                fontSize: "0.76rem",
+              }}
+            >
+              {JSON.stringify(rule.rule_config, null, 2)}
+            </pre>
+          )}
+
           <div className="rdm-section-title">
             <i className="bi bi-bar-chart-fill" />
             Statistik Rule

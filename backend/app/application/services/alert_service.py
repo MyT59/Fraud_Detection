@@ -3,7 +3,7 @@ import asyncio
 from datetime import datetime, timezone              # ← hapus 'time' dari sini
 from fastapi import HTTPException, BackgroundTasks
 from typing import Optional
-from sqlalchemy import func
+from sqlalchemy import String, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from app.infrastructure.database.models.transaction_model import Transaction
@@ -17,7 +17,8 @@ from sqlalchemy.orm import joinedload
 from app.infrastructure.repositories.alert_repository import AlertRepository
 from app.application.services.notification_service import should_send_fraud_alert
 from app.infrastructure.repositories.admin_repository import AdminRepository
-from app.infrastructure.database.enums import TransactionStatusEnum
+from app.infrastructure.database.enums import AlertStatusEnum, TransactionStatusEnum
+from app.core.rbac import get_role_name
 
 from app.infrastructure.realtime.redis_pubsub import redis_service
 from app.presentation.websocket.connection_manager import manager
@@ -30,7 +31,12 @@ logger = get_logger(__name__)
 
 
 def format_badge(severity):
-    return {"HIGH": "HIGH RISK", "MEDIUM": "MEDIUM RISK", "LOW": "LOW RISK"}.get(severity, "UNKNOWN")
+    return {
+        "CRITICAL": "CRITICAL RISK",
+        "HIGH": "HIGH RISK",
+        "MEDIUM": "MEDIUM RISK",
+        "LOW": "LOW RISK",
+    }.get(severity, "UNKNOWN")
 
 
 def get_priority_label(priority: float) -> str:
@@ -38,6 +44,26 @@ def get_priority_label(priority: float) -> str:
     elif priority >= 75: return "HIGH"
     elif priority >= 50: return "MEDIUM"
     return "LOW"
+
+
+def format_alert_message(reason: str | None) -> str:
+    """Create a human-readable alert message from persisted engine evidence."""
+    if not reason:
+        return "No suspicious activity detected"
+
+    readable = []
+    for item in reason.split(" | "):
+        if item.startswith("RULE:"):
+            readable.append(item.replace("RULE:", "Rule Triggered: "))
+        elif item.startswith("PATTERN:"):
+            readable.append(item.replace("PATTERN:", "Pattern Detected: "))
+        elif item.startswith("BLACKLIST:"):
+            readable.append(item.replace("BLACKLIST:", "Blacklist Match: "))
+        elif item.startswith("ML:"):
+            readable.append(item.replace("ML:", "ML Anomaly: "))
+        else:
+            readable.append(item)
+    return "User triggered suspicious behaviors:\n- " + "\n- ".join(readable)
 
 
 def get_safe_alert_type(alert):
@@ -85,9 +111,9 @@ def format_time(dt):
     return f"{days} days ago"
 
 
-def safe_redis_publish(payload: dict, task_type: str = "ALERT_UPDATED"):
+async def safe_redis_publish(payload: dict, task_type: str = "ALERT_UPDATED"):
     try:
-        redis_service.publish("dashboard", payload)
+        await redis_service.publish("dashboard", payload)
     except Exception as e:
         logger.warning(f"[REDIS OFFLINE] Gagal mengirim broadcast {task_type}. Keperluan realtime stream dilewati.")
         logger.debug(f"Payload yang gagal dikirim: {payload}")
@@ -114,15 +140,6 @@ def create_alert(db, trx, background_tasks: Optional[BackgroundTasks] = None):
         elif has_pattern:            return "PATTERN"
         return "SYSTEM"
 
-    def format_message(reason: str):
-        if not reason: return "No suspicious activity detected"
-        parts    = reason.split(" | ")
-        readable = []
-        for p in parts:
-            if p.startswith("RULE:"):      readable.append(p.replace("RULE:", "Rule Triggered: "))
-            elif p.startswith("PATTERN:"): readable.append(p.replace("PATTERN:", "Pattern Detected: "))
-        return "User triggered suspicious behaviors:\n- " + "\n- ".join(readable)
-
     alert_type    = determine_alert_type(trx)
     title_mapping = {
         "RULE": "Rule Engine Triggered", "PATTERN": "Pattern Engine Triggered",
@@ -131,14 +148,36 @@ def create_alert(db, trx, background_tasks: Optional[BackgroundTasks] = None):
         "RULE_ML": "Rule + ML Anomaly Detected", "PATTERN_ML": "Pattern + ML Anomaly Detected",
     }
 
+    # Serialize alert creation per transaction. Tanpa ini, Rule/Pattern dan ML
+    # yang berjalan berdekatan bisa masing-masing membuat alert baru.
+    db.query(Transaction).filter(Transaction.id == trx.id).with_for_update().one()
+    existing_alert = (
+        db.query(FraudAlert)
+        .filter(FraudAlert.transaction_id == trx.id)
+        .first()
+    )
+    if existing_alert:
+        existing_alert.alert_type = alert_type
+        existing_alert.severity = trx.risk_level or existing_alert.severity
+        existing_alert.priority = max(
+            float(existing_alert.priority or 0),
+            float((trx.risk_score or 0) + (10 if trx.final_status == TransactionStatusEnum.FRAUD else 0)),
+        )
+        existing_alert.title = title_mapping.get(alert_type, existing_alert.title or "System Alert")
+        existing_alert.message = format_alert_message(trx.violation_reason)
+        if "ML" in alert_type:
+            existing_alert.is_escalated = True
+        db.flush()
+        return existing_alert
+
     alert = FraudAlert(
         transaction_id = trx.id,
         alert_type     = alert_type,
         severity       = trx.risk_level,
         priority       = (trx.risk_score or 0) + (10 if trx.final_status == "FRAUD" else 0),
         title          = title_mapping.get(alert_type, "System Alert"),
-        message        = format_message(trx.violation_reason),
-        status         = "OPEN"
+        message        = format_alert_message(trx.violation_reason),
+        status         = AlertStatusEnum.OPEN,
     )
 
     # [TIMING] Alert Insert
@@ -170,10 +209,10 @@ def create_alert(db, trx, background_tasks: Optional[BackgroundTasks] = None):
     if background_tasks:
         from app.infrastructure.realtime.redis_pubsub import redis_service
 
-        def _publish():
+        async def _publish():
             t_redis = time.perf_counter()
             try:
-                redis_service.publish("dashboard", {
+                await redis_service.publish("dashboard", {
                     "type": "DASHBOARD_PARTIAL_UPDATE",
                     "alert": {"id": alert.id, "title": alert.title,
                               "description": alert.message, "severity": alert.severity}
@@ -199,7 +238,7 @@ def create_alert(db, trx, background_tasks: Optional[BackgroundTasks] = None):
 # ============================================================
 @log_performance(label="AlertService.get_all_alerts")
 def get_all_alerts(db, status=None, severity=None, service=None, priority=None,
-                   page=1, limit=10, alert_type=None):
+                   page=1, limit=10, alert_type=None, search=None, sort_by="priority_desc"):
     alert_repo = AlertRepository(db)
     query = alert_repo.get_query().options(joinedload(FraudAlert.transaction)).join(Transaction)
 
@@ -207,6 +246,20 @@ def get_all_alerts(db, status=None, severity=None, service=None, priority=None,
     if severity:   query = query.filter(FraudAlert.severity == severity.upper())
     if alert_type: query = query.filter(FraudAlert.alert_type == alert_type.upper())
     if service:    query = query.filter(Transaction.service_source == service.upper())
+    if search:
+        term = f"%{search.strip()}%"
+        query = query.filter(or_(
+            FraudAlert.title.ilike(term),
+            FraudAlert.message.ilike(term),
+            func.cast(FraudAlert.transaction_id, String).ilike(term),
+            Transaction.user_account_id.ilike(term),
+            Transaction.original_trx_id.ilike(term),
+            Transaction.account_number.ilike(term),
+            Transaction.merchant_id.ilike(term),
+            Transaction.terminal_id.ilike(term),
+            Transaction.ip_address.ilike(term),
+            Transaction.violation_reason.ilike(term),
+        ))
     if priority:
         label = priority.upper()
         if label == "CRITICAL":  query = query.filter(FraudAlert.priority >= 90)
@@ -214,8 +267,14 @@ def get_all_alerts(db, status=None, severity=None, service=None, priority=None,
         elif label == "MEDIUM":  query = query.filter(FraudAlert.priority >= 50, FraudAlert.priority < 75)
         elif label == "LOW":     query = query.filter(FraudAlert.priority < 50)
 
+    order_map = {
+        "priority_desc": (FraudAlert.priority.desc(), FraudAlert.created_at.desc()),
+        "priority_asc": (FraudAlert.priority.asc(), FraudAlert.created_at.desc()),
+        "newest": (FraudAlert.created_at.desc(),),
+        "oldest": (FraudAlert.created_at.asc(),),
+    }
     total  = query.count()
-    alerts = query.order_by(FraudAlert.priority.desc(), FraudAlert.created_at.desc()) \
+    alerts = query.order_by(*order_map[sort_by]) \
                   .offset((page - 1) * limit).limit(limit).all()
 
     return {
@@ -247,7 +306,9 @@ def get_all_alerts(db, status=None, severity=None, service=None, priority=None,
 # OPEN ALERT COUNT
 # ============================================================
 def get_open_alert_count(db):
-    return db.query(FraudAlert).filter(FraudAlert.status == "OPEN").count()
+    return db.query(FraudAlert).filter(
+        FraudAlert.status.in_([AlertStatusEnum.OPEN, AlertStatusEnum.REOPENED])
+    ).count()
 
 
 # ============================================================
@@ -259,7 +320,7 @@ def get_alert_metrics_service(db):
     open_count   = db.query(func.count(FraudAlert.id)).filter(FraudAlert.status == "OPEN").scalar()
     in_progress  = db.query(func.count(FraudAlert.id)).filter(FraudAlert.status == "IN_PROGRESS").scalar()
     resolved     = db.query(func.count(FraudAlert.id)).filter(FraudAlert.status == "RESOLVED").scalar()
-    fraud_count  = db.query(func.count(Transaction.id)).filter(Transaction.final_status == "FRAUD").scalar()
+    fraud_count  = db.query(func.count(FraudAlert.id)).join(Transaction).filter(Transaction.final_status == "FRAUD").scalar()
     avg_response = db.query(
         func.avg(func.extract('epoch', FraudAlert.resolved_at - FraudAlert.created_at))
     ).filter(FraudAlert.status == "RESOLVED", FraudAlert.resolved_at.isnot(None)).scalar()
@@ -371,49 +432,90 @@ def get_alert_detail_service(db, alert_id: int):
 # UPDATE ALERT STATUS
 # ============================================================
 @log_performance(label="AlertService.update_alert_status_service")
-def update_alert_status_service(db, alert_id: int, status: str, user_id: int,
-                                 background_tasks: BackgroundTasks):
-    alert_repo    = AlertRepository(db)
-    alert         = alert_repo.get_by_id(alert_id)
+def update_alert_status_service(
+    db,
+    alert_id: int,
+    actor,
+    background_tasks: BackgroundTasks | None = None,
+    status: AlertStatusEnum = AlertStatusEnum.RESOLVED,
+    require_claim_owner: bool = False,
+    resolution_reason: str | None = None,
+):
+    """Apply only valid state transitions and retain a complete ownership trail."""
+    alert = db.query(FraudAlert).filter(FraudAlert.id == alert_id).with_for_update().first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert tidak ditemukan")
 
-    target_status = status.upper()
+    current_status = alert.status.value if hasattr(alert.status, "value") else str(alert.status)
+    target_status = status.value if hasattr(status, "value") else str(status).upper()
+    actor_role = get_role_name(actor)
+    transitions = {
+        "OPEN": {"RESOLVED", "OVERRIDDEN"},
+        "IN_PROGRESS": {"OPEN", "RESOLVED", "OVERRIDDEN"},
+        "RESOLVED": {"REOPENED", "OVERRIDDEN"},
+        "REOPENED": {"OPEN", "RESOLVED", "OVERRIDDEN"},
+        "OVERRIDDEN": {"REOPENED"},
+    }
+    if target_status == current_status:
+        return {"message": f"Alert {alert.id} sudah berstatus {target_status}"}
+    if target_status not in transitions.get(current_status, set()):
+        raise HTTPException(status_code=409, detail=f"Transisi {current_status} ke {target_status} tidak diizinkan")
+    if require_claim_owner and (current_status != "IN_PROGRESS" or alert.claimed_by != actor.id):
+        raise HTTPException(status_code=403, detail="Alert harus diklaim oleh Anda sebelum diselesaikan")
+    if actor_role == "FRAUD_ANALYST" and target_status != "RESOLVED":
+        raise HTTPException(status_code=403, detail="Fraud Analyst hanya dapat menyelesaikan alert yang diklaimnya")
 
-    if alert.status == "OPEN" and target_status == "RESOLVED":
-        admin_repo = AdminRepository(db)
-        user       = admin_repo.get_by_id(user_id)
-        if user and user.role_id not in [1, 2]:
-            raise HTTPException(
-                status_code=403,
-                detail="Akses Ditolak: Anda harus melakukan 'Claim' terlebih dahulu sebelum dapat menutup kasus ini."
-            )
+    # A transaction alert must be concluded through Manual Review so the
+    # SAFE/FRAUD disposition and ML feedback are retained. This applies to
+    # every role; privileged users use OVERRIDDEN with an auditable reason.
+    is_transaction_alert = alert.transaction_id is not None
+    has_completed_review = any(
+        not review.is_deleted and review.decision is not None and review.review_completed_at is not None
+        for review in alert.reviews
+    )
+    if target_status == "RESOLVED" and is_transaction_alert and not has_completed_review:
+        raise HTTPException(
+            status_code=409,
+            detail="Alert transaksi harus diselesaikan melalui Manual Review (SAFE atau FRAUD).",
+        )
+    if target_status == "OVERRIDDEN":
+        if actor_role not in {"SUPER_ADMIN", "RISK_MANAGER"}:
+            raise HTTPException(status_code=403, detail="Hanya Risk Manager atau Super Admin yang dapat override alert")
+        resolution_reason = (resolution_reason or "").strip()
+        if not resolution_reason:
+            raise HTTPException(status_code=422, detail="Alasan override wajib diisi")
 
-    if target_status == "RESOLVED":
-        if alert.claimed_by is not None and alert.claimed_by != user_id:
-            admin_repo = AdminRepository(db)
-            user       = admin_repo.get_by_id(user_id)
-            if user and user.role_id not in [1, 2]:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Akses Ditolak: Kasus ini sedang dikerjakan oleh analis lain."
-                )
-        alert.resolved_by = user_id
+    if target_status in {"OPEN", "REOPENED"}:
+        alert.claimed_by = None
+        alert.claimed_at = None
+        alert.resolved_by = None
+        alert.resolved_at = None
+    elif target_status in {"RESOLVED", "OVERRIDDEN"}:
+        alert.resolved_by = actor.id
         alert.resolved_at = datetime.now(timezone.utc)
 
-    alert.status = target_status
+    alert.status = AlertStatusEnum(target_status)
     log_activity(
         db=db,
-        admin=None,
+        admin=actor,
         action_type=ActivityActionEnum.ALERT_UPDATED,
-        module_source=EventSourceEnum.SYSTEM,
+        module_source=EventSourceEnum.MANUAL_REVIEW,
         severity=SeverityLevelEnum.INFO,
         target_type=TargetType.ALERT,
         target_id=alert.id,
-        details={"status": target_status, "updated_by": user_id}
+        details={
+            "previous_status": current_status,
+            "status": target_status,
+            "updated_by": actor.id,
+            "override_reason": resolution_reason if target_status == "OVERRIDDEN" else None,
+        },
     )
     db.commit()
     db.refresh(alert)
+    if background_tasks:
+        background_tasks.add_task(safe_redis_publish, {
+            "event": "ALERT_UPDATED", "alert_id": alert.id, "status": target_status,
+        }, task_type="ALERT_UPDATED")
     return {"message": f"Status alert {alert.id} berhasil diupdate menjadi {target_status}"}
 
 
@@ -424,7 +526,7 @@ def update_alert_status_service(db, alert_id: int, status: str, user_id: int,
 def claim_alert_service(db, alert_id, admin_id, background_tasks: BackgroundTasks):
     alert = db.query(FraudAlert).filter(FraudAlert.id == alert_id).with_for_update().first()
     if not alert: raise HTTPException(status_code=404, detail="Alert not found")
-    if alert.status != "OPEN":
+    if alert.status not in {AlertStatusEnum.OPEN, AlertStatusEnum.REOPENED}:
         raise HTTPException(status_code=400, detail=f"Cannot claim alert. Current status is {alert.status}")
     if alert.claimed_by:
         if alert.claimed_by == admin_id: return {"message": "You have already claimed this alert"}
@@ -490,11 +592,14 @@ def release_alert_service(db, alert_id, admin_id, user_role="FRAUD_ANALYST"):
 # ============================================================
 @log_performance(label="AlertService.get_my_queue_service")
 def get_my_queue_service(db, user_id: int, page: int = 1, limit: int = 10):
-    alert_repo   = AlertRepository(db)
-    all_alerts   = alert_repo.get_my_queue(user_id=user_id)
-    total        = len(all_alerts)
-    start_offset = (page - 1) * limit
-    paginated    = all_alerts[start_offset:start_offset + limit]
+    query = db.query(FraudAlert).options(joinedload(FraudAlert.transaction)).filter(
+        FraudAlert.claimed_by == user_id,
+        FraudAlert.status == AlertStatusEnum.IN_PROGRESS,
+    )
+    total = query.count()
+    paginated = query.order_by(
+        FraudAlert.priority.desc(), FraudAlert.claimed_at.asc()
+    ).offset((page - 1) * limit).limit(limit).all()
 
     items = [
         {
@@ -525,14 +630,33 @@ def get_open_queue_service(
     alert_type: str = None,
     page: int = 1,
     limit: int = 50,
+    search: str | None = None,
+    sort_by: str = "priority_desc",
 ):
-    query = db.query(FraudAlert).filter(FraudAlert.status == "OPEN")
+    query = db.query(FraudAlert).options(joinedload(FraudAlert.transaction)).join(Transaction).filter(
+        FraudAlert.status.in_([AlertStatusEnum.OPEN, AlertStatusEnum.REOPENED])
+    )
 
     if severity:
         query = query.filter(FraudAlert.severity == severity.upper())
 
     if alert_type:
         query = query.filter(FraudAlert.alert_type == alert_type.upper())
+
+    if search:
+        term = f"%{search.strip()}%"
+        query = query.filter(or_(
+            FraudAlert.title.ilike(term),
+            FraudAlert.message.ilike(term),
+            func.cast(FraudAlert.transaction_id, String).ilike(term),
+            Transaction.user_account_id.ilike(term),
+            Transaction.original_trx_id.ilike(term),
+            Transaction.account_number.ilike(term),
+            Transaction.merchant_id.ilike(term),
+            Transaction.terminal_id.ilike(term),
+            Transaction.ip_address.ilike(term),
+            Transaction.violation_reason.ilike(term),
+        ))
 
     if priority_label:
         label = priority_label.upper()
@@ -541,9 +665,15 @@ def get_open_queue_service(
         elif label == "MEDIUM":  query = query.filter(FraudAlert.priority >= 50, FraudAlert.priority < 75)
         elif label == "LOW":     query = query.filter(FraudAlert.priority < 50)
 
+    order_map = {
+        "priority_desc": (FraudAlert.priority.desc(), FraudAlert.created_at.desc()),
+        "priority_asc": (FraudAlert.priority.asc(), FraudAlert.created_at.desc()),
+        "newest": (FraudAlert.created_at.desc(),),
+        "oldest": (FraudAlert.created_at.asc(),),
+    }
     total  = query.count()
     alerts = (
-        query.order_by(FraudAlert.priority.desc(), FraudAlert.created_at.desc())
+        query.order_by(*order_map[sort_by])
         .offset((page - 1) * limit).limit(limit).all()
     )
 

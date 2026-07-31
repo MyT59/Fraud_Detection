@@ -1,17 +1,11 @@
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
-from enum import Enum
-
-class AlertStatusEnum(str, Enum):
-    OPEN = "OPEN"
-    IN_PROGRESS = "IN_PROGRESS"
-    RESOLVED = "RESOLVED"
-    REOPENED = "REOPENED"     # Tambahkan ini
-    OVERRIDDEN = "OVERRIDDEN"
+from app.infrastructure.database.enums import AlertStatusEnum
 
 class AlertStatusUpdate(BaseModel):
     status: AlertStatusEnum
+    reason: Optional[str] = Field(default=None, max_length=1000)
 class AlertResponse(BaseModel):
     id: int
     transaction_id: int

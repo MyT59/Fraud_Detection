@@ -183,6 +183,7 @@ const TransactionChart = ({ data, onRangeChange }) => {
   const [customData, setCustomData] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [isFetchingRange, setIsFetchingRange] = useState(false);
+  const [rangeError, setRangeError] = useState(null);
 
   const emptyData = useMemo(() => buildEmptyData(), []);
 
@@ -247,6 +248,7 @@ const TransactionChart = ({ data, onRangeChange }) => {
   }, [activeRange, customData, data, emptyData, apiData]);
 
   const handleRangeClick = (key) => {
+    setRangeError(null);
     if (key === "custom") {
       setShowDatePicker((p) => !p);
       return;
@@ -265,6 +267,7 @@ const TransactionChart = ({ data, onRangeChange }) => {
   };
 
   const handleReset = () => {
+    setRangeError(null);
     setActiveRange(DEFAULT_RANGE);
     setShowDatePicker(false);
     setCustomData(null);
@@ -276,7 +279,12 @@ const TransactionChart = ({ data, onRangeChange }) => {
   };
 
   const handleApplyCustom = async () => {
-    if (!dateFrom || !dateTo || dateTo < dateFrom) return;
+    if (!dateFrom || !dateTo || dateTo < dateFrom) {
+      setRangeError("Tanggal awal harus sebelum atau sama dengan tanggal akhir.");
+      return;
+    }
+
+    setRangeError(null);
 
     setIsFetchingRange(true);
     try {
@@ -299,11 +307,7 @@ const TransactionChart = ({ data, onRangeChange }) => {
         onRangeChange("custom", { from: dateFrom, to: dateTo, data: [] });
     } catch (err) {
       console.warn("[TransactionChart] Gagal fetch custom range:", err.message);
-      setCustomData([]);
-      setActiveRange("custom");
-      setShowDatePicker(false);
-      if (onRangeChange)
-        onRangeChange("custom", { from: dateFrom, to: dateTo, data: [] });
+      setRangeError(err?.data?.detail || err?.message || "Gagal memuat rentang transaksi.");
     } finally {
       setIsFetchingRange(false);
     }
@@ -536,7 +540,8 @@ const TransactionChart = ({ data, onRangeChange }) => {
       </div>
 
       {showDatePicker && (
-        <div className="txn-date-row">
+        <div>
+          <div className="txn-date-row">
           <input
             type="date"
             value={dateFrom}
@@ -558,6 +563,10 @@ const TransactionChart = ({ data, onRangeChange }) => {
           >
             {isFetchingRange ? "..." : "Apply"}
           </button>
+          </div>
+          {rangeError && (
+            <div style={{ color: "#dc2626", fontSize: 11 }}>{rangeError}</div>
+          )}
         </div>
       )}
     </div>

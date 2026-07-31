@@ -76,6 +76,15 @@ const REPORT_TYPE_OPTIONS = [
     group: "pattern",
   },
   {
+    value: "GLOBAL_RULE",
+    label: "Global Rule Report",
+    icon: "list-check",
+    color: "#f59e0b",
+    desc: "Konfigurasi dan efektivitas Global Rule",
+    finalStatus: null,
+    group: "global_rule",
+  },
+  {
     value: "BLACKLIST",
     label: "Blacklist Report",
     icon: "ban",
@@ -120,6 +129,12 @@ const FORMAT_OPTIONS = [
 ];
 
 const RISK_LEVEL_OPTIONS = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const BLACKLIST_TYPES_BY_SCOPE = {
+  "": ["", "USER_ID", "CUSTOMER_ID", "ACCOUNT_NUMBER", "IP_ADDRESS", "TERMINAL_ID", "MERCHANT_ID"],
+  ALL: ["", "CUSTOMER_ID", "MERCHANT_ID"],
+  AGENUSA: ["", "USER_ID", "IP_ADDRESS", "TERMINAL_ID", "MERCHANT_ID", "ACCOUNT_NUMBER"],
+  NUSABILL: ["", "CUSTOMER_ID", "IP_ADDRESS"],
+};
 const RISK_LEVEL_COLORS = {
   LOW: "#16a34a",
   MEDIUM: "#d97706",
@@ -135,6 +150,7 @@ const ACTIVITY_ACTION_GROUPS = [
     icon: "shield-exclamation",
     actions: [
       "ALERT_CREATED",
+      "ALERT_UPDATED",
       "BLACKLIST_HIT",
       "PATTERN_TRIGGERED",
       "RULE_TRIGGERED",
@@ -149,6 +165,8 @@ const ACTIVITY_ACTION_GROUPS = [
       "REVIEW_APPROVED",
       "REVIEW_REJECTED",
       "REVIEW_OVERRIDDEN",
+      "SOFT_DELETE_REVIEW",
+      "REPORT_FALSE_NEGATIVE",
       "ALERT_CLAIMED",
       "ALERT_RELEASED",
     ],
@@ -157,7 +175,7 @@ const ACTIVITY_ACTION_GROUPS = [
     group: "Rules",
     color: "#2563eb",
     icon: "gear",
-    actions: ["RULE_CREATED", "RULE_UPDATED", "RULE_DELETED"],
+    actions: ["RULE_CREATED", "RULE_UPDATED", "RULE_DELETED", "RULE_TRIGGERED"],
   },
   {
     group: "Patterns",
@@ -165,9 +183,12 @@ const ACTIVITY_ACTION_GROUPS = [
     icon: "diagram-3",
     actions: [
       "PATTERN_CREATED",
+      "PATTERN_UPDATED",
       "PATTERN_AUTO_DISABLE",
       "PATTERN_AUTO_PROMOTE",
       "PATTERN_REACTIVATED",
+      "PATTERN_ACTIVATED",
+      "PATTERN_DEACTIVATED",
       "PATTERN_TRIGGERED",
     ],
   },
@@ -175,7 +196,12 @@ const ACTIVITY_ACTION_GROUPS = [
     group: "Blacklist",
     color: "#ea580c",
     icon: "ban",
-    actions: ["BLACKLIST_ADD", "BLACKLIST_REMOVE"],
+    actions: [
+      "BLACKLIST_ADD", "BLACKLIST_REMOVE", "BLACKLIST_CREATED",
+      "BLACKLIST_UPDATED", "BLACKLIST_DELETED", "BLACKLIST_APPROVED",
+      "BLACKLIST_REJECTED", "BLACKLIST_ACTIVATED", "BLACKLIST_DEACTIVATED",
+      "BLACKLIST_BULK_IMPORT",
+    ],
   },
   {
     group: "Auth & Session",
@@ -193,13 +219,13 @@ const ACTIVITY_ACTION_GROUPS = [
     group: "ML & Retrain",
     color: "#0d9488",
     icon: "cpu",
-    actions: ["MANUAL_RUN_RETRAIN"],
+    actions: ["ML_SCORING_COMPLETED"],
   },
   {
     group: "Reports",
     color: "#2563eb",
     icon: "file-earmark-text",
-    actions: ["REPORT_GENERATED", "REPORT_DOWNLOADED"],
+    actions: ["REPORT_GENERATED", "REPORT_DOWNLOADED", "REPORT_DELETED"],
   },
   {
     group: "System",
@@ -211,13 +237,16 @@ const ACTIVITY_ACTION_GROUPS = [
     group: "User Actions",
     color: "#0891b2",
     icon: "person-gear",
-    actions: ["ACCOUNT_CREATED", "ACCOUNT_SUSPENDED", "ACCOUNT_ROLE_CHANGED"],
+    actions: [
+      "ACCOUNT_CREATED", "ACCOUNT_SUSPENDED", "ACCOUNT_ROLE_CHANGED", "ACCOUNT_LOCKED",
+      "ACCOUNT_ACTIVATED", "ACCOUNT_UPDATED", "ACCOUNT_DELETED", "PASSWORD_CHANGED", "PASSWORD_RESET",
+    ],
   },
 ];
 
 // Mapping Module Source (BE EventSourceEnum) → group names di ACTIVITY_ACTION_GROUPS
 const MODULE_TO_GROUPS = {
-  AUTH: ["Auth & Session"],
+  AUTH: ["Auth & Session", "User Actions"],
   RULE_ENGINE: ["Rules", "Fraud & Deteksi"],
   PATTERN_ENGINE: ["Patterns", "Fraud & Deteksi"],
   MANUAL_REVIEW: ["Reviews"],
@@ -261,6 +290,17 @@ const inputStyle = {
   fontFamily: "inherit",
 };
 
+const toJakartaDateTime = (date, isEndOfDay = false) =>
+  `${date}T${isEndOfDay ? "23:59:59.999999" : "00:00:00"}+07:00`;
+
+const getJakartaDate = () =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
 // ─── Component ────────────────────────────────────────────────────────────────
 const ReportGenerator = ({ onGenerate, onCancel }) => {
   const [reportType, setReportType] = useState("");
@@ -285,6 +325,11 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
   const [patternRiskLevel, setPatternRiskLevel] = useState("");
   const [patternStatus, setPatternStatus] = useState("");
   const [patternCategory, setPatternCategory] = useState("");
+  const [patternCategories, setPatternCategories] = useState([]);
+
+  // Global Rule filters
+  const [ruleScope, setRuleScope] = useState("");
+  const [ruleIsActive, setRuleIsActive] = useState("");
 
   // Blacklist filters
   const [blType, setBlType] = useState("");
@@ -309,6 +354,7 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
   const isActivityLog = reportType === "ACTIVITY_LOG";
   const isManualReview = reportType === "MANUAL_REVIEW";
   const isFraudPattern = reportType === "FRAUD_PATTERN";
+  const isGlobalRule = reportType === "GLOBAL_RULE";
   const isFraudSummary = reportType === "FRAUD_DETECTION";
   const isBlacklist = reportType === "BLACKLIST";
   const isMLPerformance = reportType === "ML_PERFORMANCE";
@@ -317,6 +363,7 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
     !isActivityLog &&
     !isManualReview &&
     !isFraudPattern &&
+    !isGlobalRule &&
     !isFraudSummary &&
     !isBlacklist &&
     !isMLPerformance;
@@ -324,6 +371,14 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
   const selectedAnalyst = fraudAnalysts.find(
     (analyst) => String(analyst.id) === String(selectedReviewerId),
   );
+  const blacklistTypes = BLACKLIST_TYPES_BY_SCOPE[blScope] || BLACKLIST_TYPES_BY_SCOPE[""];
+
+  const handleBlacklistScopeChange = (scope) => {
+    setBlScope(scope);
+    if (!(BLACKLIST_TYPES_BY_SCOPE[scope] || []).includes(blType)) {
+      setBlType("");
+    }
+  };
 
   useEffect(() => {
     let ignore = false;
@@ -346,6 +401,30 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isFraudPattern) return;
+    let ignore = false;
+
+    reportService
+      .getPatternCategories()
+      .then((data) => {
+        if (!ignore) {
+          setPatternCategories(
+            Array.isArray(data)
+              ? data.filter((category) => typeof category === "string" && category.trim())
+              : [],
+          );
+        }
+      })
+      .catch(() => {
+        if (!ignore) setPatternCategories([]);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [isFraudPattern]);
+
   // Reset filters saat ganti tipe laporan
   const handleReportTypeChange = (val) => {
     setReportType(val);
@@ -361,6 +440,8 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
     setPatternRiskLevel("");
     setPatternStatus("");
     setPatternCategory("");
+    setRuleScope("");
+    setRuleIsActive("");
     setBlType("");
     setBlScope("");
     setBlIsActive("");
@@ -424,9 +505,9 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
     if (!reportType) errs.reportType = "Pilih tipe laporan";
     if (isTransaction && !layanan)
       errs.layanan = "Pilih layanan terlebih dahulu";
-    if (!dateFrom) errs.dateFrom = "Tanggal mulai wajib diisi";
-    if (!dateTo) errs.dateTo = "Tanggal selesai wajib diisi";
-    if (dateFrom && dateTo && dateFrom > dateTo)
+    if (!isGlobalRule && !dateFrom) errs.dateFrom = "Tanggal mulai wajib diisi";
+    if (!isGlobalRule && !dateTo) errs.dateTo = "Tanggal selesai wajib diisi";
+    if (!isGlobalRule && dateFrom && dateTo && dateFrom > dateTo)
       errs.dateTo = "Tanggal selesai harus setelah tanggal mulai";
     if (minAmount && maxAmount && Number(minAmount) > Number(maxAmount))
       errs.maxAmount = "Max amount harus lebih besar dari min";
@@ -460,6 +541,8 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
     const typeLabel = selectedOpt?.label || reportType;
     const reportName = isActivityLog
       ? `Activity Log (${dateFrom} s/d ${dateTo})`
+      : isGlobalRule
+        ? "Global Rule Report"
       : `${layananLabel} — ${typeLabel} (${dateFrom} s/d ${dateTo})`;
 
     const finalReportName = isManualReview
@@ -470,8 +553,10 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
       report_name: finalReportName,
       report_type: beReportType,
       format,
-      date_from: `${dateFrom}T00:00:00`,
-      date_to: `${dateTo}T23:59:59`,
+      // Report persistence still requires a date range. A configuration
+      // snapshot uses a neutral range and the backend deliberately ignores it.
+      date_from: toJakartaDateTime(isGlobalRule ? "2000-01-01" : dateFrom),
+      date_to: toJakartaDateTime(isGlobalRule ? getJakartaDate() : dateTo, true),
     };
 
     if (isTransaction) {
@@ -498,8 +583,16 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
     }
 
     if (isFraudPattern) {
+      // Backend schema uses RiskLevelEnum values in uppercase, while the UI
+      // keeps these values lowercase for display/filter state.
+      if (patternRiskLevel) payload.risk_level = patternRiskLevel.toUpperCase();
       if (patternStatus) payload.status = patternStatus;
       if (patternCategory) payload.category = patternCategory;
+    }
+
+    if (isGlobalRule) {
+      if (ruleScope) payload.service_scope = ruleScope;
+      if (ruleIsActive !== "") payload.is_active = ruleIsActive === "true";
     }
 
     if (isActivityLog) {
@@ -683,6 +776,7 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
           )}
 
           {/* TANGGAL */}
+          {!isGlobalRule && <>
           <div className="row g-3 mb-2">
             <div className="col-md-6">
               <label className="form-label" style={labelStyle}>
@@ -740,6 +834,7 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
           ) : (
             <div className="mb-2"></div>
           )}
+          </>}
 
           {isManualReview && (
             <div className="mb-4">
@@ -1034,16 +1129,7 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
                       TYPE
                     </label>
                     <div className="d-flex gap-2 flex-wrap">
-                      {[
-                        "",
-                        "USER_ID",
-                        "CUSTOMER_ID",
-                        "ACCOUNT_NUMBER",
-                        "IP_ADDRESS",
-                        "TERMINAL_ID",
-                        "MERCHANT_ID",
-                        "DEVICE_ID",
-                      ].map((t) => {
+                      {blacklistTypes.map((t) => {
                         const active = blType === t;
                         return (
                           <button
@@ -1098,7 +1184,7 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
                           <button
                             key={opt.value}
                             type="button"
-                            onClick={() => setBlScope(opt.value)}
+                            onClick={() => handleBlacklistScopeChange(opt.value)}
                             style={{
                               padding: "3px 12px",
                               border: active
@@ -1171,7 +1257,7 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
                       {[
                         { value: "", label: "Semua", color: "#6b7280" },
                         { value: "MANUAL", label: "Manual", color: "#7c3aed" },
-                        { value: "AUTO", label: "Auto", color: "#0891b2" },
+                        { value: "IMPORT", label: "Import", color: "#0891b2" },
                       ].map((opt) => {
                         const active = blSource === opt.value;
                         return (
@@ -1256,6 +1342,93 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* ── FILTERS: GLOBAL RULE ── */}
+          {isGlobalRule && (
+            <div className="mb-4">
+              <label className="form-label" style={labelStyle}>
+                <i className="bi bi-funnel me-1 text-danger"></i>FILTER GLOBAL RULE
+              </label>
+              <div
+                style={{
+                  padding: "1rem",
+                  background: "#fffbeb",
+                  borderRadius: 10,
+                  border: "1px solid #fde68a",
+                }}
+              >
+                <div className="row g-3">
+                  <div className="col-md-6">
+                    <label className="form-label" style={{ ...labelStyle, fontSize: ".7rem" }}>
+                      SERVICE SCOPE
+                    </label>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {[
+                        { value: "", label: "Semua", color: "#6b7280" },
+                        { value: "ALL", label: "ALL", color: "#6b7280" },
+                        { value: "AGENUSA", label: "AGENUSA", color: "#dc2626" },
+                        { value: "NUSABILL", label: "NUSABILL", color: "#2563eb" },
+                      ].map((opt) => {
+                        const active = ruleScope === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setRuleScope(opt.value)}
+                            style={{
+                              padding: "3px 12px",
+                              border: active ? `1.5px solid ${opt.color}` : "1.5px solid #e5e5e5",
+                              borderRadius: 20,
+                              background: active ? `${opt.color}12` : "white",
+                              cursor: "pointer",
+                              fontSize: ".75rem",
+                              fontWeight: active ? 700 : 400,
+                              color: active ? opt.color : "#525252",
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label" style={{ ...labelStyle, fontSize: ".7rem" }}>
+                      STATUS
+                    </label>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {[
+                        { value: "", label: "Semua", color: "#6b7280" },
+                        { value: "true", label: "Active", color: "#16a34a" },
+                        { value: "false", label: "Inactive", color: "#9ca3af" },
+                      ].map((opt) => {
+                        const active = ruleIsActive === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setRuleIsActive(opt.value)}
+                            style={{
+                              padding: "3px 12px",
+                              border: active ? `1.5px solid ${opt.color}` : "1.5px solid #e5e5e5",
+                              borderRadius: 20,
+                              background: active ? `${opt.color}12` : "white",
+                              cursor: "pointer",
+                              fontSize: ".75rem",
+                              fontWeight: active ? 700 : 400,
+                              color: active ? opt.color : "#525252",
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1369,15 +1542,7 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
                       CATEGORY
                     </label>
                     <div className="d-flex gap-2 flex-wrap">
-                      {[
-                        "",
-                        "TRANSACTION",
-                        "CREDENTIAL",
-                        "BEHAVIORAL",
-                        "LOCATION",
-                        "NETWORK",
-                        "CHAIN",
-                      ].map((cat) => {
+                      {["", ...patternCategories].map((cat) => {
                         const active = patternCategory === cat;
                         return (
                           <button
@@ -1642,9 +1807,7 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
                       {ACTIVITY_ACTION_GROUPS.filter(
                         ({ group }) =>
                           !moduleSource ||
-                          (MODULE_TO_GROUPS[moduleSource] || []).includes(
-                            group,
-                          ),
+                          (MODULE_TO_GROUPS[moduleSource] || []).includes(group),
                       ).map(({ group, color, icon, actions }) => {
                         const allSelected = actions.every((a) =>
                           selectedActions.has(a),
@@ -1758,10 +1921,10 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
 
           {/* Summary preview */}
           {reportType &&
-            dateFrom &&
-            dateTo &&
+            (isGlobalRule || (dateFrom && dateTo)) &&
             (isActivityLog ||
               isFraudPattern ||
+              isGlobalRule ||
               isFraudSummary ||
               isBlacklist ||
               isMLPerformance ||
@@ -1774,6 +1937,8 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
                     ? "#eef2ff"
                     : isFraudPattern
                       ? "#f5f3ff"
+                      : isGlobalRule
+                        ? "#fffbeb"
                       : isFraudSummary
                         ? "#f0f9ff"
                         : isBlacklist
@@ -1783,7 +1948,7 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
                             : isManualReview
                               ? "#f0fdfa"
                               : "#fef2f2",
-                  border: `1px solid ${isActivityLog ? "#c7d2fe" : isFraudPattern ? "#ddd6fe" : isFraudSummary ? "#bae6fd" : isBlacklist ? "#fed7aa" : isMLPerformance || isManualReview ? "#99f6e4" : "#fecaca"}`,
+                  border: `1px solid ${isActivityLog ? "#c7d2fe" : isFraudPattern ? "#ddd6fe" : isGlobalRule ? "#fde68a" : isFraudSummary ? "#bae6fd" : isBlacklist ? "#fed7aa" : isMLPerformance || isManualReview ? "#99f6e4" : "#fecaca"}`,
                   borderRadius: 8,
                   marginBottom: "1.25rem",
                   fontSize: ".82rem",
@@ -1791,6 +1956,8 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
                     ? "#4338ca"
                     : isFraudPattern
                       ? "#6d28d9"
+                      : isGlobalRule
+                        ? "#92400e"
                       : isFraudSummary
                         ? "#0369a1"
                         : isBlacklist
@@ -1839,6 +2006,19 @@ const ReportGenerator = ({ onGenerate, onCancel }) => {
                         <>
                           {" "}
                           · Status: <strong>{patternStatus}</strong>
+                        </>
+                      )}
+                    </>
+                  ) : isGlobalRule ? (
+                    <>
+                      Akan generate <strong>Global Rule Report</strong> format{" "}
+                      <strong>{format}</strong> — snapshot konfigurasi saat ini
+                      {ruleScope && (
+                        <> · Layanan: <strong>{ruleScope}</strong></>
+                      )}
+                      {ruleIsActive !== "" && (
+                        <>
+                          {" "}· Status: <strong>{ruleIsActive === "true" ? "Active" : "Inactive"}</strong>
                         </>
                       )}
                     </>

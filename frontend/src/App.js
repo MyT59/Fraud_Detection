@@ -287,9 +287,7 @@ function App() {
                       <Route
                         path="/audit-log"
                         element={
-                          <RoleGuard
-                            allowedRoles={["SUPER_ADMIN", "RISK_MANAGER"]}
-                          >
+                          <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
                             <AuditLog />
                           </RoleGuard>
                         }

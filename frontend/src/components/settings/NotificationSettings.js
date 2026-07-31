@@ -3,7 +3,6 @@ import api from "../../services/apiService";
 
 const FIELD_MAP = {
   fraudAlerts: "fraud_alerts_enabled",
-  pushNotifications: "push_notifications_enabled",
 };
 
 const NOTIFICATION_CONFIG = [
@@ -13,13 +12,6 @@ const NOTIFICATION_CONFIG = [
     color: "danger",
     title: "Fraud Alerts",
     description: "Notifikasi segera saat terdeteksi aktivitas fraud",
-  },
-  {
-    key: "pushNotifications",
-    icon: "bell",
-    color: "warning",
-    title: "Push Notifications",
-    description: "Notifikasi push di browser atau mobile",
   },
 ];
 
@@ -64,7 +56,6 @@ const SkeletonItem = () => (
 const NotificationSettings = () => {
   const [prefs, setPrefs] = useState({
     fraudAlerts: false,
-    pushNotifications: false,
   });
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState(null);
@@ -78,7 +69,6 @@ const NotificationSettings = () => {
       const data = await api.get("/notifications/");
       setPrefs({
         fraudAlerts: data.fraud_alerts_enabled,
-        pushNotifications: data.push_notifications_enabled,
       });
     } catch {
       setFetchError(true);

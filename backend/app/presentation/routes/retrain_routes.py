@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, s
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import app.core.scheduler as scheduler_core
 
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/retrain", tags=["ML Retraining"])
 # 📅 1. LIST SEMUA JADWAL
 # ==========================================
 @router.get("/schedules")
-def list_schedules(db: Session = Depends(get_db), current_admin: Admin = Depends(get_current_user)) -> List[ScheduleResponse]:
+def list_schedules(db: Session = Depends(get_db), current_admin: Admin = Depends(is_super_admin)) -> List[ScheduleResponse]:
     service = RetrainService(db)
     return service.get_all_schedules()
 
@@ -38,7 +38,7 @@ def list_schedules(db: Session = Depends(get_db), current_admin: Admin = Depends
 def scheduler_status(
     db: Session = Depends(get_db), 
     scheduler_service: SchedulerService = Depends(get_scheduler_service),
-    current_admin: Admin = Depends(get_current_user)
+    current_admin: Admin = Depends(is_super_admin)
 ):
     jobs = scheduler_service.get_jobs()
     uptime_seconds = None
@@ -66,19 +66,10 @@ def scheduler_status(
     }
 
     # ✅ RESPONSE FINAL
-    return {
-        "scheduler_running": scheduler_service.scheduler.running,
-        "uptime_seconds": uptime_seconds,
-        "last_run": last_run,
-        "successful_jobs": successful_jobs,
-        "failed_jobs": failed_jobs,
-        "total_jobs": len(jobs.get("jobs", jobs)) if isinstance(jobs, dict) else len(jobs), # Memastikan len aman sesuai struktur response jobs
-        "jobs": jobs
-    }
-
 @router.get("/health")
 def retrain_health(
-    scheduler_service: SchedulerService = Depends(get_scheduler_service)
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
+    current_admin: Admin = Depends(is_super_admin),
 ):
     return {
         "status": (
@@ -91,7 +82,7 @@ def retrain_health(
 @router.get("/metrics")
 def retrain_metrics(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_user)
+    current_admin: Admin = Depends(is_super_admin)
 ):
     from app.infrastructure.database.models.retrain_history_model import RetrainHistory
 
@@ -125,11 +116,17 @@ def create_schedule(
     scheduler_service: SchedulerService = Depends(get_scheduler_service)
 ):
     service = RetrainService(db)
-    # Simpan ke DB & Log aktivitas
+    try:
+        scheduler_service.validate_cron_expr(data.cron_expr)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     new_schedule = service.create_schedule(data.dict(), admin_id=current_admin.id)
-    
-    # Daftarkan ke mesin background scheduler
-    scheduler_service.register_job(new_schedule.to_dict())
+    if new_schedule.is_active:
+        try:
+            scheduler_service.register_job(new_schedule.to_dict())
+        except ValueError as exc:
+            service.toggle_schedule_status(new_schedule.id, False, admin_id=current_admin.id)
+            raise HTTPException(status_code=503, detail=str(exc))
     
     return new_schedule
 
@@ -146,14 +143,26 @@ def update_schedule(
     scheduler_service: SchedulerService = Depends(get_scheduler_service)
 ):
     service = RetrainService(db)
-    updated = service.update_schedule(schedule_id, data.dict(exclude_unset=True), admin_id=current_admin.id)
+    update_data = data.dict(exclude_unset=True)
+    if "cron_expr" in update_data:
+        try:
+            scheduler_service.validate_cron_expr(update_data["cron_expr"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+    updated = service.update_schedule(schedule_id, update_data, admin_id=current_admin.id)
 
     if not updated:
         raise HTTPException(status_code=404, detail="Schedule not found")
 
     # Re-register job di scheduler dengan config terbaru
     if updated.is_active:
-        scheduler_service.register_job(updated.to_dict())
+        try:
+            scheduler_service.register_job(updated.to_dict())
+        except ValueError as exc:
+            service.toggle_schedule_status(updated.id, False, admin_id=current_admin.id)
+            raise HTTPException(status_code=503, detail=str(exc))
+    else:
+        scheduler_service.unregister_job(str(updated.id))
 
     return updated
 
@@ -176,7 +185,11 @@ def toggle_status(
 
     # Update di mesin scheduler
     if data.is_active:
-        scheduler_service.register_job(updated.to_dict())
+        try:
+            scheduler_service.register_job(updated.to_dict())
+        except ValueError as exc:
+            service.toggle_schedule_status(updated.id, False, admin_id=current_admin.id)
+            raise HTTPException(status_code=503, detail=str(exc))
     else:
         scheduler_service.unregister_job(str(updated.id))
         
@@ -193,13 +206,10 @@ def delete_schedule(
     scheduler_service: SchedulerService = Depends(get_scheduler_service)
 ):
     service = RetrainService(db)
-    # Hapus dari mesin scheduler dulu
-    scheduler_service.unregister_job(str(schedule_id))
-    
-    # Hapus dari DB & Log
     success = service.delete_schedule(schedule_id, admin_id=current_admin.id)
     if not success:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    scheduler_service.unregister_job(str(schedule_id))
         
     return {"message": "Schedule deleted successfully"}
 
@@ -220,13 +230,29 @@ def run_now(
     if not sched:
         raise HTTPException(status_code=404, detail="Schedule not found")
         
-    # Eksekusi Retrain langsung
-    result = service.execute_retrain(
-        domain=sched.domain,
-        schedule_id=sched.id,
-        trigger_source="manual",
-        admin_id=current_admin.id,
-    )
+    # Eksekusi manual harus memperbarui metadata schedule seperti job terjadwal.
+    try:
+        result = service.execute_retrain(
+            domain=sched.domain,
+            schedule_id=sched.id,
+            trigger_source="manual",
+            admin_id=current_admin.id,
+        )
+        sched.last_run_at = datetime.now(timezone.utc)
+        sched.last_run_status = "SUCCESS" if result.get("status") == "success" else "FAILED"
+        db.commit()
+    except Exception:
+        # execute_retrain dapat melakukan rollback atas transaksi training-nya.
+        # Ambil ulang schedule dan simpan status gagal secara terpisah agar UI
+        # tetap memiliki jejak percobaan manual terakhir.
+        db.rollback()
+        failed_schedule = service.get_schedule_by_id(schedule_id)
+        if failed_schedule:
+            failed_schedule.last_run_at = datetime.now(timezone.utc)
+            failed_schedule.last_run_status = "FAILED"
+            db.commit()
+        raise
+
     return {"message": "Manual retraining finished", "result": result}
 
 # ==========================================
@@ -239,7 +265,7 @@ async def upload_and_train(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(is_super_admin)
 ):
-    if not file.filename.endswith(".csv"):
+    if not (file.filename or "").lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are allowed")
 
     service = RetrainService(db)
@@ -253,7 +279,7 @@ async def upload_and_train(
 @router.get("/model-stats")
 def get_model_stats(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_user)
+    current_admin: Admin = Depends(is_super_admin)
 ):
     from app.infrastructure.database.models.ml_model_model import MLModel as MLModelDB
 
@@ -287,7 +313,7 @@ def get_model_stats(
 # 📜 7. LIHAT HISTORY
 # ==========================================
 @router.get("/history")
-def get_history(db: Session = Depends(get_db), current_admin: Admin = Depends(get_current_user)) -> List[RetrainHistoryResponse]:
+def get_history(db: Session = Depends(get_db), current_admin: Admin = Depends(is_super_admin)) -> List[RetrainHistoryResponse]:
     from app.infrastructure.database.models.retrain_history_model import RetrainHistory
     history = db.query(RetrainHistory).order_by(RetrainHistory.execution_time.desc()).limit(50).all()
     return [RetrainHistoryResponse.from_orm(item) for item in history]

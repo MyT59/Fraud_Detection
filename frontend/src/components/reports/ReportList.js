@@ -126,7 +126,7 @@ const ConfirmModal = ({ config, onConfirm, onCancel }) => {
               }}
             >
               {isDelete
-                ? "Laporan ini akan dihapus secara permanen dan tidak bisa dikembalikan."
+                ? "Laporan dan file export-nya akan dihapus. Tindakan ini tidak dapat dikembalikan dari dashboard."
                 : `File akan didownload dalam format ${config.report?.format}.`}
             </p>
             <div
@@ -636,38 +636,32 @@ const ReportList = ({
   onDeleteReport,
   onDownloadReport,
   selectedReportId,
+  totalRecords,
+  currentPage,
+  rowsPerPage,
+  onPageChange,
+  onRowsPerPageChange,
+  filterFormat,
+  onFormatChange,
+  filterStatus,
+  onStatusChange,
 }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [confirmModal, setConfirmModal] = useState(null);
-
-  const [filterFormat, setFilterFormat] = useState(null);
-  const [filterStatus, setFilterStatus] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
 
   const formatBtnRef = useRef(null);
   const statusBtnRef = useRef(null);
 
-  const filteredReports = reports.filter((r) => {
-    if (filterFormat && r.format !== filterFormat) return false;
-    if (filterStatus && r.status !== filterStatus) return false;
-    return true;
-  });
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [reports.length, filterFormat, filterStatus]);
-
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredReports.length / rowsPerPage),
+    Math.ceil(totalRecords / rowsPerPage),
   );
   const startIndex = (currentPage - 1) * rowsPerPage;
-  const endIndex = Math.min(startIndex + rowsPerPage, filteredReports.length);
-  const pageReports = filteredReports.slice(startIndex, endIndex);
+  const endIndex = Math.min(startIndex + reports.length, totalRecords);
+  const pageReports = reports;
 
   const goToPage = (page) => {
-    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+    if (page >= 1 && page <= totalPages) onPageChange(page);
   };
 
   const getPageNumbers = () => {
@@ -734,7 +728,7 @@ const ReportList = ({
   };
   const handleCancel = () => setConfirmModal(null);
 
-  if (filteredReports.length === 0 && !filterFormat && !filterStatus) {
+  if (reports.length === 0 && !filterFormat && !filterStatus) {
     return (
       <div className="empty-state py-5 text-center">
         <i
@@ -758,11 +752,11 @@ const ReportList = ({
       <ActiveFiltersBar
         filterFormat={filterFormat}
         filterStatus={filterStatus}
-        onClearFormat={() => setFilterFormat(null)}
-        onClearStatus={() => setFilterStatus(null)}
+        onClearFormat={() => onFormatChange(null)}
+        onClearStatus={() => onStatusChange(null)}
         onClearAll={() => {
-          setFilterFormat(null);
-          setFilterStatus(null);
+          onFormatChange(null);
+          onStatusChange(null);
         }}
       />
 
@@ -777,8 +771,8 @@ const ReportList = ({
                   label="Format"
                   options={FORMAT_OPTIONS}
                   value={filterFormat}
-                  onChange={setFilterFormat}
-                  onClear={() => setFilterFormat(null)}
+                  onChange={onFormatChange}
+                  onClear={() => onFormatChange(null)}
                   open={openDropdown === "format"}
                   onToggle={(v) => setOpenDropdown(v ? "format" : null)}
                   anchorRef={formatBtnRef}
@@ -792,8 +786,8 @@ const ReportList = ({
                   label="Status"
                   options={STATUS_OPTIONS}
                   value={filterStatus}
-                  onChange={setFilterStatus}
-                  onClear={() => setFilterStatus(null)}
+                  onChange={onStatusChange}
+                  onClear={() => onStatusChange(null)}
                   open={openDropdown === "status"}
                   onToggle={(v) => setOpenDropdown(v ? "status" : null)}
                   anchorRef={statusBtnRef}
@@ -807,7 +801,7 @@ const ReportList = ({
           </thead>
 
           <tbody>
-            {filteredReports.length === 0 ? (
+            {reports.length === 0 ? (
               <tr>
                 <td
                   colSpan={7}
@@ -836,8 +830,8 @@ const ReportList = ({
                     </span>
                     <button
                       onClick={() => {
-                        setFilterFormat(null);
-                        setFilterStatus(null);
+                        onFormatChange(null);
+                        onStatusChange(null);
                       }}
                       style={{
                         marginTop: 4,
@@ -985,13 +979,13 @@ const ReportList = ({
           <span className="pagination-range">
             Showing{" "}
             <strong>
-              {filteredReports.length === 0 ? 0 : startIndex + 1}–{endIndex}
+              {reports.length === 0 ? 0 : startIndex + 1}–{endIndex}
             </strong>{" "}
-            of <strong>{filteredReports.length}</strong> reports
+            of <strong>{totalRecords}</strong> reports
             {(filterFormat || filterStatus) && (
               <span style={{ color: "#8e8e9e", fontWeight: 400 }}>
                 {" "}
-                (filtered from {reports.length})
+                (filtered result)
               </span>
             )}
           </span>
@@ -1001,8 +995,7 @@ const ReportList = ({
               className="rows-select"
               value={rowsPerPage}
               onChange={(e) => {
-                setRowsPerPage(Number(e.target.value));
-                setCurrentPage(1);
+                onRowsPerPageChange(Number(e.target.value));
               }}
             >
               {ROWS_PER_PAGE_OPTIONS.map((n) => (

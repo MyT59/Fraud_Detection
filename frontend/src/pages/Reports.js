@@ -8,16 +8,21 @@ import reportService from "../services/reportService";
 const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [reports, setReports] = useState([]);
+  const [totalReports, setTotalReports] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterFormat, setFilterFormat] = useState(null);
   const [showGenerator, setShowGenerator] = useState(false);
 
-  const fetchReports = useCallback(async (page = 1, status = "all") => {
+  const fetchReports = useCallback(async (page = 1, status = "all", format = null, limit = 20) => {
     try {
-      const params = { page, limit: 20 };
+      const params = { page, limit };
       if (status !== "all") params.status = status.toUpperCase();
+      if (format) params.format = format;
       const res = await reportService.getReports(params);
       setReports(res.items || []);
+      setTotalReports(res.total || 0);
     } catch (err) {
       console.error("Failed to fetch reports:", err.message);
     } finally {
@@ -26,8 +31,8 @@ const Reports = () => {
   }, []);
 
   useEffect(() => {
-    fetchReports(currentPage, filterStatus);
-  }, [fetchReports, currentPage, filterStatus]);
+    fetchReports(currentPage, filterStatus, filterFormat, pageSize);
+  }, [fetchReports, currentPage, filterStatus, filterFormat, pageSize]);
 
   // Poll status untuk report yang masih PROCESSING/PENDING
   useEffect(() => {
@@ -58,7 +63,8 @@ const Reports = () => {
   }, [reports]);
 
   const handleGenerateReport = (newReport) => {
-    setReports((prev) => [newReport, ...prev]);
+    setCurrentPage(1);
+    fetchReports(1, filterStatus, filterFormat, pageSize);
     setShowGenerator(false);
   };
 
@@ -74,7 +80,9 @@ const Reports = () => {
   const handleDeleteReport = async (reportId) => {
     try {
       await reportService.deleteReport(reportId);
-      setReports((prev) => prev.filter((r) => r.id !== reportId));
+      const nextPage = reports.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+      setCurrentPage(nextPage);
+      fetchReports(nextPage, filterStatus, filterFormat, pageSize);
     } catch (err) {
       console.error("Delete failed:", err.message);
       alert(`Gagal menghapus report: ${err.message}`);
@@ -87,11 +95,6 @@ const Reports = () => {
       handleDownloadReport(report);
     }
   };
-
-  const filteredReports =
-    filterStatus === "all"
-      ? reports
-      : reports.filter((r) => r.status === filterStatus.toUpperCase());
 
   if (loading) return <PageLoader message="Memuat data laporan..." />;
 
@@ -137,11 +140,11 @@ const Reports = () => {
                     <i className="bi bi-table me-2"></i>
                     Report History
                     <span className="report-count-badge ms-2">
-                      {filteredReports.length}
+                      {totalReports}
                     </span>
                   </h5>
                   <div className="filter-buttons">
-                    {["all", "COMPLETED", "PROCESSING", "FAILED"].map((s) => (
+                    {["all", "PENDING", "PROCESSING", "COMPLETED", "FAILED"].map((s) => (
                       <button
                         key={s}
                         className={`btn btn-sm ${
@@ -150,7 +153,7 @@ const Reports = () => {
                               ? "btn-danger"
                               : s === "COMPLETED"
                                 ? "btn-success"
-                                : s === "PROCESSING"
+                              : s === "PROCESSING" || s === "PENDING"
                                   ? "btn-warning"
                                   : "btn-danger"
                             : "btn-outline-secondary"
@@ -170,7 +173,25 @@ const Reports = () => {
               </div>
               <div className="card-body p-0">
                 <ReportList
-                  reports={filteredReports}
+                  reports={reports}
+                  totalRecords={totalReports}
+                  currentPage={currentPage}
+                  rowsPerPage={pageSize}
+                  onPageChange={setCurrentPage}
+                  onRowsPerPageChange={(size) => {
+                    setPageSize(size);
+                    setCurrentPage(1);
+                  }}
+                  filterFormat={filterFormat}
+                  onFormatChange={(value) => {
+                    setFilterFormat(value);
+                    setCurrentPage(1);
+                  }}
+                  filterStatus={filterStatus === "all" ? null : filterStatus}
+                  onStatusChange={(value) => {
+                    setFilterStatus(value || "all");
+                    setCurrentPage(1);
+                  }}
                   onViewReport={handleViewReport}
                   onDeleteReport={handleDeleteReport}
                   onDownloadReport={handleDownloadReport}

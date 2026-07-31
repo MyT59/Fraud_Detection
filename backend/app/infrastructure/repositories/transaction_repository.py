@@ -1,4 +1,3 @@
-from matplotlib.pylab import size
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
@@ -243,6 +242,50 @@ class TransactionRepository:
             self.db.query(Transaction)
             .filter(
                 Transaction.account_number == account_number
+            )
+            .order_by(Transaction.transaction_time.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def get_recent_transactions_by_user_account(
+        self,
+        user_account_id: str,
+        service_source: str | None = None,
+        limit: int = 10,
+    ):
+        """Retrieve a customer's recent transactions, newest first.
+
+        Nusabill invoice payments do not have a source ``account_number`` in
+        ``transactions_feed``. Their behavioural history is therefore keyed by
+        the customer identifier stored in ``user_account_id``.
+        """
+        if not user_account_id:
+            return []
+
+        query = self.db.query(Transaction).filter(
+            Transaction.user_account_id == user_account_id
+        )
+        if service_source:
+            query = query.filter(Transaction.service_source == service_source)
+
+        return query.order_by(Transaction.transaction_time.desc()).limit(limit).all()
+
+    def get_recent_transactions_by_issuer_account(
+        self,
+        issuer_account_number: str,
+        limit: int = 10,
+    ):
+        """Retrieve recent Agenusa activity for the same external-bank card."""
+        if not issuer_account_number:
+            return []
+
+        return (
+            self.db.query(Transaction)
+            .filter(
+                Transaction.service_source == "AGENUSA",
+                Transaction.transaction_details["issuer_account_number"].astext
+                == issuer_account_number,
             )
             .order_by(Transaction.transaction_time.desc())
             .limit(limit)

@@ -16,7 +16,7 @@ from app.application.services.review_service import (
     soft_delete_review_service
 )
 
-from app.presentation.schemas.review_schema import ReviewRequest, ReviewMetricsResponse, MyReviewMetricsResponse, AnalystPerformanceResponse, ReviewTimelineAnalyticsResponse, ReviewOverrideRequest, FalseNegativeReportRequest, ReviewHistoryPaginatedResponse
+from app.presentation.schemas.review_schema import ReviewRequest, ReviewDecision, ReviewMetricsResponse, MyReviewMetricsResponse, AnalystPerformanceResponse, ReviewTimelineAnalyticsResponse, ReviewOverrideRequest, FalseNegativeReportRequest, ReviewHistoryPaginatedResponse
 
 from app.core.rbac import require_roles
 
@@ -30,7 +30,7 @@ router = APIRouter(
 def create_review(
     payload: ReviewRequest,
     db: Session = Depends(get_db),
-    current_admin = Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST"))
+    current_admin = Depends(require_roles("FRAUD_ANALYST"))
 ):
     review = review_transaction(
         db=db,
@@ -63,18 +63,24 @@ def get_analyst_performance(
 @router.get("/history", response_model=ReviewHistoryPaginatedResponse)
 def get_review_history_route(
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     reviewed_by: Optional[int] = Query(None, ge=1),
+    decision: Optional[ReviewDecision] = None,
+    search: Optional[str] = Query(None, max_length=100),
+    sort_by: str = Query("newest", pattern="^(newest|oldest)$"),
     db: Session = Depends(get_db),
     current_admin = Depends(require_roles("RISK_MANAGER", "SUPER_ADMIN"))
 ):
-    return get_review_history(db, page, limit, reviewed_by)
+    return get_review_history(db, page, limit, reviewed_by, decision.value if decision else None, search, sort_by)
 
 
 @router.get("/my-history", response_model=ReviewHistoryPaginatedResponse)
 def get_my_review_history_route(
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    decision: Optional[ReviewDecision] = None,
+    search: Optional[str] = Query(None, max_length=100),
+    sort_by: str = Query("newest", pattern="^(newest|oldest)$"),
     db: Session = Depends(get_db),
     current_admin = Depends(require_roles("FRAUD_ANALYST", "RISK_MANAGER", "SUPER_ADMIN"))
 ):
@@ -82,7 +88,7 @@ def get_my_review_history_route(
     Riwayat review milik analis yang sedang login.
     FRAUD_ANALYST hanya lihat history miliknya sendiri.
     """
-    return get_my_review_history(db, current_admin.id, page, limit)
+    return get_my_review_history(db, current_admin.id, page, limit, decision.value if decision else None, search, sort_by)
 
 
 @router.get("/my-metrics", response_model=MyReviewMetricsResponse)

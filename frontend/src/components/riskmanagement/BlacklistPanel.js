@@ -59,6 +59,7 @@ const STATUS_CONFIG = {
   active: { label: "Active", cls: "st-active" },
   pending: { label: "Needs Review", cls: "st-pending" },
   inactive: { label: "Inactive", cls: "st-inactive" },
+  rejected: { label: "Rejected", cls: "st-inactive" },
 };
 
 const ColumnDropdown = ({ options, value, onChange, label, anchor }) => {
@@ -221,6 +222,7 @@ const BlacklistPanel = ({
   onBulkImport,
   onDelete,
   onApprove,
+  onReject,
   onEdit,
   onToggleStatus,
 }) => {
@@ -259,7 +261,7 @@ const BlacklistPanel = ({
       const q = search.toLowerCase();
       const matchQ =
         !q ||
-        item.accountNumber.includes(q) ||
+        item.accountNumber.toLowerCase().includes(q) ||
         item.accountName.toLowerCase().includes(q) ||
         item.bank.toLowerCase().includes(q);
       const matchSrc = filterSrc === "all" || item.source === filterSrc;
@@ -538,13 +540,22 @@ const BlacklistPanel = ({
                       <td onClick={(e) => e.stopPropagation()}>
                         <div className="blp-actions">
                           {item.status === "pending" && (
-                            <button
-                              className="blp-action-btn approve"
-                              title="Setujui"
-                              onClick={() => onApprove(item.id)}
-                            >
-                              <i className="bi bi-check-lg" />
-                            </button>
+                            <>
+                              <button
+                                className="blp-action-btn approve"
+                                title="Setujui"
+                                onClick={() => onApprove(item.id)}
+                              >
+                                <i className="bi bi-check-lg" />
+                              </button>
+                              <button
+                                className="blp-action-btn deactivate"
+                                title="Tolak"
+                                onClick={() => onReject(item.id)}
+                              >
+                                <i className="bi bi-x-lg" />
+                              </button>
+                            </>
                           )}
                           {item.status === "active" && (
                             <button
@@ -564,6 +575,15 @@ const BlacklistPanel = ({
                               onClick={() => onToggleStatus(item.id, "active")}
                             >
                               <i className="bi bi-play-circle" />
+                            </button>
+                          )}
+                          {item.status === "rejected" && (
+                            <button
+                              className="blp-action-btn approve"
+                              title="Setujui ulang"
+                              onClick={() => onApprove(item.id)}
+                            >
+                              <i className="bi bi-arrow-repeat" />
                             </button>
                           )}
                           <button
@@ -667,6 +687,7 @@ const BlacklistPanel = ({
           setDetailItem(null);
         }}
         onApprove={(id) => onApprove(id)}
+        onReject={(id) => onReject(id)}
         onToggleStatus={(id, status) => onToggleStatus(id, status)}
       />
 
