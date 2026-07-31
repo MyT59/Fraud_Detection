@@ -313,7 +313,6 @@ const RetrainSchedule = () => {
         isOpen={uploadModalOpen}
         onClose={() => setUploadModalOpen(false)}
         onSuccess={() => {
-          setUploadModalOpen(false);
           fetchSchedules();
         }}
       />

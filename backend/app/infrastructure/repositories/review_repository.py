@@ -35,7 +35,7 @@ class ReviewRepository:
             func.count(ManualReview.id).label("total"),
             func.sum(case((ManualReview.decision == "FRAUD", 1), else_=0)).label("fraud"),
             func.sum(case((ManualReview.decision == "SAFE", 1), else_=0)).label("safe")
-        ).first()
+        ).filter(ManualReview.is_deleted == False).first()
         
         return {
             "total": data.total or 0,
@@ -53,6 +53,7 @@ class ReviewRepository:
                 func.extract('epoch', ManualReview.review_completed_at - ManualReview.review_started_at)
             )
         ).filter(
+            ManualReview.is_deleted == False,
             ManualReview.review_completed_at.isnot(None),
             ManualReview.review_started_at.isnot(None)
         ).scalar() or 0.0
@@ -64,17 +65,19 @@ class ReviewRepository:
         """
         return self.db.query(
             ManualReview.reviewer_id.label("analyst_id"),
-            Admin.full_name.label("analyst_name"),
+            func.coalesce(Admin.full_name, ManualReview.reviewer_name, "Deleted analyst").label("analyst_name"),
             Admin.email.label("analyst_email"),
             func.count(ManualReview.id).label("reviews_completed"),
             func.avg(
                 func.extract('epoch', ManualReview.review_completed_at - ManualReview.review_started_at)
             ).label("avg_review_seconds"),
             func.sum(case((ManualReview.decision == "FRAUD", 1), else_=0)).label("fraud_detected")
-        ).join(
+        ).outerjoin(
             Admin, ManualReview.reviewer_id == Admin.id
+        ).filter(
+            ManualReview.is_deleted == False
         ).group_by(
-            ManualReview.reviewer_id, Admin.full_name, Admin.email
+            ManualReview.reviewer_id, Admin.full_name, Admin.email, ManualReview.reviewer_name
         ).order_by(
             func.count(ManualReview.id).desc()  
         ).all()
@@ -90,6 +93,7 @@ class ReviewRepository:
             truncated_hour.label('hour'),
             func.count(ManualReview.id).label('count')
         ).filter(
+            ManualReview.is_deleted == False,
             ManualReview.review_completed_at >= since
         ).group_by(
             truncated_hour
@@ -110,6 +114,7 @@ class ReviewRepository:
             truncated_day.label('day'),
             func.count(ManualReview.id).label('count')
         ).filter(
+            ManualReview.is_deleted == False,
             ManualReview.review_completed_at >= since,
             ManualReview.decision == "FRAUD"
         ).group_by(
@@ -143,7 +148,7 @@ class ReviewRepository:
             )
             .filter(
                 FraudAlert.resolved_at >= seven_days_ago,
-                FraudAlert.status == 'RESOLVED'
+                FraudAlert.status.in_(['RESOLVED', 'OVERRIDDEN'])
             )
             .group_by(func.date(FraudAlert.resolved_at))
             .all()
@@ -219,6 +224,7 @@ class ReviewRepository:
             )
         ).filter(
             ManualReview.reviewer_id == reviewer_id,
+            ManualReview.is_deleted == False,
             ManualReview.review_completed_at.isnot(None),
             ManualReview.review_started_at.isnot(None)
         ).scalar() or 0.0

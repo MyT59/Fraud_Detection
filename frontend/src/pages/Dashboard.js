@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import StatCard from "../components/dashboard/StatCard";
 import TransactionChart from "../components/dashboard/TransactionChart";
 import FraudChart from "../components/dashboard/FraudChart";
@@ -14,7 +14,7 @@ import "./Dashboard.css";
 const severityToType = (s = "") => {
   const u = s.toUpperCase();
   if (u === "CRITICAL" || u === "HIGH") return "high";
-  if (u === "MEDIUM") return "medium";
+  if (u === "MEDIUM" || u === "WARNING") return "medium";
   return "low";
 };
 
@@ -175,6 +175,7 @@ const normalizeApiResponse = (data) => {
     alerts_summary: alertsSummary,
     top_patterns: patterns,
     activity_preview: activities,
+    system_health: data.system_health || null,
   };
 };
 
@@ -196,6 +197,7 @@ const FALLBACK = normalizeApiResponse({
   recent_alerts: [],
   top_patterns: [],
   activity: [],
+  system_health: null,
 });
 
 const PANEL_CARDS = [
@@ -235,16 +237,22 @@ const Dashboard = () => {
   const [dataSource, setDataSource] = useState("api");
   const [apiError, setApiError] = useState(null);
   const [activeModal, setActiveModal] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const requestSequence = useRef(0);
 
   const loadData = useCallback(async (signal) => {
+    const requestId = ++requestSequence.current;
     setLoading(true);
     setApiError(null);
     try {
       const raw = await api.get("/dashboard/summary", { signal });
+      if (requestId !== requestSequence.current) return;
       setDashData(normalizeApiResponse(raw));
       setDataSource("api");
+      setLastUpdated(new Date());
     } catch (err) {
       if (err.name === "AbortError") return;
+      if (requestId !== requestSequence.current) return;
       console.warn(
         "[Dashboard] API tidak tersedia, pakai fallback.",
         err.message,
@@ -253,7 +261,7 @@ const Dashboard = () => {
       setDashData(FALLBACK);
       setDataSource("static");
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
   }, []);
 
@@ -301,11 +309,12 @@ const Dashboard = () => {
             <span
               className={`badge ms-2 ${dataSource === "api" ? "bg-success" : "bg-warning text-dark"}`}
               style={{ fontSize: "0.7rem", verticalAlign: "middle" }}
-              title={apiError || "Live data dari API"}
+              title={apiError || "Data dari API pada refresh terakhir"}
             >
               {dataSource === "api" ? (
                 <>
-                  <i className="bi bi-cloud-check me-1"></i>Live
+                  <i className="bi bi-cloud-check me-1"></i>
+                  Updated {lastUpdated?.toLocaleTimeString() || "now"}
                 </>
               ) : (
                 <>
@@ -353,35 +362,35 @@ const Dashboard = () => {
           value={(stats.total_agenusa ?? 0).toLocaleString()}
           icon="bi bi-building"
           type="secondary"
-          change={10.2}
+          change={null}
         />
         <StatCard
           title="Total Nusabill"
           value={(stats.total_nusabill ?? 0).toLocaleString()}
           icon="bi bi-receipt-cutoff"
           type="secondary"
-          change={8.7}
+          change={null}
         />
         <StatCard
           title="Agenusa Fraud"
           value={(stats.agenusa_fraud ?? 0).toLocaleString()}
           icon="bi bi-shield-fill-exclamation"
           type="primary"
-          change={-5.1}
+          change={null}
         />
         <StatCard
           title="Nusabill Fraud"
           value={(stats.nusabill_fraud ?? 0).toLocaleString()}
           icon="bi bi-shield-fill-x"
           type="primary"
-          change={-3.8}
+          change={null}
         />
         <StatCard
           title="Fraud Rate"
           value={`${stats.fraud_rate}%`}
           icon="bi bi-percent"
           type="secondary"
-          change={-2.1}
+          change={null}
         />
         <StatCard
           title="Anomaly Rate"
@@ -407,6 +416,8 @@ const Dashboard = () => {
         <FraudChart
           total={fraudTotal}
           fraudCount={fraudCount}
+          flaggedCount={fraud_distribution?.flagged ?? 0}
+          safeCount={fraud_distribution?.safe ?? 0}
         />
       </div>
 
@@ -634,7 +645,7 @@ const Dashboard = () => {
             </div>
 
             <div style={{ overflowY: "auto", flex: 1 }}>
-              {activeModal === "health" && <SystemHealth />}
+              {activeModal === "health" && <SystemHealth health={dashData.system_health} onRefresh={loadData} />}
               {activeModal === "patterns" && (
                 <TopFraudPatterns patterns={top_patterns} />
               )}

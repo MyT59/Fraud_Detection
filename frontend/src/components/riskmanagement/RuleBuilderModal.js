@@ -51,7 +51,6 @@ const FLD = {
     },
   ],
   NUSABILL: [
-    { l: "Kode pembayaran / merchant", f: "merchant_id", t: "text", d: "Payment/Merchant Code" },
     {
       l: "Metode pembayaran (SOF)",
       f: "transaction_details.sof",
@@ -62,7 +61,8 @@ const FLD = {
     {
       l: "Jalur transaksi (channel)",
       f: "transaction_details.channel",
-      t: "text",
+      t: "sel",
+      o: ["API", "MOBILE_BANKING", "INTERNET_BANKING", "WEB", "MOBILE", "ATM"],
       j: true,
       d: "Transaction Channel",
     },
@@ -144,7 +144,7 @@ function fieldMeta(f, scope) {
 
 const getTimestampHint = (field) => {
   if (field === "transaction_time") {
-    return "Isi waktu transaksi. Bisa jam saja, tapi lebih jelas bila pakai tanggal dan jam, mis. 14:32 atau 2026-07-06 14:32.";
+    return "Waktu dievaluasi dalam WIB. Bisa jam saja, tapi lebih jelas bila pakai tanggal dan jam, mis. 14:32 atau 2026-07-06 14:32.";
   }
   return null;
 };
@@ -290,7 +290,6 @@ const FieldCombobox = ({ fields, value, onChange, scope }) => {
               {f.l} - {f.d || f.f}
             </option>
           ))}
-          <option value={CUSTOM_VALUE}>Field dot-notation kustom...</option>
         </select>
       </div>
       {knownField && (
@@ -317,12 +316,16 @@ const ConditionRow = ({
   const effectiveMeta = meta || (cond.field ? { t: "text" } : null);
   const isJsonb = meta?.j || (cond.field && cond.field.includes("."));
   const timestampHint = getTimestampHint(cond.field);
+  const supportsOrderedComparison =
+    meta?.t === "number" || cond.field === "transaction_time";
+  const availableOperators = supportsOrderedComparison ? OPS : ["=", "!="];
 
   const setField = (f) => {
     const newMeta = fieldMeta(f, scope);
     onChange({
       ...cond,
       field: f,
+      operator: newMeta?.t === "number" || f === "transaction_time" ? cond.operator : "=",
       value: newMeta?.t === "sel" ? newMeta.o[0] || "" : "",
     });
   };
@@ -352,7 +355,7 @@ const ConditionRow = ({
           value={cond.operator}
           onChange={(e) => onChange({ ...cond, operator: e.target.value })}
         >
-          {OPS.map((op) => (
+          {availableOperators.map((op) => (
             <option key={op} value={op}>
               {op}
             </option>
@@ -548,6 +551,26 @@ const normalizeMitigationAction = (action) => {
   return normalized === "BLOCK" ? "BLOCK" : "FLAG";
 };
 
+// Keep the Rule Builder preview aligned with calculate_rule_score() and
+// get_rule_weight() in the backend Rule Engine.
+const RULE_SEVERITY_CONFIG = [
+  { v: "CRITICAL", color: "#dc2626", baseScore: 35, weight: 1.5 },
+  { v: "HIGH", color: "#d97706", baseScore: 22, weight: 1.3 },
+  { v: "MEDIUM", color: "#2563eb", baseScore: 15, weight: 1.1 },
+  { v: "LOW", color: "#16a34a", baseScore: 6, weight: 1.0 },
+];
+
+const calculateRuleContribution = (severity, action) => {
+  const config = RULE_SEVERITY_CONFIG.find((item) => item.v === severity);
+  if (!config) return 0;
+
+  // Backend: int(int(base_score * action_multiplier) * severity_weight)
+  const actionMultiplier = action === "BLOCK" ? 1.5 : 1.2;
+  return Math.trunc(
+    Math.trunc(config.baseScore * actionMultiplier) * config.weight,
+  );
+};
+
 const DEFAULT_SIMPLE_LOGIC = "AND";
 
 const RuleBuilderModal = ({
@@ -555,6 +578,7 @@ const RuleBuilderModal = ({
   onClose,
   onSuccess,
   onUpdate,
+  onError,
   editData,
 }) => {
   const isEdit = Boolean(editData);
@@ -598,7 +622,14 @@ const RuleBuilderModal = ({
           description: editData.description || "",
         });
 
-        const cfg = editData.rule_config;
+        let cfg = editData.rule_config;
+        if (typeof cfg === "string") {
+          try {
+            cfg = JSON.parse(cfg);
+          } catch {
+            cfg = null;
+          }
+        }
         if (cfg && (cfg.AND || cfg.OR || cfg.field)) {
           if (cfg.field) {
             setMode("simple");
@@ -838,7 +869,7 @@ const RuleBuilderModal = ({
       rule_config: buildRuleConfig(),
       action: form.action,
       severity: form.severity,
-      priority: parseInt(form.priority) || 0,
+      priority: Math.max(0, Math.min(100, parseInt(form.priority, 10) || 0)),
     };
     if (form.rule_group.trim()) p.rule_group = form.rule_group.trim();
     if (form.description.trim()) p.description = form.description.trim();
@@ -890,8 +921,9 @@ const RuleBuilderModal = ({
         onSuccess?.({ ...p, ...json });
         onClose();
       }
-    } catch {
+    } catch (error) {
       setLoading(false);
+      onError?.(error.message || "Gagal menyimpan rule.");
     }
   };
 
@@ -1220,12 +1252,7 @@ const RuleBuilderModal = ({
                   <span className="rbm-label-meta">(RuleSeverityEnum)</span>
                 </label>
                 <div className="rbm-severity-grid">
-                  {[
-                    { v: "CRITICAL", color: "#dc2626", score: "52" },
-                    { v: "HIGH", color: "#d97706", score: "28" },
-                    { v: "MEDIUM", color: "#2563eb", score: "16" },
-                    { v: "LOW", color: "#16a34a", score: "6" },
-                  ].map((s) => (
+                  {RULE_SEVERITY_CONFIG.map((s) => (
                     <button
                       key={s.v}
                       type="button"
@@ -1237,10 +1264,18 @@ const RuleBuilderModal = ({
                         style={{ background: s.color }}
                       />
                       <span>{s.v}</span>
-                      <span className="rbm-sev-score">+{s.score} poin</span>
+                      <span className="rbm-sev-score">
+                        +{calculateRuleContribution(s.v, form.action)} poin
+                      </span>
                     </button>
                   ))}
                 </div>
+                <span className="rbm-field-hint" style={{ marginTop: 8 }}>
+                  <i className="bi bi-info-circle" />
+                  {form.action === "BLOCK"
+                    ? "Skor di atas adalah kontribusi rule. Rule BLOCK yang match kemudian memaksa skor akhir transaksi menjadi 100, status FRAUD, dan level CRITICAL."
+                    : "Kontribusi FLAG mengikuti rumus backend: base severity × 1,2 × severity weight."}
+                </span>
               </div>
 
               <div className="rbm-field">
@@ -1261,7 +1296,7 @@ const RuleBuilderModal = ({
                     }}
                     onBlur={(e) => {
                       const parsed = parseInt(e.target.value, 10);
-                      set("priority", isNaN(parsed) ? 0 : Math.max(0, parsed));
+                      set("priority", isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed)));
                     }}
                   />
                   <div className="rbm-priority-pills">

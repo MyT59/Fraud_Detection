@@ -21,7 +21,6 @@ const LIFECYCLE = {
   PROMOTE_THRESHOLD: 0.85,
   DISABLE_MIN_SAMPLE: 10,
   PROMOTE_MIN_SAMPLE: 20,
-  COOLDOWN_DAYS: 7,
 };
 
 const PatternPanel = ({
@@ -170,6 +169,8 @@ const PatternPanel = ({
   const accLabel = (v) => (v == null ? "â€”" : `${Math.round(v * 100)}%`);
   const scoreColor = (s) =>
     s >= 70 ? "#dc2626" : s >= 40 ? "#d97706" : "#16a34a";
+  const performanceLabel = (value) =>
+    value == null ? "Belum ada review" : accLabel(value);
 
   const summaryCards = [
     {
@@ -188,9 +189,9 @@ const PatternPanel = ({
     },
     {
       icon: "bi-speedometer2",
-      label: "Rata-rata Akurasi",
-      value: accLabel(avgAccuracy),
-      meta: "TP/FP + score historis",
+      label: "Rata-rata Precision",
+      value: performanceLabel(avgAccuracy),
+      meta: "Ketepatan dari feedback TP/FP",
       tone: "blue",
     },
     {
@@ -207,6 +208,9 @@ const PatternPanel = ({
     const st = p.is_active ? STATUS_CFG.active : STATUS_CFG.inactive;
     const eff = p._eff;
     const acc = p.accuracy_score ?? eff?.accuracy_score ?? null;
+    const truePositive = eff?.true_positive ?? p.true_positive ?? 0;
+    const falsePositive = eff?.false_positive ?? p.false_positive ?? 0;
+    const hasFeedback = Number(truePositive) + Number(falsePositive) > 0;
     const isCandidate = Boolean(p._isCandidate);
 
     return (
@@ -249,14 +253,14 @@ const PatternPanel = ({
         <td>
           <div className="ptp-performance">
             <span className="ptp-acc" style={{ color: accColor(acc) }}>
-              {accLabel(acc)}
+              {hasFeedback ? performanceLabel(acc) : "Belum ada review"}
             </span>
             <div className="ptp-tpfp">
               <span className="ptp-tp">
-                TP {eff?.true_positive ?? p.true_positive ?? 0}
+                TP {truePositive}
               </span>
               <span className="ptp-fp">
-                FP {eff?.false_positive ?? p.false_positive ?? 0}
+                FP {falsePositive}
               </span>
             </div>
           </div>
@@ -433,7 +437,7 @@ const PatternPanel = ({
             <div>
               <strong>{candidateCount} kandidat menunggu review.</strong>
               <span>
-                Prioritaskan kandidat dengan risk score dan akurasi tertinggi
+                Prioritaskan kandidat dengan risk score dan precision tertinggi
                 sebelum diaktifkan ke engine.
               </span>
             </div>
@@ -576,7 +580,7 @@ const PatternPanel = ({
               <span className="ptp-section-title">Pattern Kandidat</span>
               <p className="ptp-section-note">
                 Pattern ini berasal dari review manual, proses retraining, atau
-                pattern yang sedang nonaktif. Cek akurasi, TP/FP, dan risk score
+                pattern yang sedang nonaktif. Cek precision, TP/FP, dan risk score
                 sebelum diaktifkan ke engine.
               </p>
             </div>
@@ -686,32 +690,32 @@ const PatternPanel = ({
                 {
                   icon: "bi-shield-check",
                   color: "#16a34a",
-                  label: "Auto-Promote â†’ BLOCK",
-                  desc: `Akurasi â‰¥ ${LIFECYCLE.PROMOTE_THRESHOLD * 100}% dengan min ${LIFECYCLE.PROMOTE_MIN_SAMPLE} sample`,
+                  label: "Auto-Promote menjadi BLOCK",
+                  desc: `Pattern aktif dengan precision minimal ${LIFECYCLE.PROMOTE_THRESHOLD * 100}% dan minimal ${LIFECYCLE.PROMOTE_MIN_SAMPLE} sampel akan dipromosikan.`,
                 },
                 {
                   icon: "bi-shield-exclamation",
                   color: "#dc2626",
-                  label: "Auto-Disable -> FLAG",
-                  desc: `Akurasi < ${LIFECYCLE.DISABLE_THRESHOLD * 100}% dengan min ${LIFECYCLE.DISABLE_MIN_SAMPLE} sample`,
+                  label: "Auto-Disable dan FLAG",
+                  desc: `Pattern dengan precision di bawah ${LIFECYCLE.DISABLE_THRESHOLD * 100}% setelah minimal ${LIFECYCLE.DISABLE_MIN_SAMPLE} sampel akan dinonaktifkan dan aksinya menjadi FLAG.`,
                 },
                 {
-                  icon: "bi-arrow-repeat",
+                  icon: "bi-person-check",
                   color: "#2563eb",
-                  label: "Cooldown Reaktivasi",
-                  desc: `${LIFECYCLE.COOLDOWN_DAYS} hari setelah disabled_at, pattern di-reactivate otomatis`,
+                  label: "Aktivasi Terkendali",
+                  desc: "Pattern nonaktif hanya dapat diaktifkan kembali oleh Risk Manager atau Super Admin melalui dashboard.",
                 },
                 {
                   icon: "bi-bar-chart-line",
                   color: "#d97706",
                   label: "Akumulasi Feedback",
-                  desc: "Counter TP/FP disimpan utuh agar threshold lifecycle dapat tercapai",
+                  desc: "Counter TP/FP diperbarui dari hasil Manual Review dan dikoreksi bila keputusan di-override.",
                 },
                 {
                   icon: "bi-database",
                   color: "#6d28d9",
                   label: "Min Sample Evaluasi",
-                  desc: `${LIFECYCLE.MIN_SAMPLE} sample minimum sebelum lifecycle dievaluasi`,
+                  desc: `Minimal ${LIFECYCLE.MIN_SAMPLE} sampel sebelum aksi lifecycle otomatis dipertimbangkan.`,
                 },
               ].map((item) => (
                 <div key={item.label} className="ptp-lc-item">

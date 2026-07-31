@@ -16,10 +16,6 @@ def get_pattern_statistics(db: Session):
 
     results = []
 
-    total_flagged = db.query(func.count(Transaction.id)).filter(
-        Transaction.is_flagged_ml == True
-    ).scalar() or 0
-
     # Pre-aggregate tx_count dan avg_amount per pattern_id dalam satu query
     # menghindari N+1 query (2 query per pattern × jumlah pattern)
     from sqlalchemy import cast
@@ -35,26 +31,17 @@ def get_pattern_statistics(db: Session):
 
     agg_map = {int(r.pid): {"tx_count": r.tx_count, "avg_amount": float(r.avg_amount or 0)} for r in agg_rows}
 
-    # [FIX] Basis perhitungan trend per pattern.
-    # Sebelumnya trend = tx_count / total_flagged (is_flagged_ml), padahal
-    # tx_count berasal dari domain violation_pattern_ids (pattern engine).
-    # Dua domain berbeda (ML async vs pattern engine sync) menyebabkan trend
-    # bisa >100% atau tidak masuk akal jika kedua flag tidak overlap konsisten.
-    #
-    # total_pattern_flagged dihitung dari domain yang sama dengan tx_count:
-    # jumlah baris transaksi yang punya minimal satu violation_pattern_ids
-    # (yaitu jumlah seluruh "kemunculan" pattern di semua transaksi).
-    # Dihitung dari agg_map agar tidak perlu query tambahan ke DB.
-    total_pattern_flagged = sum(a["tx_count"] for a in agg_map.values())
+    total_pattern_occurrences = sum(a["tx_count"] for a in agg_map.values())
+    total_pattern_transactions = db.query(func.count(Transaction.id)).filter(
+        func.coalesce(func.jsonb_array_length(Transaction.violation_pattern_ids), 0) > 0
+    ).scalar() or 0
 
     for pattern in patterns:
         agg = agg_map.get(pattern.id, {"tx_count": 0, "avg_amount": 0.0})
         tx_count = agg["tx_count"]
 
-        # [FIX] trend = share pattern ini terhadap total kemunculan pattern
-        # violation di seluruh transaksi (domain sama dengan tx_count).
         trend = round(
-            (tx_count / max(total_pattern_flagged, 1)) * 100,
+            (tx_count / max(total_pattern_occurrences, 1)) * 100,
             1
         )
 
@@ -67,6 +54,7 @@ def get_pattern_statistics(db: Session):
             "service_source": pattern.service_source,
             "is_active": pattern.is_active,
             "is_deleted": pattern.is_deleted,
+            "updated_at": pattern.updated_at.isoformat() if pattern.updated_at else None,
 
             "occurrences": tx_count,
             "avg_amount": agg["avg_amount"],
@@ -86,7 +74,9 @@ def get_pattern_statistics(db: Session):
     return {
         "patterns": results,
         "total_patterns": len(results),
-        "total_flagged_transactions": total_flagged,
+        # This is intentionally the number of distinct transactions with at
+        # least one pattern match, not ML-only flags or summed occurrences.
+        "total_flagged_transactions": total_pattern_transactions,
     }
 
 @log_performance(label="PatternAnalytics.get_pattern_effectiveness_service")
@@ -120,7 +110,16 @@ def get_pattern_diagnostics_service(db):
 
     # 3. AUTO SUGGESTION LOOP: Menggunakan nilai ambang batas dinamis dari Settings
     suggestions = []
-    inactive_candidates = [p for p in all_patterns if not p.is_active]
+    # Do not suggest reactivation for patterns that are already known to have
+    # poor precision. Hits on suppressed patterns are diagnostic evidence, not
+    # proof that an administrator's disable decision should be overridden.
+    inactive_candidates = [
+        p for p in all_patterns
+        if not p.is_active
+        and p.disabled_at is None
+        and (p.accuracy_score is None or p.accuracy_score >= 0.6)
+        and (p.false_positive_rate is None or p.false_positive_rate <= 0.4)
+    ]
 
     for p in inactive_candidates:
         if (p.hit_count or 0) >= settings.AUTO_PATTERN_ACTIVATION_THRESHOLD:

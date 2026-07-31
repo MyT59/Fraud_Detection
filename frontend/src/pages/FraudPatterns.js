@@ -107,37 +107,37 @@ function generateIndicators(bp, category) {
     Transaction: [
       `Occurrences tercatat: ${bp.occurrences ?? bp.hit_count ?? 0} deteksi`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False discovery rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Rata-rata nominal terdampak: ${formatAvgLoss(bp.avg_amount)}`,
     ],
     Credential: [
       `Percobaan autentikasi berulang terdeteksi`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False discovery rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
     Location: [
       `Lokasi transaksi tidak konsisten dengan profil pengguna`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False discovery rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
     Device: [
       `Device fingerprint tidak dikenali`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False discovery rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
     Behavioral: [
       `Pola perilaku menyimpang dari histori pengguna`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False discovery rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
     Network: [
       `Aktivitas jaringan mencurigakan terdeteksi`,
       `Risk score: ${bp.risk_score ?? 50}/100`,
-      `False positive rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
+      `False discovery rate: ${((bp.false_positive_rate ?? 0) > 1 ? bp.false_positive_rate : (bp.false_positive_rate ?? 0) * 100).toFixed(1)}%`,
       `Occurrences: ${bp.occurrences ?? 0} deteksi`,
     ],
   };

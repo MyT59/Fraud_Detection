@@ -20,13 +20,14 @@ def detect_domain(columns: List[str]) -> Optional[str]:
     Auto-detect domain dari kolom dataset.
     Return 'agenusa', 'nusabill', atau None jika tidak cocok.
     """
-    col_set = set(columns)
+    # CSV header is case-insensitive; normalize before comparing signatures.
+    col_set = {str(column).strip().upper() for column in columns}
     
     score_agenusa = len(_AGENUSA_SIGNATURE & col_set)
     score_nusabill = len(_NUSABILL_SIGNATURE & col_set)
     
-    # Jika tidak ada irisan sama sekali dengan kedua signature
-    if score_agenusa == 0 and score_nusabill == 0:
+    # One generic field is not sufficient to identify a training dataset safely.
+    if max(score_agenusa, score_nusabill) < 2:
         logger.warning(
             f"[DOMAIN_DETECT] Tidak ada domain yang cocok — columns={list(col_set)}"
         )

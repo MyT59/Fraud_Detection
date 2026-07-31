@@ -1,6 +1,7 @@
 import asyncio
 import time
 import requests
+import math
 from datetime import datetime, timezone
 from functools import lru_cache
 
@@ -52,13 +53,47 @@ def _enqueue_ml(db: Session, trx: Transaction):
 
 
 @log_performance(label="TransactionService._apply_hard_block")
-def _apply_hard_block(trx: Transaction, violations: list, db: Session, bl_score: float = None):
-    trx.risk_score = max(100, bl_score or 100)
+def _apply_hard_block(
+    trx: Transaction,
+    violations: list,
+    db: Session,
+    bl_score: float = None,
+    rule_score: float = 0,
+):
+    trx.risk_score = min(100, max(100, float(bl_score or 100)))
     trx.final_status = TransactionStatusEnum.FRAUD
     trx.risk_level = "CRITICAL"
 
     if violations:
         trx.violation_reason = " | ".join([f"{v['type']}:{v['name']}" for v in violations])
+
+    # Hard-blocks return before the regular finalization block. Persist a
+    # complete score audit so the transaction detail page does not show blanks.
+    score_breakdown = dict(trx.score_breakdown or {})
+    score_breakdown.update({
+        "rule_score": rule_score or 0,
+        "pattern_score": 0,
+        "ml_score": 0,
+        "final_score": trx.risk_score,
+        "rule_names": [v["name"] for v in violations if v.get("type") == "RULE"],
+        "pattern_names": [],
+        "pattern_ids": [],
+    })
+
+    # Preserve blacklist evidence for the transaction detail view.
+    blacklist_matches = [
+        {
+            "blacklist_id": violation.get("blacklist_id"),
+            "identifier_type": violation.get("identifier_type"),
+            "value": violation.get("value"),
+            "name": violation.get("name"),
+        }
+        for violation in violations
+        if violation.get("type") == "BLACKLIST"
+    ]
+    if blacklist_matches:
+        score_breakdown["blacklist_matches"] = blacklist_matches
+    trx.score_breakdown = score_breakdown
 
     create_alert(db, trx)
 
@@ -87,8 +122,7 @@ def _determine_risk_level(score: int) -> str:
     if score >= 80: return "CRITICAL"
     if score >= 60: return "HIGH"
     if score >= 40: return "MEDIUM"
-    if score >= 20: return "LOW"
-    return "SAFE"
+    return "LOW"
 
 
 # =========================
@@ -108,7 +142,7 @@ def enrich_geoip_location(ip_address: str) -> tuple[str | None, str | None]:
     try:
         response = requests.get(
             f"http://ip-api.com/json/{ip_address}?fields=status,city,countryCode",
-            timeout=2
+            timeout=0.75
         )
         data = response.json()
         if data.get("status") == "success":
@@ -141,16 +175,38 @@ def process_transaction(data: dict, db: Session):
         # =========================
         # 1. VALIDATION & IDEMPOTENCY
         # =========================
-        original_trx_id = data.get("original_trx_id")
-        service_source  = data.get("service_source").upper()
-        user_account_id = data.get("user_account_id")
+        original_trx_id = str(data.get("original_trx_id") or "").strip()
+        service_source  = str(data.get("service_source") or "").strip().upper()
+        user_account_id = normalize(data.get("user_account_id"))
         amount          = data.get("amount")
+        transaction_details = data.get("transaction_details") or {}
 
         if not original_trx_id or not service_source or not user_account_id:
             raise ValueError("original_trx_id, service_source, and user_account_id are required")
 
-        if not isinstance(amount, (int, float)):
-            raise ValueError("amount must be a number")
+        if service_source not in {"AGENUSA", "NUSABILL"}:
+            raise ValueError("service_source must be AGENUSA or NUSABILL")
+
+        is_balance_inquiry = (
+            service_source == "AGENUSA"
+            and str(transaction_details.get("msg_type") or "").upper() == "CEK_SALDO"
+        )
+        if (
+            isinstance(amount, bool)
+            or not isinstance(amount, (int, float))
+            or not math.isfinite(float(amount))
+            or amount < 0
+            or (amount == 0 and not is_balance_inquiry)
+        ):
+            raise ValueError(
+                "amount must be a positive finite number, except 0 for Agenusa CEK_SALDO"
+            )
+
+        transaction_time = data.get("transaction_time") or datetime.now(timezone.utc)
+        if not isinstance(transaction_time, datetime):
+            raise ValueError("transaction_time must be a datetime")
+        if transaction_time.tzinfo is None:
+            transaction_time = transaction_time.replace(tzinfo=timezone.utc)
 
         repo     = TransactionRepository(db)
         existing = repo.get_by_original(service_source, original_trx_id)
@@ -163,25 +219,31 @@ def process_transaction(data: dict, db: Session):
         trx = Transaction(
             original_trx_id    = original_trx_id,
             service_source     = service_source,
-            user_account_id    = normalize(user_account_id),
+            user_account_id    = user_account_id,
             amount             = amount,
-            transaction_time   = data.get("transaction_time") or datetime.now(timezone.utc),
-            transaction_status = "SUCCESS",
+            transaction_time   = transaction_time,
+            transaction_status = data.get("transaction_status") or "INGESTED",
             final_status       = TransactionStatusEnum.FLAGGED,
             ip_address         = data.get("ip_address"),
             terminal_id        = data.get("terminal_id"),
             merchant_id        = data.get("merchant_id"),
             account_number     = data.get("account_number"),
+            city               = data.get("city"),
+            country            = data.get("country"),
             transaction_details= data.get("transaction_details"),
             risk_score         = 0
         )
 
         # ── GeoIP (cached) ───────────────────────────────────
         _tick("geoip")
-        if trx.ip_address:
+        # Lokasi dari source lebih dipercaya; GeoIP hanya melengkapi field yang
+        # belum tersedia agar ingest tidak terblokir network call yang sia-sia.
+        if trx.ip_address and (not trx.city or not trx.country):
             city, country = enrich_geoip_location(trx.ip_address)
-            trx.city    = city
-            trx.country = country
+            if city and not trx.city:
+                trx.city = city
+            if country and not trx.country:
+                trx.country = country
         _perf_geoip = _tock("geoip")
 
         # ── Location Jump ────────────────────────────────────
@@ -196,7 +258,11 @@ def process_transaction(data: dict, db: Session):
 
         violations = []
         if is_jump:
-            violations.append({"type": "PATTERN", "name": "Location Jump Detected", "details": jump_reason})
+            violations.append({
+                "type": "PATTERN",
+                "name": f"Location Jump Detected ({jump_reason})",
+                "details": jump_reason,
+            })
 
         # =========================
         # 3. BLACKLIST ENGINE
@@ -230,7 +296,13 @@ def process_transaction(data: dict, db: Session):
                 f"[PERF] trx={original_trx_id} | GeoIP={_perf_geoip}s | "
                 f"Blacklist={_perf_bl}s | Rule={_perf_rule}s (RULE BLOCK)"
             )
-            return _apply_hard_block(trx, violations, db, bl_score)
+            return _apply_hard_block(
+                trx,
+                violations,
+                db,
+                bl_score,
+                rule_score=rule_score,
+            )
 
         # =========================
         # =========================
@@ -350,8 +422,16 @@ def process_transaction(data: dict, db: Session):
         trx.risk_score   = max(trx.risk_score, ensemble.get("final_score", 0))
         _perf_ensemble = _tock("ensemble")
 
-        if trx.final_status == TransactionStatusEnum.FLAGGED:
-            trx.final_status = ensemble.get("final_status", TransactionStatusEnum.FLAGGED)
+        # A Location Jump is a direct behavioural signal with its own risk
+        # escalation. An empty rule/pattern ensemble must not downgrade it to
+        # SAFE, otherwise the alert creation step is skipped.
+        ensemble_status = ensemble.get("final_status", TransactionStatusEnum.SAFE)
+        if ensemble_status == TransactionStatusEnum.FRAUD:
+            trx.final_status = TransactionStatusEnum.FRAUD
+        elif is_jump or ensemble_status == TransactionStatusEnum.FLAGGED:
+            trx.final_status = TransactionStatusEnum.FLAGGED
+        else:
+            trx.final_status = TransactionStatusEnum.SAFE
 
         # =========================
         # 7. RISK ESCALATION
@@ -446,8 +526,8 @@ def process_transaction(data: dict, db: Session):
     except IntegrityError:
         db.rollback()
         return db.query(Transaction).filter(
-            Transaction.service_source  == data.get("service_source"),
-            Transaction.original_trx_id == data.get("original_trx_id")
+            Transaction.service_source  == str(data.get("service_source") or "").strip().upper(),
+            Transaction.original_trx_id == str(data.get("original_trx_id") or "").strip()
         ).first()
 
     except Exception as e:

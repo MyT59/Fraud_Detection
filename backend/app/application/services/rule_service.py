@@ -10,8 +10,29 @@ from app.application.cache.fraud_cache import invalidate_rule_cache
 from app.domain.entities.target_type import TargetType
 from app.infrastructure.database.enums import ActivityActionEnum, SeverityLevelEnum, EventSourceEnum
 from app.core.logging import get_logger, log_performance
+from app.presentation.schemas.rule_schema import (
+    validate_rule_config_structure,
+    validate_rule_config_scope,
+    validate_legacy_condition,
+    validate_rule_field_scope,
+)
 
 logger = get_logger(__name__)
+
+
+def _validate_persisted_rule(rule: GlobalRule) -> None:
+    """Keep partial updates from leaving an active rule unevaluable at runtime."""
+    if rule.rule_config is not None:
+        validate_rule_config_structure(rule.rule_config)
+        validate_rule_config_scope(rule.rule_config, rule.service_scope)
+        return
+    if not (rule.condition_field and rule.operator and rule.threshold_value is not None):
+        raise HTTPException(
+            status_code=422,
+            detail="Rule harus memiliki rule_config atau condition_field, operator, dan threshold_value",
+        )
+    validate_legacy_condition(rule.condition_field, rule.operator)
+    validate_rule_field_scope(rule.condition_field, rule.service_scope)
 
 
 @log_performance(label="RuleService.create_rule")
@@ -99,7 +120,15 @@ def update_rule(db: Session, rule_id: int, data, admin):
 
     for key, value in data.dict(exclude_unset=True).items():
         setattr(rule, key, value)
-    db.flush()
+    try:
+        _validate_persisted_rule(rule)
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Rule key already exists")
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     snapshot_after = {
         "rule_name": rule.rule_name, "action": rule.action,

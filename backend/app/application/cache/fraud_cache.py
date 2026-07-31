@@ -20,12 +20,14 @@ Aman untuk single-process FastAPI (uvicorn workers=1).
 import logging
 import threading
 from typing import Any
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
 _lock           = threading.Lock()
 _pattern_cache: list | None = None
 _rule_cache:    list | None = None
+_rule_cache_revision: tuple[Any, int] | None = None
 
 
 # ============================================================
@@ -46,6 +48,9 @@ def get_cached_patterns(db) -> list:
         patterns = db.query(FraudPattern).filter(
             FraudPattern.is_active == True,
             FraudPattern.is_deleted == False,
+        ).order_by(
+            FraudPattern.priority.desc(),
+            FraudPattern.id.asc(),
         ).all()
         
         # JURUS SAKTI CACHING: Lepaskan objek dari ikatan Session
@@ -67,15 +72,32 @@ def invalidate_pattern_cache():
 # ============================================================
 # GLOBAL RULE CACHE
 # ============================================================
-def get_cached_rules(db) -> list:
-    global _rule_cache
+def _get_rule_revision(db) -> tuple[Any, int]:
+    """Detect rule edits committed by another API worker."""
+    from app.infrastructure.database.models.global_rule_model import GlobalRule
 
-    if _rule_cache is not None:
+    updated_at, count = (
+        db.query(func.max(GlobalRule.updated_at), func.count(GlobalRule.id))
+        .filter(
+            GlobalRule.is_active == True,
+            GlobalRule.is_deleted == False,
+        )
+        .one()
+    )
+    return updated_at, int(count or 0)
+
+
+def get_cached_rules(db) -> list:
+    global _rule_cache, _rule_cache_revision
+
+    current_revision = _get_rule_revision(db)
+    if _rule_cache is not None and _rule_cache_revision == current_revision:
         logger.debug(f"[CACHE] GlobalRule hit — {len(_rule_cache)} rules")
         return _rule_cache
 
     with _lock:
-        if _rule_cache is not None:
+        current_revision = _get_rule_revision(db)
+        if _rule_cache is not None and _rule_cache_revision == current_revision:
             return _rule_cache
 
         from app.infrastructure.database.models.global_rule_model import GlobalRule
@@ -92,14 +114,16 @@ def get_cached_rules(db) -> list:
             db.expunge(r)
             
         _rule_cache = rules
+        _rule_cache_revision = current_revision
         logger.info(f"[CACHE] GlobalRule loaded — {len(_rule_cache)} rules")
         return _rule_cache
 
 
 def invalidate_rule_cache():
-    global _rule_cache
+    global _rule_cache, _rule_cache_revision
     with _lock:
         _rule_cache = None
+        _rule_cache_revision = None
     logger.info("[CACHE] GlobalRule cache invalidated")
 
 

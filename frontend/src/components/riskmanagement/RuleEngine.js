@@ -84,8 +84,6 @@ const RuleEngine = ({
   setSortHDir,
   filterAction,
   setFilterAction,
-  period,
-  setPeriod,
   openDrop,
   setOpenDrop,
 }) => {
@@ -121,28 +119,6 @@ const RuleEngine = ({
             setSortKey(null);
           },
         });
-      if (period)
-        chips.push({
-          key: "period",
-          label:
-            period === "today"
-              ? "Hari Ini"
-              : period === "week"
-                ? "Minggu Ini"
-                : "Bulan Ini",
-          onRemove: () => setPeriod(null),
-        });
-    } else if (period) {
-      chips.push({
-        key: "period",
-        label:
-          period === "today"
-            ? "Hari Ini"
-            : period === "week"
-              ? "Minggu Ini"
-              : "Bulan Ini",
-        onRemove: () => setPeriod(null),
-      });
     }
     return chips;
   }, [
@@ -150,12 +126,10 @@ const RuleEngine = ({
     sortPDir,
     filterAction,
     sortHDir,
-    period,
     setSortPDir,
     setSortKey,
     setFilterAction,
     setSortHDir,
-    setPeriod,
   ]);
 
   const resetAll = () => {
@@ -163,7 +137,6 @@ const RuleEngine = ({
     setSortPDir(null);
     setFilterAction(null);
     setSortHDir(null);
-    setPeriod(null);
     setSearch("");
     resetPage();
   };
@@ -188,35 +161,8 @@ const RuleEngine = ({
     resetPage();
     closeDrop();
   };
-  const applyPeriod = (val) => {
-    setPeriod(val === period ? null : val);
-    if (val && sortKey !== "hit") {
-      setSortHDir("desc");
-      setSortPDir(null);
-      setSortKey("hit");
-    }
-    resetPage();
-    closeDrop();
-  };
-
   // ── Derived display values ────────────────────────────────────────────────
-  const hitField =
-    period === "today"
-      ? "hitToday"
-      : period === "week"
-        ? "hitWeek"
-        : period === "month"
-          ? "hitMonth"
-          : "hitCount";
-
-  const periodLabel =
-    period === "today"
-      ? "Hari Ini"
-      : period === "week"
-        ? "Minggu Ini"
-        : period === "month"
-          ? "Bulan Ini"
-          : null;
+  const hitField = "hitCount";
 
   // ── Processed rows ────────────────────────────────────────────────────────
   const processed = useMemo(() => {
@@ -249,7 +195,7 @@ const RuleEngine = ({
     safePage * PAGE_SIZE,
   );
 
-  const isHitActive = sortKey === "hit" && (sortHDir || period);
+  const isHitActive = sortKey === "hit" && sortHDir;
   const isPActive = sortKey === "priority" && sortPDir;
   const isAActive = Boolean(filterAction);
 
@@ -427,9 +373,6 @@ const RuleEngine = ({
                 >
                   <span className="re-hit-th-label">
                     Total Hit
-                    {periodLabel && (
-                      <span className="re-hit-period-badge">{periodLabel}</span>
-                    )}
                   </span>
                   <SortIcon dir={sortKey === "hit" ? sortHDir : null} />
                 </button>
@@ -447,35 +390,11 @@ const RuleEngine = ({
                   >
                     <i className="bi bi-sort-numeric-up" /> Paling Sedikit
                   </button>
-                  <div className="re-col-drop-divider" />
-                  <div className="re-col-drop-title">Periode</div>
-                  {[
-                    { val: "today", label: "Hari Ini", icon: "bi-sun" },
-                    {
-                      val: "week",
-                      label: "Minggu Ini",
-                      icon: "bi-calendar-week",
-                    },
-                    {
-                      val: "month",
-                      label: "Bulan Ini",
-                      icon: "bi-calendar-month",
-                    },
-                  ].map((o) => (
-                    <button
-                      key={o.val}
-                      className={`re-col-drop-item${period === o.val ? " selected" : ""}`}
-                      onClick={() => applyPeriod(o.val)}
-                    >
-                      <i className={`bi ${o.icon}`} /> {o.label}
-                    </button>
-                  ))}
-                  {(sortKey === "hit" || period) && (
+                  {sortKey === "hit" && (
                     <button
                       className="re-col-drop-item re-col-drop-clear"
                       onClick={() => {
                         setSortHDir(null);
-                        setPeriod(null);
                         setSortKey(null);
                         closeDrop();
                         resetPage();
@@ -560,9 +479,6 @@ const RuleEngine = ({
                             ? "—"
                             : displayHit.toLocaleString("id-ID")}
                         </span>
-                        {period && displayHit > 0 && (
-                          <span className="re-hit-sub">{periodLabel}</span>
-                        )}
                       </div>
                     </td>
                     <td

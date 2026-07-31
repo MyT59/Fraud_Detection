@@ -39,6 +39,7 @@ const HistoryTable = ({
   onViewDetail,
   onRefresh,
   apiError,
+  onFiltersChange,
 }) => {
   const { canManage } = useRole();
   const navigate = useNavigate();
@@ -79,10 +80,15 @@ const HistoryTable = ({
   const hasActiveFilters =
     search || filterDecision !== "all" || sortKey !== "createdAt-desc";
 
+  const notifyFilters = (next) => {
+    onFiltersChange?.(next);
+  };
+
   const handleReset = () => {
     setSearch("");
     setSortKey("createdAt-desc");
     setFilterDecision("all");
+    notifyFilters({ search: "", decision: "all", sortKey: "createdAt-desc" });
   };
 
   const handleGoToManagement = () => {
@@ -158,10 +164,17 @@ const HistoryTable = ({
             className="rh-search-input"
             placeholder="Cari Transaction ID, Alert ID, Reviewer..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSearch(value);
+              notifyFilters({ search: value, decision: filterDecision, sortKey });
+            }}
           />
           {search && (
-            <button className="rh-search-clear" onClick={() => setSearch("")}>
+            <button className="rh-search-clear" onClick={() => {
+              setSearch("");
+              notifyFilters({ search: "", decision: filterDecision, sortKey });
+            }}>
               <i className="bi bi-x" />
             </button>
           )}
@@ -179,7 +192,11 @@ const HistoryTable = ({
             cursor: "pointer",
           }}
           value={filterDecision}
-          onChange={(e) => setFilterDecision(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setFilterDecision(value);
+            notifyFilters({ search, decision: value, sortKey });
+          }}
         >
           {DECISION_OPTS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -247,7 +264,10 @@ const HistoryTable = ({
                     <ColDropdown
                       options={TIMESTAMP_OPTS}
                       activeValue={sortKey}
-                      onSelect={setSortKey}
+                      onSelect={(value) => {
+                        setSortKey(value);
+                        notifyFilters({ search, decision: filterDecision, sortKey: value });
+                      }}
                       isActive={sortKey !== "createdAt-desc"}
                     />
                   </div>
@@ -268,7 +288,10 @@ const HistoryTable = ({
                     <ColDropdown
                       options={DECISION_OPTS}
                       activeValue={filterDecision}
-                      onSelect={setFilterDecision}
+                      onSelect={(value) => {
+                        setFilterDecision(value);
+                        notifyFilters({ search, decision: value, sortKey });
+                      }}
                       isActive={filterDecision !== "all"}
                     />
                   </div>

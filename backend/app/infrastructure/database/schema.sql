@@ -34,7 +34,7 @@ CREATE TYPE report_status_enum AS ENUM (
 );
 
 CREATE TYPE report_type_enum AS ENUM (
-    'FRAUD_DETECTION', 'FRAUD_PATTERN', 'TRANSACTION', 'MANUAL_REVIEW', 'ALERT', 'BLACKLIST', 'ACTIVITY_LOG', 'ML_PERFORMANCE'
+    'FRAUD_DETECTION', 'FRAUD_PATTERN', 'TRANSACTION', 'MANUAL_REVIEW', 'ALERT', 'BLACKLIST', 'ACTIVITY_LOG', 'ML_PERFORMANCE', 'GLOBAL_RULE'
 );
 
 CREATE TYPE pattern_source_enum AS ENUM (
@@ -546,6 +546,9 @@ CREATE INDEX IF NOT EXISTS idx_fraud_patterns_service ON fraud_patterns(service_
 CREATE INDEX IF NOT EXISTS idx_fraud_patterns_active ON fraud_patterns(is_active); 
 CREATE INDEX IF NOT EXISTS idx_fraud_patterns_deleted ON fraud_patterns(is_deleted);
 CREATE INDEX idx_rules_hash ON fraud_patterns(rules_hash); 
+CREATE UNIQUE INDEX uq_fraud_patterns_service_rules_hash_active
+    ON fraud_patterns(service_source, rules_hash)
+    WHERE is_deleted = FALSE AND rules_hash IS NOT NULL;
 CREATE INDEX idx_fraud_patterns_rules ON fraud_patterns USING GIN (pattern_rules); 
 
 -- Partial Index (Caching Rule Aktif)

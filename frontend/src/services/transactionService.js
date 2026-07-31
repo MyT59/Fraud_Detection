@@ -22,6 +22,7 @@ export const transactionService = {
     sort_order = "desc",
     page = 1,
     size = 20,
+    requestOptions = {},
   } = {}) => {
     const params = new URLSearchParams();
 
@@ -55,14 +56,14 @@ export const transactionService = {
     params.append("page", page);
     params.append("size", size);
 
-    return api.get(`/transactions?${params.toString()}`);
+    return api.get(`/transactions?${params.toString()}`, requestOptions);
   },
 
   /**
    * GET /transactions/{id}
    */
-  getTransactionById: async (transactionId) => {
-    return api.get(`/transactions/${transactionId}`);
+  getTransactionById: async (transactionId, requestOptions = {}) => {
+    return api.get(`/transactions/${transactionId}`, requestOptions);
   },
 };
 

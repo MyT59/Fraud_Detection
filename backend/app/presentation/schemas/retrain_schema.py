@@ -10,14 +10,15 @@ import uuid
 # ==========================================
 
 class ScheduleCreate(BaseModel):
-    name: str = Field(..., example="Retrain Mingguan Agenusa")
-    cron_expr: str = Field(..., example="0 0 * * 0") 
+    name: str = Field(..., min_length=1, max_length=120, example="Retrain Mingguan Agenusa")
+    cron_expr: str = Field(..., min_length=9, max_length=100, example="0 0 * * 0")
     domain: Literal["agenusa", "nusabill"] = Field(..., example="agenusa")
     is_active: bool = True
 
 class ScheduleUpdate(BaseModel):
-    name: Optional[str] = None
-    cron_expr: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
+    cron_expr: Optional[str] = Field(None, min_length=9, max_length=100)
+    domain: Optional[Literal["agenusa", "nusabill"]] = None
     is_active: Optional[bool] = None
 
 class StatusUpdate(BaseModel):

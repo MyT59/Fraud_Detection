@@ -21,7 +21,11 @@ from app.infrastructure.repositories.switching_log_repository import SwitchingLo
 # CONSTANTS & POOLS
 # ============================================================
 TERMINALS       = ["71809339", "71809340", "71809341", "71809342"]
-PROCESSING_CODES = ["301000", "401000", "011000"]
+ISO_BY_MSG_TYPE = {
+    "TRANSFER": {"mti": "0200", "processing_code": "200000"},
+    "TARIK_SALDO": {"mti": "0200", "processing_code": "010000"},
+    "CEK_SALDO": {"mti": "0100", "processing_code": "310000"},
+}
 BANK_CODES      = ["014", "008", "009", "002"]
 IP_POOL         = ["36.90.120.15", "114.10.20.30", "180.250.50.60"]
 
@@ -43,21 +47,23 @@ def _generate_rrn() -> str:
     return "".join(random.choices(string.digits, k=12))
 
 
-def _base_trx(time_override=None) -> dict:
+def _base_trx(time_override=None, msg_type: str = "TRANSFER") -> dict:
     """
     Flat dict sesuai field SwitchingLog model.
     map_agenusa() akan memetakan ini ke format Transaction.
     """
-    return {
+    msg_type = str(msg_type or "TRANSFER").upper()
+    iso = ISO_BY_MSG_TYPE.get(msg_type, ISO_BY_MSG_TYPE["TRANSFER"])
+    trx = {
         "rrn":                  _generate_rrn(),
         "timestamp_db":         time_override or datetime.now(timezone.utc),
-        "mti":                  "0200",
+        "mti":                  iso["mti"],
         "msg_raw":              "SIMULATED_MSG",
         "stan":                 "".join(random.choices(string.digits, k=6)),
         "terminal_id":          random.choice(TERMINALS),
         "merchant_id":          "M_" + "".join(random.choices(string.digits, k=4)),
-        "processing_code":      random.choice(PROCESSING_CODES),
-        "msg_type":             random.choice(["TRANSFER", "TARIK_SALDO", "CEK_SALDO"]),
+        "processing_code":      iso["processing_code"],
+        "msg_type":             msg_type,
         "response_code":        "00",
         "account_number":       "ACC" + "".join(random.choices(string.digits, k=8)),
         "dest_account_number":  "ACC" + "".join(random.choices(string.digits, k=8)),
@@ -68,15 +74,36 @@ def _base_trx(time_override=None) -> dict:
         "acquirer_code":        "014",
         "ip_address":           random.choice(IP_POOL),
         "issuer_account_number": "CARD" + "".join(random.choices(string.digits, k=8)),
+        "fep_id":               "FEP-SIM-01",
     }
+
+    # Hanya transfer yang memiliki rekening tujuan. Cek saldo adalah inquiry,
+    # sehingga tidak merepresentasikan perpindahan dana.
+    if msg_type != "TRANSFER":
+        trx["dest_account_number"] = None
+        trx["dest_bank_code"] = None
+    if msg_type == "CEK_SALDO":
+        trx["amount"] = 0
+    return trx
 
 
 # ============================================================
 # SCENARIO 1 — NORMAL
 # ============================================================
 def generate_normal(count: int = 20) -> list[dict]:
-    """Transaksi normal. Tidak seharusnya memicu engine manapun."""
-    return [_base_trx() for _ in range(count)]
+    """Transaksi baseline yang tidak membentuk pola fraud berbasis terminal."""
+    batch_id = "".join(random.choices(string.digits, k=6))
+    records = []
+    for index in range(count):
+        trx = _base_trx(
+            msg_type=random.choice(["TRANSFER", "TARIK_SALDO", "CEK_SALDO"])
+        )
+        # Jangan memakai terminal pool acak untuk baseline. Jika 20 transaksi
+        # normal dibentuk di waktu yang sama dari hanya empat terminal, pattern
+        # distinct_account_count >= 5 dapat terpicu secara tidak sengaja.
+        trx["terminal_id"] = f"TERM_NORMAL_{batch_id}_{index:02d}"
+        records.append(trx)
+    return records
 
 
 # ============================================================
@@ -134,7 +161,7 @@ def generate_blacklist_merchant() -> list[dict]:
 # ============================================================
 # SCENARIO 6 — BRUTE FORCE PIN
 # Target engine : Pattern Engine (AI Discovery: BRUTE_FORCE) + ML
-# Trigger       : IS_BRUTE_PATTERN → processing_code==300000 & response_code==55
+# Trigger       : wrong-PIN response_code==55 berulang dari kartu yang sama
 #                 RAPID_RETRY_DECLINED → IS_DECLINED==1 & GAP_MINUTES<=2
 # ============================================================
 def generate_bruteforce() -> list[dict]:
@@ -150,7 +177,6 @@ def generate_bruteforce() -> list[dict]:
         trx["account_number"]        = card_num
         trx["customer_ref_number"]   = card_num
         trx["terminal_id"]           = term_id
-        trx["processing_code"]       = "300000"
         trx["response_code"]         = "55"
         records.append(trx)
 
@@ -159,7 +185,6 @@ def generate_bruteforce() -> list[dict]:
     trx_ok["account_number"]        = card_num
     trx_ok["customer_ref_number"]   = card_num
     trx_ok["terminal_id"]           = term_id
-    trx_ok["processing_code"]       = "300000"
     trx_ok["response_code"]         = "00"
     records.append(trx_ok)
 
@@ -262,7 +287,7 @@ def generate_fan_in() -> list[dict]:
 # ============================================================
 # SCENARIO 10 — MIDNIGHT AMOUNT SPIKE
 # Target engine : Pattern Engine (AI Discovery: UNUSUAL_TIME) + ML
-# Trigger       : IS_NIGHT_TX==1 (jam 0-4 UTC) AND AMOUNT_OVER_AVG_RATIO>=2.0
+# Trigger       : IS_NIGHT_TX==1 (jam 00.00-04.59 WIB) AND AMOUNT_OVER_AVG_RATIO>=2.0
 #
 # Fix timezone: IS_NIGHT_TX cek jam UTC (bukan WIB).
 # Jam 03:00 WIB = 20:00 UTC (hari sebelumnya).
@@ -274,7 +299,7 @@ def generate_fan_in() -> list[dict]:
 def generate_midnight_spike() -> list[dict]:
     """
     5 transaksi siang (nominal kecil) sebagai baseline,
-    lalu 1 transaksi raksasa di jam 21:00 UTC (= 04:00 WIB).
+    lalu 1 transaksi raksasa pada 04.00 WIB (21.00 UTC hari sebelumnya).
     """
     records   = []
     now       = datetime.now(timezone.utc)
@@ -334,6 +359,7 @@ def generate_money_mule() -> list[dict]:
     records = []
     for _ in range(3):
         trx = _base_trx()
+        trx["msg_type"] = "TRANSFER"
         trx["dest_account_number"] = MONEY_MULE_DEST
         trx["amount"]              = round(random.uniform(1_000_000, 4_000_000), 2)
         records.append(trx)
@@ -366,6 +392,41 @@ def generate_terminal_switch_fast() -> list[dict]:
     records.append(trx2)
 
     return records
+
+
+# ============================================================
+# SCENARIO â€” LOCATION JUMP / IMPOSSIBLE TRAVEL
+# Target engine : Location Jump detector in pattern_engine_service
+# Trigger       : same user changes city within less than one hour
+# ============================================================
+def generate_location_jump() -> list[dict]:
+    """Jakarta → Surabaya in 30 minutes for the same cardholder."""
+    base_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+    card_num = "CARD_LOCATION_" + "".join(random.choices(string.digits, k=6))
+    user_id = "CUST_LOCATION_" + card_num[-6:]
+
+    jakarta = _base_trx(time_override=base_time)
+    jakarta.update({
+        "issuer_account_number": card_num,
+        "account_number": card_num,
+        "customer_ref_number": user_id,
+        "terminal_id": "TERM_JAKARTA_001",
+        "city": "Jakarta",
+        "country": "ID",
+        "ip_address": "36.90.120.15",
+    })
+
+    surabaya = _base_trx(time_override=base_time + timedelta(minutes=30))
+    surabaya.update({
+        "issuer_account_number": card_num,
+        "account_number": card_num,
+        "customer_ref_number": user_id,
+        "terminal_id": "TERM_SURABAYA_001",
+        "city": "Surabaya",
+        "country": "ID",
+        "ip_address": "114.10.20.30",
+    })
+    return [jakarta, surabaya]
 
 
 # ============================================================
@@ -497,8 +558,8 @@ def generate_edc_terminal_pooling() -> list[dict]:
 # Trigger     : amount > 10_000_000
 # ============================================================
 def generate_rule_agenusa_max_cash_out() -> list[dict]:
-    """Tarik tunai fisik melebihi batas maksimal Rp 10.000.000."""
-    trx = _base_trx()
+    """Contoh tarik saldo yang melewati batas nominal transaksi Agenusa."""
+    trx = _base_trx(msg_type="TARIK_SALDO")
     trx["amount"] = round(random.uniform(10_500_000, 15_000_000), 2)
     return [trx]
 
@@ -522,7 +583,6 @@ def generate_rule_agenusa_suspended_bank() -> list[dict]:
 def generate_ml_bruteforce_pin() -> list[dict]:
     """Satu transaksi salah PIN yang menyalakan IS_BRUTE_PATTERN."""
     trx = _base_trx()
-    trx["processing_code"] = "300000"
     trx["response_code"] = "55"
     trx["amount"] = 750_000
     return [trx]
@@ -539,14 +599,13 @@ def generate_ml_rapid_retry_declined() -> list[dict]:
         trx["account_number"] = card_num
         trx["customer_ref_number"] = card_num
         trx["response_code"] = "51"
-        trx["processing_code"] = "301000"
         trx["amount"] = 500_000
         records.append(trx)
     return records
 
 
 def generate_ml_midnight_unusual_amount() -> list[dict]:
-    """Baseline nominal normal lalu spike 2x pada jam malam model (UTC 00-04)."""
+    """Baseline nominal normal lalu spike 2x pada jam malam WIB (00.00-04.59)."""
     now = datetime.now(timezone.utc)
     card_num = "CARD_ML_NIGHT_" + "".join(random.choices(string.digits, k=6))
     records = []
@@ -559,7 +618,8 @@ def generate_ml_midnight_unusual_amount() -> list[dict]:
         trx["amount"] = 1_000_000
         records.append(trx)
 
-    midnight = now.replace(hour=2, minute=0, second=0, microsecond=0)
+    # 21.00 UTC = 04.00 WIB, sesuai definisi bisnis feature.
+    midnight = now.replace(hour=21, minute=0, second=0, microsecond=0)
     if midnight <= records[-1]["timestamp_db"]:
         midnight += timedelta(days=1)
     trx = _base_trx(time_override=midnight)
@@ -617,14 +677,13 @@ def generate_ml_unknown_mixed_outlier() -> list[dict]:
     outlier = _base_trx(time_override=unusual_time)
     outlier.update(
         {
+            "msg_type": "TRANSFER",
             "terminal_id": "TERM_UNSEEN_ML_999",
             "merchant_id": "MERCHANT_UNSEEN_ML_999",
             "issuer_account_number": card_num,
             "account_number": card_num,
             "customer_ref_number": card_num,
-            "processing_code": "000000",
             "response_code": "91",
-            "mti": "0800",
             "dest_account_number": "DEST_UNSEEN_ML_999",
             "amount": 7_900_000,
         }
@@ -637,7 +696,7 @@ def generate_ml_unknown_mixed_outlier() -> list[dict]:
 # ============================================================
 def get_scenario_catalog() -> dict[str, dict]:
     """Metadata scenario pattern aktif; diselaraskan dengan fraud_patterns."""
-    return {
+    catalog = {
         "normal": {
             "title": "Agenusa - Normal Transactions",
             "category": "Baseline",
@@ -737,6 +796,21 @@ def get_scenario_catalog() -> dict[str, dict]:
             "expected_result": "FRAUD",
             "transaction_count": 6,
         },
+        "location_jump": {
+            "title": "Agenusa - Fast City Jump (Impossible Travel)",
+            "category": "Behavioral Anomaly",
+            "description": (
+                "Kartu dan pengguna yang sama bertransaksi di Jakarta lalu Surabaya "
+                "dalam selang 30 menit."
+            ),
+            "target_engines": ["Location Jump Detector"],
+            "trigger_conditions": [
+                "same user_account_id",
+                "city changes within less than 1 hour",
+            ],
+            "expected_result": "FLAGGED",
+            "transaction_count": 2,
+        },
         "bruteforce": {
             "title": "Agenusa - Account Takeover & Brute Force PIN Guessing",
             "category": "Account Takeover Suspect",
@@ -758,7 +832,7 @@ def get_scenario_catalog() -> dict[str, dict]:
                 "logic": "AND",
                 "time_window_minutes": 10,
             },
-            "expected_result": "UNDER_REVIEW",
+            "expected_result": "FLAGGED",
             "transaction_count": 5,
         },
         "fan_in": {
@@ -835,11 +909,10 @@ def get_scenario_catalog() -> dict[str, dict]:
             "description": "Menyalakan feature IS_BRUTE_PATTERN tanpa memenuhi burst pattern tabel.",
             "target_engines": ["ML Engine"],
             "trigger_conditions": [
-                "processing_code == '300000'",
                 "response_code == '55'",
             ],
             "ml_pattern": {"key": "bruteforce_pin_pattern"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 1,
         },
         "ml_rapid_retry_declined": {
@@ -849,7 +922,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["IS_DECLINED == 1", "GAP_MINUTES <= 2"],
             "ml_pattern": {"key": "rapid_retry_declined"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 2,
         },
         "ml_money_mule_destination": {
@@ -859,7 +932,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["dest_account_number == 'DST999999'"],
             "ml_pattern": {"key": "money_mule_destination"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 3,
         },
         "ml_terminal_switch_fast": {
@@ -869,7 +942,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["GAP_MINUTES <= 10", "terminal_id berubah"],
             "ml_pattern": {"key": "impossible_travel_terminal_switch"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 2,
         },
         "ml_high_amount_spike": {
@@ -879,7 +952,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["AMOUNT_OVER_AVG_RATIO >= 8"],
             "ml_pattern": {"key": "high_amount_spike"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 6,
         },
         "ml_midnight_unusual_amount": {
@@ -889,7 +962,7 @@ def get_scenario_catalog() -> dict[str, dict]:
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["IS_NIGHT_TX == 1", "AMOUNT_OVER_AVG_RATIO >= 2"],
             "ml_pattern": {"key": "midnight_unusual_amount"},
-            "expected_result": "ML ANOMALY / UNDER_REVIEW",
+            "expected_result": "ML ANOMALY / FLAGGED",
             "transaction_count": 6,
         },
         "ml_unknown_mixed_outlier": {
@@ -911,11 +984,11 @@ def get_scenario_catalog() -> dict[str, dict]:
             "transaction_count": 2,
         },
         "rule_agenusa_max_cash_out": {
-            "title": "Agenusa - Batas Maksimum Penarikan Fisik",
+            "title": "Agenusa - Batas Nominal Transaksi",
             "category": "AMOUNT_LIMIT",
             "description": (
-                "Membatasi tarik tunai fisik atau transfer sekali jalan melalui "
-                "EDC Agenusa maksimal Rp10.000.000 untuk menjaga likuiditas dan "
+                "Membatasi tarik saldo atau transfer sekali jalan melalui "
+                "Agenusa maksimal Rp10.000.000 untuk menjaga likuiditas dan "
                 "memitigasi kesalahan input nominal."
             ),
             "target_engines": ["Rule Engine"],
@@ -964,6 +1037,12 @@ def get_scenario_catalog() -> dict[str, dict]:
             "transaction_count": 1,
         },
     }
+    for scenario in catalog.values():
+        for target_key in ("fraud_pattern", "global_rule"):
+            target = scenario.get(target_key)
+            if target and target.get("action") == "REVIEW":
+                target["action"] = "FLAG"
+    return catalog
 
 
 def get_all_scenarios() -> dict[str, list[dict]]:
@@ -989,6 +1068,7 @@ def get_all_scenarios() -> dict[str, list[dict]]:
         "ml_rapid_retry_declined": generate_ml_rapid_retry_declined(),
         "ml_money_mule_destination": generate_money_mule(),
         "ml_terminal_switch_fast": generate_terminal_switch_fast(),
+        "location_jump": generate_location_jump(),
         "ml_high_amount_spike": generate_ml_high_amount_spike(),
         "ml_midnight_unusual_amount": generate_ml_midnight_unusual_amount(),
         "ml_unknown_mixed_outlier": generate_ml_unknown_mixed_outlier(),

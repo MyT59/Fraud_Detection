@@ -49,21 +49,38 @@ class TransactionFeatureSnapshotService:
             return None
 
         domain = self._detect_transaction_domain(transaction)
+        details = transaction.transaction_details or {}
 
         # =========================================================
         # HISTORICAL CONTEXT LOOKUP
         # =========================================================
 
-        recent_account_transactions = self._get_recent_account_transactions(
-            account_number=transaction.account_number,
-            limit=10,
-        )
+        if domain == "agenusa":
+            # Agenusa is a mini-ATM/EDC service. Its behavioural baseline
+            # belongs to the external bank card, represented by the issuer
+            # account number, rather than the app-side account placeholder.
+            recent_account_transactions = self._get_recent_issuer_card_transactions(
+                issuer_account_number=details.get("issuer_account_number"),
+                fallback_account_number=transaction.account_number,
+                limit=10,
+            )
+        elif domain == "nusabill":
+            # Invoice payments have no source account number. Their behavioural
+            # features (payment gap and channel switch) must use the paying
+            # customer's own transaction history instead.
+            recent_account_transactions = self._get_recent_customer_transactions(
+                customer_id=transaction.user_account_id,
+                limit=10,
+            )
+        else:
+            recent_account_transactions = self._get_recent_account_transactions(
+                account_number=transaction.account_number,
+                limit=10,
+            )
 
         # =========================================================
         # NORMALIZED SNAPSHOT PAYLOAD
         # =========================================================
-
-        details = transaction.transaction_details or {}
 
         snapshot = {
             "transaction": {
@@ -159,6 +176,38 @@ class TransactionFeatureSnapshotService:
             self._serialize_transaction(trx)
             for trx in transactions
         ]
+
+    def _get_recent_customer_transactions(
+        self,
+        customer_id: str,
+        limit: int = 10,
+    ):
+        """Return recent Nusabill payments for the same customer."""
+        transactions = self.transaction_repository.get_recent_transactions_by_user_account(
+            user_account_id=customer_id,
+            service_source="NUSABILL",
+            limit=limit,
+        )
+        return [self._serialize_transaction(trx) for trx in transactions]
+
+    def _get_recent_issuer_card_transactions(
+        self,
+        issuer_account_number: str | None,
+        fallback_account_number: str | None,
+        limit: int = 10,
+    ):
+        """Return Agenusa history by issuer card, with legacy fallback."""
+        if issuer_account_number:
+            transactions = self.transaction_repository.get_recent_transactions_by_issuer_account(
+                issuer_account_number=issuer_account_number,
+                limit=limit,
+            )
+        else:
+            transactions = self.transaction_repository.get_recent_transactions_by_account(
+                account_number=fallback_account_number,
+                limit=limit,
+            )
+        return [self._serialize_transaction(trx) for trx in transactions]
 
     def _serialize_transaction(self, transaction):
         """

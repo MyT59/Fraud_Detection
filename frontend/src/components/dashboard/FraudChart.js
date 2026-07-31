@@ -5,24 +5,27 @@ import "./ChartCard.css";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-const FraudChart = ({ total = 0, fraudCount = 0 }) => {
-  const { computedTotal, computedFraud } = useMemo(() => {
-    return { computedTotal: total, computedFraud: fraudCount };
-  }, [total, fraudCount]);
-
-  const legitimateCount = Math.max(0, computedTotal - computedFraud);
+const FraudChart = ({ total = 0, fraudCount = 0, flaggedCount = 0, safeCount = 0 }) => {
+  const { computedTotal, computedFraud, computedFlagged, computedSafe } = useMemo(() => {
+    return {
+      computedTotal: total,
+      computedFraud: fraudCount,
+      computedFlagged: flaggedCount,
+      computedSafe: safeCount,
+    };
+  }, [total, fraudCount, flaggedCount, safeCount]);
   const fraudPercentage =
     computedTotal > 0
       ? ((computedFraud / computedTotal) * 100).toFixed(1)
       : "0.0";
 
   const data = {
-    labels: ["Legitimate", "Fraudulent"],
+    labels: ["Safe", "Flagged", "Fraud"],
     datasets: [
       {
-        data: [legitimateCount, computedFraud],
-        backgroundColor: ["#262626", "#dc2626"],
-        borderColor: ["#ffffff", "#ffffff"],
+        data: [computedSafe, computedFlagged, computedFraud],
+        backgroundColor: ["#16a34a", "#f59e0b", "#dc2626"],
+        borderColor: ["#ffffff", "#ffffff", "#ffffff"],
         borderWidth: 3,
         hoverOffset: 6,
       },
@@ -68,8 +71,8 @@ const FraudChart = ({ total = 0, fraudCount = 0 }) => {
     <div className="chart-card-simple">
       <div className="chart-header">
         <div>
-          <h3 className="chart-title">Fraud vs Non-Fraud</h3>
-          <p className="chart-subtitle">Distribution overview</p>
+          <h3 className="chart-title">Transaction Status Distribution</h3>
+          <p className="chart-subtitle">Safe, flagged, and confirmed fraud</p>
         </div>
         <div className="fraud-rate-badge">{fraudPercentage}% Fraud Rate</div>
       </div>

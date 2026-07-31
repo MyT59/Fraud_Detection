@@ -642,7 +642,7 @@ def detect_suppressed_patterns(db: Session, trx: Transaction) -> list:
     inactive_patterns = db.query(FraudPattern).filter(
         FraudPattern.is_active == False,
         FraudPattern.is_deleted == False,
-    ).all()
+    ).order_by(FraudPattern.priority.desc(), FraudPattern.id.asc()).all()
 
     if not inactive_patterns:
         return suppressed
@@ -789,6 +789,47 @@ def detect_suppressed_patterns(db: Session, trx: Transaction) -> list:
                         if field == "failure_count"
                         else success_key
                     )
+                elif field == "chain_decline_success_burst":
+                    cache_key = (field, window_ms, issuer_account_number)
+                    if cache_key not in window_cache:
+                        chain_detected = False
+                        if issuer_account_number:
+                            recent = db.query(Transaction).filter(
+                                Transaction.transaction_details["issuer_account_number"].astext
+                                == issuer_account_number,
+                                Transaction.transaction_time >= time_thresh,
+                                Transaction.transaction_time <= trx.transaction_time,
+                            ).order_by(Transaction.transaction_time.asc()).all()
+
+                            state = "START"
+                            failure_count = 0
+                            burst_count = 0
+                            for recent_trx in recent:
+                                response_code = (recent_trx.transaction_details or {}).get("response_code")
+                                if state == "START":
+                                    if response_code != "00":
+                                        state = "DECLINE"
+                                        failure_count = 1
+                                elif state == "DECLINE":
+                                    if response_code != "00":
+                                        failure_count += 1
+                                    elif failure_count >= 3:
+                                        state = "SUCCESS"
+                                        burst_count = 0
+                                    else:
+                                        state = "START"
+                                        failure_count = 0
+                                elif state == "SUCCESS":
+                                    if response_code == "00":
+                                        burst_count += 1
+                                        if burst_count >= 3:
+                                            chain_detected = True
+                                            break
+                                    else:
+                                        state = "DECLINE"
+                                        failure_count = 1
+                                        burst_count = 0
+                        window_cache[cache_key] = chain_detected
                 else:
                     cache_key = (field, window_ms, trx.user_account_id)
                     if cache_key not in window_cache:
@@ -811,10 +852,15 @@ def detect_suppressed_patterns(db: Session, trx: Transaction) -> list:
             matched = False
 
         if matched:
-            db.query(FraudPattern).filter(FraudPattern.id == pattern.id).update(
-                {"hit_count": func.coalesce(FraudPattern.hit_count, 0) + 1},
-                synchronize_session=False,
-            )
+            # Draft candidates (disabled_at is None) may collect diagnostic
+            # evidence. A pattern disabled manually or by lifecycle remains
+            # visible as a signal but must not accumulate evidence toward
+            # reactivation.
+            if pattern.disabled_at is None:
+                db.query(FraudPattern).filter(FraudPattern.id == pattern.id).update(
+                    {"hit_count": func.coalesce(FraudPattern.hit_count, 0) + 1},
+                    synchronize_session=False,
+                )
             suppressed.append({
                 "id": pattern.id,
                 "name": pattern.pattern_name,

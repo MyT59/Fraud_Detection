@@ -34,6 +34,7 @@ const Transactions = () => {
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
   const [apiError, setApiError] = useState(false);
+  const [apiErrorMessage, setApiErrorMessage] = useState("");
 
   const [rows, setRows] = useState([]);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -61,6 +62,7 @@ const Transactions = () => {
 
   // Debounce search input
   const debounceTimer = useRef(null);
+  const requestRef = useRef(null);
   const handleSearchChange = (val) => {
     setSearchQuery(val);
     setCurrentPage(1);
@@ -92,12 +94,18 @@ const Transactions = () => {
   // Fetch dari BE
   const fetchTransactions = useCallback(
     async (isInitial = false) => {
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
       if (isInitial) setLoading(true);
       else setTableLoading(true);
 
       try {
         const response =
-          await transactionService.getTransactions(buildParams());
+          await transactionService.getTransactions({
+            ...buildParams(),
+            requestOptions: { signal: controller.signal },
+          });
 
         setRows(response.data || []);
         setTotalRecords(response.total_records || 0);
@@ -110,29 +118,22 @@ const Transactions = () => {
             response.summary?.flagged ?? response.summary?.under_review ?? 0,
         });
         setApiError(false);
+        setApiErrorMessage("");
       } catch (err) {
+        if (err.name === "AbortError") return;
         console.error("Transactions: fetch gagal.", err.message);
+        setApiError(true);
+        setApiErrorMessage(err.message || "Gagal memuat data transaksi.");
         if (isInitial) {
-          setApiError(true);
-          const fallback = generateFallback();
-          setRows(fallback.slice(0, ITEMS_PER_PAGE));
-          setTotalRecords(fallback.length);
-          setTotalPages(Math.ceil(fallback.length / ITEMS_PER_PAGE));
-          setStats({
-            total: fallback.length,
-            fraud: fallback.filter((t) => t.final_status === "FRAUD").length,
-            safe: fallback.filter((t) => t.final_status === "SAFE").length,
-            flagged: fallback.filter(
-              (t) =>
-                t.final_status === "FLAGGED" ||
-                t.final_status === "PENDING" ||
-                t.final_status === "UNDER_REVIEW",
-            ).length,
-          });
+          setRows([]);
+          setTotalRecords(0);
+          setTotalPages(0);
         }
       } finally {
-        setLoading(false);
-        setTableLoading(false);
+        if (requestRef.current === controller) {
+          setLoading(false);
+          setTableLoading(false);
+        }
       }
     },
     [buildParams],
@@ -141,7 +142,10 @@ const Transactions = () => {
   // Initial load
   useEffect(() => {
     fetchTransactions(true);
+    return () => requestRef.current?.abort();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => clearTimeout(debounceTimer.current), []);
 
   // Re-fetch saat filter / sort / page / search berubah (bukan initial)
   const isFirstRender = useRef(true);
@@ -308,7 +312,7 @@ const Transactions = () => {
             <div className="d-flex align-items-center gap-2 flex-wrap">
               {apiError ? (
                 <span className="txn-status-pill txn-pill-warn">
-                  <i className="bi bi-exclamation-triangle-fill"></i>Static data
+                  <i className="bi bi-exclamation-triangle-fill"></i>Data belum tersinkron
                 </span>
               ) : (
                 <span className="txn-status-pill txn-pill-ok">
@@ -336,6 +340,18 @@ const Transactions = () => {
         </div>
 
         <div className="card table-card">
+          {apiError && (
+            <div className="rh-offline-banner" style={{ margin: "1rem" }}>
+              <i className="bi bi-exclamation-triangle-fill" />
+              <span>
+                <strong>Gagal memuat transaksi.</strong> {apiErrorMessage}
+                {rows.length > 0 && " Menampilkan data terakhir yang berhasil dimuat."}
+              </span>
+              <button className="rh-refresh-btn" onClick={() => fetchTransactions(rows.length === 0)}>
+                <i className="bi bi-arrow-clockwise" /> Coba Lagi
+              </button>
+            </div>
+          )}
           <div className="txn-table-toolbar">
             <div className="txn-search-wrap">
               <i className="bi bi-search txn-search-icon"></i>
@@ -441,77 +457,9 @@ const Transactions = () => {
         transaction={selectedTxn}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onFalseNegativeReported={() => fetchTransactions(false)}
       />
     </div>
-  );
-};
-
-// --- Fallback Seeded Random Generator ---
-const seededRand = (s) => {
-  const x = Math.sin(s + 1) * 10000;
-  return x - Math.floor(x);
-};
-
-const generateFallback = () => {
-  const rows = [];
-  for (let i = 1; i <= 60; i++) {
-    const r = seededRand(i * 7),
-      r2 = seededRand(i * 13),
-      r3 = seededRand(i * 17);
-    const risk = Math.min(99, Math.max(5, Math.floor(r * 95)));
-    rows.push({
-      id: i,
-      original_trx_id: `AGN-${String(i).padStart(6, "0")}`,
-      service_source: "AGENUSA",
-      user_account_id: `ACCT1${String(10000 + ((i * 37) % 900)).slice(1)}`,
-      amount: Math.floor(50000 + r * 950000),
-      risk_score: risk,
-      risk_level:
-        risk >= 80
-          ? "CRITICAL"
-          : risk >= 60
-            ? "HIGH"
-            : risk >= 40
-              ? "MEDIUM"
-              : "LOW",
-      final_status: risk >= 65 ? "FRAUD" : r2 > 0.6 ? "SAFE" : "FLAGGED",
-      transaction_time: new Date(
-        Date.now() - Math.floor(r3 * 60) * 86400000,
-      ).toISOString(),
-      city: ["Jakarta", "Surabaya", "Bandung", "Medan"][Math.floor(r2 * 4)],
-      country: "Indonesia",
-    });
-  }
-  for (let i = 1; i <= 40; i++) {
-    const r = seededRand(i * 11),
-      r2 = seededRand(i * 19),
-      r3 = seededRand(i * 29);
-    const risk = Math.min(99, Math.max(5, Math.floor(r * 95)));
-    rows.push({
-      id: i + 60,
-      original_trx_id: `NUS-${String(i).padStart(6, "0")}`,
-      service_source: "NUSABILL",
-      user_account_id: `CUST1${String(10000 + ((i * 61) % 900)).slice(1)}`,
-      amount: Math.floor(50000 + r * 700000),
-      risk_score: risk,
-      risk_level:
-        risk >= 80
-          ? "CRITICAL"
-          : risk >= 60
-            ? "HIGH"
-            : risk >= 40
-              ? "MEDIUM"
-              : "LOW",
-      final_status: risk >= 65 ? "FRAUD" : r2 > 0.6 ? "SAFE" : "FLAGGED",
-      transaction_time: new Date(
-        Date.now() - Math.floor(r3 * 60) * 86400000,
-      ).toISOString(),
-      city: ["Bali", "Yogyakarta", "Makassar", "Semarang"][Math.floor(r2 * 4)],
-      country: "Indonesia",
-    });
-  }
-  return rows.sort(
-    (a, b) => new Date(b.transaction_time) - new Date(a.transaction_time),
   );
 };
 

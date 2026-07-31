@@ -23,6 +23,11 @@ const STATUS_CONFIG = {
     cls: "st-inactive",
     icon: "bi-shield-slash",
   },
+  rejected: {
+    label: "Rejected",
+    cls: "st-inactive",
+    icon: "bi-x-circle",
+  },
 };
 
 const REASON_ICON = {
@@ -267,16 +272,28 @@ const BlacklistDetailModal = ({
           </div>
           <div className="bdm-footer-right">
             {item.status === "pending" && (
-              <button
-                className="bdm-foot-btn bdm-foot-btn--approve"
-                onClick={() => {
-                  onApprove(item.id);
-                  onClose();
-                }}
-              >
-                <i className="bi bi-check-circle" />
-                Setujui
-              </button>
+              <>
+                <button
+                  className="bdm-foot-btn bdm-foot-btn--approve"
+                  onClick={() => {
+                    onApprove(item.id);
+                    onClose();
+                  }}
+                >
+                  <i className="bi bi-check-circle" />
+                  Setujui
+                </button>
+                <button
+                  className="bdm-foot-btn bdm-foot-btn--warn"
+                  onClick={() => {
+                    onReject(item.id);
+                    onClose();
+                  }}
+                >
+                  <i className="bi bi-x-circle" />
+                  Tolak
+                </button>
+              </>
             )}
             {item.status === "active" && (
               <button
@@ -300,6 +317,18 @@ const BlacklistDetailModal = ({
               >
                 <i className="bi bi-play-circle" />
                 Aktifkan Kembali
+              </button>
+            )}
+            {item.status === "rejected" && (
+              <button
+                className="bdm-foot-btn bdm-foot-btn--approve"
+                onClick={() => {
+                  onApprove(item.id);
+                  onClose();
+                }}
+              >
+                <i className="bi bi-arrow-repeat" />
+                Setujui Ulang
               </button>
             )}
             <button

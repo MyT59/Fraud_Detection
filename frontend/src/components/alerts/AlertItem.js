@@ -213,7 +213,7 @@ const AlertItem = ({
               </button>
             )}
 
-            {isInProgress && onResolve && (
+            {isInProgress && onResolve && !alert.transaction_id && (
               <button
                 className="alert-action-btn alert-action-resolve"
                 onClick={() => onResolve(alert.id)}

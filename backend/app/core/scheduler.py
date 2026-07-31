@@ -1,8 +1,9 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.application.services.scheduler_service import SchedulerService
 
-_scheduler = BackgroundScheduler()
+_scheduler = BackgroundScheduler(timezone=ZoneInfo("Asia/Jakarta"))
 SCHEDULER_STARTED_AT = None
 
 def get_scheduler_service() -> SchedulerService:

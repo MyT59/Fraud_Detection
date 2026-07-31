@@ -181,7 +181,7 @@ _LEGACY_SCENARIO_CATALOG = {
                 "action": "REVIEW",
                 "time_window_minutes": 10,
             },
-            "expected_result": "UNDER_REVIEW / FRAUD",
+            "expected_result": "FLAGGED / FRAUD",
             "transaction_count": 5,
         },
 
@@ -199,7 +199,7 @@ _LEGACY_SCENARIO_CATALOG = {
                 "response_code IN ['51','61','65','91','05']",
             ],
             "fraud_pattern": None,
-            "expected_result": "UNDER_REVIEW / FRAUD",
+            "expected_result": "FLAGGED / FRAUD",
             "transaction_count": 5,
         },
 
@@ -308,7 +308,7 @@ _LEGACY_SCENARIO_CATALOG = {
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["transaction_time HOUR IN [1, 2, 3] WIB"],
             "fraud_pattern": None,
-            "expected_result": "UNDER_REVIEW / FRAUD",
+            "expected_result": "FLAGGED / FRAUD",
             "transaction_count": 5,
         },
 
@@ -323,7 +323,7 @@ _LEGACY_SCENARIO_CATALOG = {
             "target_engines": ["Pattern Engine", "Rule Engine"],
             "trigger_conditions": ["tx_count >= 5 dalam 5 menit"],
             "fraud_pattern": None,
-            "expected_result": "UNDER_REVIEW / FRAUD",
+            "expected_result": "FLAGGED / FRAUD",
             "transaction_count": 8,
         },
 
@@ -376,12 +376,12 @@ _LEGACY_SCENARIO_CATALOG = {
         },
 
         "rule_agenusa_max_cash_out": {
-            "title": "Rule — Max Cash Out Exceeded",
+            "title": "Rule — Agenusa Transaction Limit Exceeded",
             "category": "Rule Violation",
             "description": (
-                "Penarikan tunai fisik melebihi batas maksimal Rp 10.000.000 "
-                "dalam satu transaksi. Melanggar rule global Agenusa untuk "
-                "membatasi cash-out per transaksi."
+                "Contoh tarik saldo melebihi batas maksimal Rp 10.000.000 "
+                "dalam satu transaksi. Rule global Agenusa juga berlaku untuk "
+                "transfer sekali jalan dengan nominal di atas batas tersebut."
             ),
             "target_engines": ["Rule Engine"],
             "trigger_conditions": ["amount BETWEEN 10,500,000 AND 15,000,000 (> 10,000,000)"],
@@ -494,7 +494,7 @@ _LEGACY_SCENARIO_CATALOG = {
             "target_engines": ["Pattern Engine", "ML Engine"],
             "trigger_conditions": ["PAYMENT_GAP_MINUTES <= 5.0 → BURST_FLAG = 1"],
             "fraud_pattern": None,
-            "expected_result": "UNDER_REVIEW / FRAUD",
+            "expected_result": "FLAGGED / FRAUD",
             "transaction_count": 6,
         },
 
@@ -526,7 +526,7 @@ _LEGACY_SCENARIO_CATALOG = {
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["payment_amount / total_tagihan < 0.3"],
             "fraud_pattern": None,
-            "expected_result": "UNDER_REVIEW",
+            "expected_result": "FLAGGED",
             "transaction_count": 3,
         },
 
@@ -542,7 +542,7 @@ _LEGACY_SCENARIO_CATALOG = {
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["distinct_channel_count >= 3 dalam waktu singkat"],
             "fraud_pattern": None,
-            "expected_result": "UNDER_REVIEW",
+            "expected_result": "FLAGGED",
             "transaction_count": 5,
         },
 
@@ -558,7 +558,7 @@ _LEGACY_SCENARIO_CATALOG = {
             "target_engines": ["ML Engine"],
             "trigger_conditions": ["tanggal_pembayaran < tanggal_tagihan (PAYMENT_DELAY_DAYS < -1.0)"],
             "fraud_pattern": None,
-            "expected_result": "UNDER_REVIEW",
+            "expected_result": "FLAGGED",
             "transaction_count": 3,
         },
 
@@ -572,7 +572,7 @@ _LEGACY_SCENARIO_CATALOG = {
             "target_engines": ["Pattern Engine", "Rule Engine"],
             "trigger_conditions": ["tx_count >= 5 dalam 5 menit"],
             "fraud_pattern": None,
-            "expected_result": "UNDER_REVIEW / FRAUD",
+            "expected_result": "FLAGGED / FRAUD",
             "transaction_count": 8,
         },
 
@@ -595,7 +595,7 @@ _LEGACY_SCENARIO_CATALOG = {
                 "total_amount >= 24,999,998",
             ],
             "fraud_pattern": None,
-            "expected_result": "UNDER_REVIEW / FRAUD",
+            "expected_result": "FLAGGED / FRAUD",
             "transaction_count": 6,
         },
 

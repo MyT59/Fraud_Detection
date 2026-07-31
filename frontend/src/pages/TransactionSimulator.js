@@ -19,22 +19,47 @@ const ANOMALIES = [
   "DIFF_CITY",
 ];
 
-const ANOMALIES_BY_SERVICE = {
-  agenusa: ["", "HIGH_AMOUNT", "UNUSUAL_HOUR", "RAPID_FIRE", "FOREIGN_IP", "DIFF_CITY"],
-  nusabill: ["", "HIGH_AMOUNT", "UNUSUAL_HOUR", "RAPID_FIRE", "UNDERPAYMENT", "OVERPAYMENT", "FOREIGN_IP"],
+const MAX_BULK_TRANSACTIONS = 150;
+const BULK_ROWS_PER_PAGE = 10;
+const AGENUSA_PROCESSING_CODES = {
+  TRANSFER: "200000",
+  TARIK_SALDO: "010000",
+  CEK_SALDO: "310000",
+};
+const AGENUSA_MTI_CODES = {
+  TRANSFER: "0200",
+  TARIK_SALDO: "0200",
+  CEK_SALDO: "0100",
 };
 
-const MAX_BULK_TRANSACTIONS = 150;
+const NUSABILL_CHANNEL_OPTIONS = [
+  "API",
+  "MOBILE_BANKING",
+  "INTERNET_BANKING",
+  "WEB",
+  "ATM",
+];
+
+const AGENUSA_RESPONSE_OPTIONS = [
+  { value: "00", label: "00 — Disetujui" },
+  { value: "05", label: "05 — Ditolak penerbit" },
+  { value: "51", label: "51 — Dana tidak cukup" },
+  { value: "54", label: "54 — Kartu kedaluwarsa" },
+  { value: "55", label: "55 — PIN salah" },
+  { value: "57", label: "57 — Transaksi tidak diizinkan" },
+  { value: "91", label: "91 — Penerbit tidak tersedia" },
+  { value: "96", label: "96 — Gangguan sistem" },
+];
 
 const initialAgenusa = {
   amount: 500000,
   msg_type: "TRANSFER",
   timestamp_db: "",
   response_code: "00",
-  mti: "",
-  processing_code: "",
+  mti: AGENUSA_MTI_CODES.TRANSFER,
+  processing_code: AGENUSA_PROCESSING_CODES.TRANSFER,
   stan: "",
-  fep_id: "",
+  fep_id: "FEP-SIM-01",
   account_number: "",
   issuer_account_number: "",
   customer_ref_number: "",
@@ -62,12 +87,29 @@ const initialNusabill = {
   tanggal_pembayaran: "",
   sof: "VA_BANK",
   channel: "API",
-  status_tagihan: "terbayar",
+  // Pembayaran baru hanya valid untuk invoice yang belum dibayar.
+  // `terbayar` dipakai untuk skenario percobaan pembayaran ulang.
+  status_tagihan: "belum_terbayar",
   status_akhir: "SUCCESS",
   keterangan: "",
   ip_address: "127.0.0.1",
   inject_anomaly: "",
 };
+
+const IP_LOCATION_OPTIONS = [
+  { value: "jakarta", label: "Jakarta, ID", ip: "36.90.120.15", city: "Jakarta", country: "ID" },
+  { value: "surabaya", label: "Surabaya, ID", ip: "114.10.20.30", city: "Surabaya", country: "ID" },
+  { value: "bandung", label: "Bandung, ID", ip: "180.250.50.60", city: "Bandung", country: "ID" },
+  { value: "medan", label: "Medan, ID", ip: "103.28.90.1", city: "Medan", country: "ID" },
+];
+
+const getLocationPreset = (row) =>
+  IP_LOCATION_OPTIONS.find(
+    (option) =>
+      option.ip === row.ip_address &&
+      option.city === row.city &&
+      option.country === row.country,
+  )?.value || "custom";
 
 const tabs = [
   { key: "scenario", label: "Live Scenario", icon: "bi-play-circle" },
@@ -102,10 +144,26 @@ const createRunId = () => {
 const createCardId = (prefix = "CARD_SIM") =>
   `${prefix}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
-const toLocalDateTimeInput = (date) => {
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+const toWibDateTimeInput = (date) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type) => parts.find((part) => part.type === type)?.value;
+  return `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:${value("minute")}`;
 };
+
+// datetime-local has no timezone. Treat every simulator input as WIB before
+// serializing it to the UTC timestamp stored by the backend.
+const wibDateTimeToIso = (value) =>
+  value ? new Date(`${value.length === 16 ? `${value}:00` : value}+07:00`).toISOString() : "";
+
+const wibDateTimeToDate = (value) => new Date(wibDateTimeToIso(value));
 
 const cleanPayload = (value) =>
   Object.fromEntries(
@@ -336,6 +394,7 @@ const ResultPanel = ({ result, error, onClose }) => {
   const maxRisk = riskScores.length ? Math.max(...riskScores) : null;
   const transactionId =
     data.transaction_id || successfulBulk[0]?.transaction_id || null;
+  const storedTransactionTime = data.transaction_time || null;
   const finalStatus =
     data.final_status ||
     (successfulBulk.some((item) => item.final_status === "FRAUD")
@@ -370,6 +429,15 @@ const ResultPanel = ({ result, error, onClose }) => {
       label: "Transaction ID",
       value: `#${transactionId}`,
       icon: "bi-receipt",
+    },
+    storedTransactionTime && {
+      label: "Waktu tersimpan (WIB)",
+      value: new Intl.DateTimeFormat("id-ID", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Jakarta",
+      }).format(new Date(storedTransactionTime)),
+      icon: "bi-clock",
     },
     result?.total !== undefined && {
       label: "Bulk result",
@@ -520,6 +588,7 @@ const TransactionSimulator = () => {
   const [advancedMode, setAdvancedMode] = useState(false);
   const [bulkCount, setBulkCount] = useState(5);
   const [bulkRows, setBulkRows] = useState([]);
+  const [bulkPage, setBulkPage] = useState(1);
   const [bulkScenario, setBulkScenario] = useState("");
   const [bulkIntervalSeconds, setBulkIntervalSeconds] = useState(30);
   const [delayMs, setDelayMs] = useState(300);
@@ -550,6 +619,38 @@ const TransactionSimulator = () => {
         : scenarioDetails[service] || [],
     [scenarioDetails, service],
   );
+
+// Scenario data can originate from CSV/seed data with locale-specific
+// separators. Keep the bulk editor and API payload numeric regardless of
+// whether the source uses `10,000,000`, `10.000.000`, or `10.000,50`.
+const parseAmount = (value) => {
+  if (typeof value === "number") return value;
+  const raw = String(value ?? "").trim().replace(/\s/g, "");
+  if (!raw) return 0;
+
+  const hasComma = raw.includes(",");
+  const hasDot = raw.includes(".");
+  let normalized = raw;
+
+  if (hasComma && hasDot) {
+    normalized = raw.lastIndexOf(",") > raw.lastIndexOf(".")
+      ? raw.replace(/\./g, "").replace(",", ".")
+      : raw.replace(/,/g, "");
+  } else if (hasComma) {
+    const parts = raw.split(",");
+    normalized = parts.length > 2 || parts.at(-1).length === 3
+      ? raw.replace(/,/g, "")
+      : raw.replace(",", ".");
+  } else if (hasDot) {
+    const parts = raw.split(".");
+    normalized = parts.length > 2 || parts.at(-1).length === 3
+      ? raw.replace(/\./g, "")
+      : raw;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : value;
+};
   const allScenarioDetail = useMemo(() => {
     const serviceLabel =
       service === "all"
@@ -754,7 +855,18 @@ const TransactionSimulator = () => {
   }, [allScenarioDetail, selectedScenario, service]);
 
   const updateForm = (key, value) =>
-    setActiveForm((current) => ({ ...current, [key]: value }));
+    setActiveForm((current) => {
+      const next = { ...current, [key]: value };
+      if (service !== "agenusa" || key !== "msg_type") return next;
+      next.processing_code = AGENUSA_PROCESSING_CODES[value] || "200000";
+      next.mti = AGENUSA_MTI_CODES[value] || "0200";
+      if (value !== "TRANSFER") {
+        next.dest_account_number = "";
+        next.dest_bank_code = "";
+      }
+      if (value === "CEK_SALDO") next.amount = 0;
+      return next;
+    });
 
   const makeBulkRows = useCallback(
     (count = bulkCount, source = service) => {
@@ -773,7 +885,7 @@ const TransactionSimulator = () => {
         `CUST-SIM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
       const endTime = Date.now();
       return Array.from({ length: safeCount }, (_, index) => {
-        const timestamp = toLocalDateTimeInput(
+        const timestamp = toWibDateTimeInput(
           new Date(
             endTime -
               (safeCount - index - 1) *
@@ -814,11 +926,51 @@ const TransactionSimulator = () => {
     }
   }, [activeTab, bulkRows.length, makeBulkRows]);
 
+  useEffect(() => {
+    const lastPage = Math.max(1, Math.ceil(bulkRows.length / BULK_ROWS_PER_PAGE));
+    setBulkPage((page) => Math.min(page, lastPage));
+  }, [bulkRows.length]);
+
   const updateBulkRow = (rowId, key, value) => {
     setBulkRows((rows) =>
       rows.map((row) =>
-        row._rowId === rowId ? { ...row, [key]: value } : row,
+        row._rowId === rowId
+          ? {
+              ...row,
+              [key]: value,
+              ...(service === "agenusa" && key === "msg_type"
+                ? {
+                    processing_code: AGENUSA_PROCESSING_CODES[value] || "200000",
+                    mti: AGENUSA_MTI_CODES[value] || "0200",
+                  }
+                : {}),
+              ...(service === "agenusa" && key === "msg_type" && value !== "TRANSFER"
+                ? {
+                    dest_account_number: "",
+                    dest_bank_code: "",
+                    ...(value === "CEK_SALDO" ? { amount: 0 } : {}),
+                  }
+                : {}),
+            }
+          : row,
       ),
+    );
+  };
+
+  const updateBulkLocation = (rowId, preset) => {
+    setBulkRows((rows) =>
+      rows.map((row) => {
+        if (row._rowId !== rowId || preset === "custom") return row;
+        const location = IP_LOCATION_OPTIONS.find((option) => option.value === preset);
+        return location
+          ? {
+              ...row,
+              ip_address: location.ip,
+              city: location.city,
+              country: location.country,
+            }
+          : row;
+      }),
     );
   };
 
@@ -851,9 +1003,10 @@ const TransactionSimulator = () => {
           return {
             ...initialAgenusa,
             ...transaction,
+            amount: parseAmount(transaction.amount),
             msg_type: transaction.msg_type || "TRANSFER",
             timestamp_db: transaction.timestamp_db
-              ? toLocalDateTimeInput(new Date(transaction.timestamp_db))
+            ? toWibDateTimeInput(new Date(transaction.timestamp_db))
               : "",
             city: transaction.city || "Jakarta",
             country: transaction.country || "ID",
@@ -864,15 +1017,16 @@ const TransactionSimulator = () => {
         return {
           ...initialNusabill,
           ...transaction,
+          total_tagihan: parseAmount(transaction.total_tagihan),
           payment_amount:
-            transaction.payment_amount ?? transaction.total_tagihan,
+            parseAmount(transaction.payment_amount ?? transaction.total_tagihan),
           tanggal_tagihan: transaction.tanggal_tagihan
-            ? toLocalDateTimeInput(new Date(transaction.tanggal_tagihan))
+            ? toWibDateTimeInput(new Date(transaction.tanggal_tagihan))
             : "",
           tanggal_pembayaran: transaction.tanggal_pembayaran
-            ? toLocalDateTimeInput(new Date(transaction.tanggal_pembayaran))
+            ? toWibDateTimeInput(new Date(transaction.tanggal_pembayaran))
             : transaction.tanggal_tagihan
-              ? toLocalDateTimeInput(new Date(transaction.tanggal_tagihan))
+              ? toWibDateTimeInput(new Date(transaction.tanggal_tagihan))
               : "",
           inject_anomaly: "",
           _rowId: `scenario-${Date.now()}-${index}`,
@@ -908,7 +1062,7 @@ const TransactionSimulator = () => {
       if (service === "nusabill") {
         const customerId = `CUST-SIM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
         return rows.map((row, index) => {
-          const timestamp = toLocalDateTimeInput(
+          const timestamp = toWibDateTimeInput(
             new Date(
               endTime -
                 (rows.length - index - 1) * effectiveInterval * 1000,
@@ -966,7 +1120,7 @@ const TransactionSimulator = () => {
         rows[0].terminal_id || `TRM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
       return rows.map((row, index) => {
-        const timestamp = toLocalDateTimeInput(
+        const timestamp = toWibDateTimeInput(
           new Date(
             endTime -
               (rows.length - index - 1) *
@@ -1018,45 +1172,37 @@ const TransactionSimulator = () => {
     if (service === "agenusa") {
       payload.amount = Number(payload.amount);
       if (payload.timestamp_db)
-        payload.timestamp_db = new Date(payload.timestamp_db).toISOString();
+        payload.timestamp_db = wibDateTimeToIso(payload.timestamp_db);
     } else {
       payload.total_tagihan = Number(payload.total_tagihan);
       if (payload.payment_amount !== undefined)
         payload.payment_amount = Number(payload.payment_amount);
       payload.biaya_admin = Number(payload.biaya_admin || 0);
       if (payload.tanggal_tagihan)
-        payload.tanggal_tagihan = new Date(
-          payload.tanggal_tagihan,
-        ).toISOString();
+        payload.tanggal_tagihan = wibDateTimeToIso(payload.tanggal_tagihan);
       if (payload.tanggal_pembayaran)
-        payload.tanggal_pembayaran = new Date(
-          payload.tanggal_pembayaran,
-        ).toISOString();
+        payload.tanggal_pembayaran = wibDateTimeToIso(payload.tanggal_pembayaran);
     }
     return payload;
   };
 
   const normalizeBulkRow = (row) => {
-    const payload = cleanPayload(row);
-    if (service === "agenusa") {
-      payload.amount = Number(payload.amount);
+      const payload = cleanPayload(row);
+      if (service === "agenusa") {
+        payload.amount = parseAmount(payload.amount);
       if (payload.timestamp_db)
-        payload.timestamp_db = new Date(payload.timestamp_db).toISOString();
+        payload.timestamp_db = wibDateTimeToIso(payload.timestamp_db);
     } else {
-      payload.total_tagihan = Number(payload.total_tagihan);
-      payload.payment_amount =
-        payload.payment_amount === undefined
-          ? payload.total_tagihan
-          : Number(payload.payment_amount);
-      payload.biaya_admin = Number(payload.biaya_admin || 0);
+        payload.total_tagihan = parseAmount(payload.total_tagihan);
+        payload.payment_amount =
+          payload.payment_amount === undefined
+            ? payload.total_tagihan
+            : parseAmount(payload.payment_amount);
+        payload.biaya_admin = parseAmount(payload.biaya_admin || 0);
       if (payload.tanggal_tagihan)
-        payload.tanggal_tagihan = new Date(
-          payload.tanggal_tagihan,
-        ).toISOString();
+        payload.tanggal_tagihan = wibDateTimeToIso(payload.tanggal_tagihan);
       if (payload.tanggal_pembayaran)
-        payload.tanggal_pembayaran = new Date(
-          payload.tanggal_pembayaran,
-        ).toISOString();
+        payload.tanggal_pembayaran = wibDateTimeToIso(payload.tanggal_pembayaran);
     }
     return payload;
   };
@@ -1098,9 +1244,7 @@ const TransactionSimulator = () => {
       override_amount: replay.override_amount
         ? Number(replay.override_amount)
         : "",
-      override_timestamp: replay.override_timestamp
-        ? new Date(replay.override_timestamp).toISOString()
-        : "",
+      override_timestamp: wibDateTimeToIso(replay.override_timestamp),
     });
     runAction("replay", () => simulatorService.replay(payload), {
       mode: "replay",
@@ -1120,12 +1264,17 @@ const TransactionSimulator = () => {
   const renderTransactionFields = () =>
     service === "agenusa" ? (
       <>
-        <Field label="Nominal transaksi (Rp)">
+        <Field
+          label="Nominal transaksi (Rp)"
+          hint={agenusaForm.msg_type === "CEK_SALDO" ? "Inquiry saldo tidak memiliki nominal transaksi." : undefined}
+        >
           <input
             type="number"
-            min="1"
+            min={agenusaForm.msg_type === "CEK_SALDO" ? "0" : "1"}
+            step="any"
             required
             value={agenusaForm.amount}
+            readOnly={agenusaForm.msg_type === "CEK_SALDO"}
             onChange={(e) => updateForm("amount", e.target.value)}
           />
         </Field>
@@ -1138,6 +1287,16 @@ const TransactionSimulator = () => {
             <option value="TARIK_SALDO">Tarik saldo</option>
             <option value="CEK_SALDO">Cek saldo</option>
           </select>
+        </Field>
+        <Field
+          label="Waktu transaksi (WIB)"
+          hint="Opsional. Kosongkan untuk memakai waktu saat ini."
+        >
+          <input
+            type="datetime-local"
+            value={agenusaForm.timestamp_db}
+            onChange={(e) => updateForm("timestamp_db", e.target.value)}
+          />
         </Field>
         <Field label="Rekening sumber" hint="Kosongkan untuk dibuat otomatis">
           <input
@@ -1197,6 +1356,7 @@ const TransactionSimulator = () => {
           <input
             type="number"
             min="1"
+            step="any"
             required
             value={nusabillForm.total_tagihan}
             onChange={(e) => updateForm("total_tagihan", e.target.value)}
@@ -1206,6 +1366,7 @@ const TransactionSimulator = () => {
           <input
             type="number"
             min="0"
+            step="any"
             value={nusabillForm.payment_amount}
             onChange={(e) => updateForm("payment_amount", e.target.value)}
           />
@@ -1214,6 +1375,7 @@ const TransactionSimulator = () => {
           <input
             type="number"
             min="0"
+            step="any"
             value={nusabillForm.biaya_admin}
             onChange={(e) => updateForm("biaya_admin", e.target.value)}
           />
@@ -1225,45 +1387,30 @@ const TransactionSimulator = () => {
           />
         </Field>
         <Field label="Channel">
-          <input
+          <select
             value={nusabillForm.channel}
             onChange={(e) => updateForm("channel", e.target.value)}
-          />
+          >
+            {NUSABILL_CHANNEL_OPTIONS.map((channel) => (
+              <option key={channel} value={channel}>{channel}</option>
+            ))}
+          </select>
         </Field>
       </>
     );
 
-  const anomalyField = (
-    <Field label="Inject anomaly">
-      <select
-        value={activeForm.inject_anomaly}
-        onChange={(e) => updateForm("inject_anomaly", e.target.value)}
-      >
-        {(ANOMALIES_BY_SERVICE[service] || ANOMALIES).map((item) => (
-          <option key={item || "none"} value={item}>
-            {item || "Tanpa anomali"}
-          </option>
-        ))}
-      </select>
-    </Field>
-  );
-
   const renderAdvancedFields = () =>
     service === "agenusa" ? (
       <div className="sim-advanced-fields">
-        <Field label="Timestamp (UTC)">
-          <input
-            type="datetime-local"
-            value={agenusaForm.timestamp_db}
-            onChange={(e) => updateForm("timestamp_db", e.target.value)}
-          />
-        </Field>
-        <Field label="Response code">
-          <input
+        <Field label="Response code" hint="Kode respons dari host/penerbit kartu.">
+          <select
             value={agenusaForm.response_code}
             onChange={(e) => updateForm("response_code", e.target.value)}
-            placeholder="00"
-          />
+          >
+            {AGENUSA_RESPONSE_OPTIONS.map((response) => (
+              <option key={response.value} value={response.value}>{response.label}</option>
+            ))}
+          </select>
         </Field>
         <Field
           label="Issuer account number"
@@ -1278,8 +1425,8 @@ const TransactionSimulator = () => {
           />
         </Field>
         <Field
-          label="Customer reference"
-          hint="Fallback grouping ketika issuer account kosong"
+          label="Cardholder Ref"
+          hint="Referensi internal pemegang kartu; dipetakan ke user_account_id"
         >
           <input
             value={agenusaForm.customer_ref_number}
@@ -1289,38 +1436,41 @@ const TransactionSimulator = () => {
             placeholder="Contoh: CUST-001"
           />
         </Field>
-        <Field label="MTI" hint="Kosongkan untuk auto-derive">
+        <Field label="MTI" hint="Otomatis mengikuti Jenis Transaksi.">
           <input
             value={agenusaForm.mti}
-            onChange={(e) => updateForm("mti", e.target.value)}
-            placeholder="0200"
+            readOnly
           />
         </Field>
-        <Field label="Processing code" hint="Kosongkan untuk auto-derive">
+        <Field
+          label="Processing code"
+          hint="Otomatis mengikuti Jenis Transaksi (Transfer 200000, Tarik Saldo 010000, Cek Saldo 310000)."
+        >
           <input
             value={agenusaForm.processing_code}
-            onChange={(e) => updateForm("processing_code", e.target.value)}
-            placeholder="200000"
+            readOnly
           />
         </Field>
-        <Field label="STAN">
+        <Field label="STAN" hint="Nomor trace unik dibuat otomatis saat transaksi dikirim.">
           <input
-            value={agenusaForm.stan}
-            onChange={(e) => updateForm("stan", e.target.value)}
+            value={agenusaForm.stan || "Dibuat otomatis"}
+            readOnly
           />
         </Field>
-        <Field label="FEP ID">
+        <Field label="FEP ID" hint="Node switching simulator yang memproses transaksi.">
           <input
             value={agenusaForm.fep_id}
-            onChange={(e) => updateForm("fep_id", e.target.value)}
+            readOnly
           />
         </Field>
-        <Field label="Destination bank code">
-          <input
-            value={agenusaForm.dest_bank_code}
-            onChange={(e) => updateForm("dest_bank_code", e.target.value)}
-          />
-        </Field>
+        {agenusaForm.msg_type === "TRANSFER" && (
+          <Field label="Destination bank code">
+            <input
+              value={agenusaForm.dest_bank_code}
+              onChange={(e) => updateForm("dest_bank_code", e.target.value)}
+            />
+          </Field>
+        )}
         <Field label="Acquirer code">
           <input
             value={agenusaForm.acquirer_code}
@@ -1357,13 +1507,17 @@ const TransactionSimulator = () => {
             placeholder="Auto-generated"
           />
         </Field>
-        <Field label="Kode pembayaran">
+        <Field
+          label="Kode Pembayaran / VA"
+          hint="Opsional. Kosongkan agar sistem membuat kode VA unik otomatis; isi hanya untuk simulasi khusus."
+        >
           <input
             value={nusabillForm.kode_pembayaran}
             onChange={(e) => updateForm("kode_pembayaran", e.target.value)}
+            placeholder="Dibuat otomatis"
           />
         </Field>
-        <Field label="Tanggal tagihan">
+        <Field label="Tanggal tagihan (WIB)">
           <input
             type="datetime-local"
             value={nusabillForm.tanggal_tagihan}
@@ -1371,8 +1525,8 @@ const TransactionSimulator = () => {
           />
         </Field>
         <Field
-          label="Tanggal pembayaran"
-          hint="Dipakai sebagai transaction_time oleh engine"
+          label="Tanggal pembayaran (WIB)"
+          hint="Dipakai sebagai transaction_time oleh engine dalam WIB"
         >
           <input
             type="datetime-local"
@@ -1411,6 +1565,19 @@ const TransactionSimulator = () => {
 
   const renderBulkTable = () => (
     <div className="sim-bulk-editor">
+      {(() => {
+        const totalPages = Math.max(
+          1,
+          Math.ceil(bulkRows.length / BULK_ROWS_PER_PAGE),
+        );
+        const currentPage = Math.min(bulkPage, totalPages);
+        const startIndex = (currentPage - 1) * BULK_ROWS_PER_PAGE;
+        const visibleRows = bulkRows.slice(
+          startIndex,
+          startIndex + BULK_ROWS_PER_PAGE,
+        );
+
+        return <>
       <div className="sim-bulk-editor__header">
         <div>
           <h3>Editable transaction table</h3>
@@ -1427,9 +1594,9 @@ const TransactionSimulator = () => {
                   ? previous.timestamp_db
                   : previous.tanggal_pembayaran || previous.tanggal_tagihan;
               const nextTimestamp = previousTimestamp
-                  ? toLocalDateTimeInput(
+                  ? toWibDateTimeInput(
                       new Date(
-                        new Date(previousTimestamp).getTime() +
+                        wibDateTimeToDate(previousTimestamp).getTime() +
                           Number(bulkIntervalSeconds) * 1000,
                       ),
                     )
@@ -1466,8 +1633,9 @@ const TransactionSimulator = () => {
                   <th>Issuer account</th>
                   <th>Bank penerbit</th>
                   <th>Terminal</th>
-                  <th>Customer ref</th>
+                  <th>Cardholder Ref</th>
                   <th>Response</th>
+                  <th>IP / Lokasi</th>
                   <th>Timestamp</th>
                 </>
               ) : (
@@ -1477,6 +1645,7 @@ const TransactionSimulator = () => {
                   <th>Tagihan</th>
                   <th>Pembayaran</th>
                   <th>Channel</th>
+                  <th>IP / Lokasi</th>
                   <th>Timestamp</th>
                 </>
               )}
@@ -1484,7 +1653,9 @@ const TransactionSimulator = () => {
             </tr>
           </thead>
           <tbody>
-            {bulkRows.map((row, index) => (
+            {visibleRows.map((row, pageIndex) => {
+              const index = startIndex + pageIndex;
+              return (
               <tr key={row._rowId}>
                 <td>{index + 1}</td>
                 {service === "agenusa" ? (
@@ -1492,9 +1663,11 @@ const TransactionSimulator = () => {
                     <td>
                       <input
                         type="number"
-                        min="1"
+                        min={row.msg_type === "CEK_SALDO" ? "0" : "1"}
+                        step="any"
                         required
                         value={row.amount}
+                        readOnly={row.msg_type === "CEK_SALDO"}
                         onChange={(e) =>
                           updateBulkRow(row._rowId, "amount", e.target.value)
                         }
@@ -1567,8 +1740,8 @@ const TransactionSimulator = () => {
                       />
                     </td>
                     <td>
-                      <input
-                        className="sim-code-input"
+                      <select
+                        className="sim-code-input sim-response-select"
                         value={row.response_code}
                         onChange={(e) =>
                           updateBulkRow(
@@ -1577,7 +1750,33 @@ const TransactionSimulator = () => {
                             e.target.value,
                           )
                         }
-                        placeholder="00"
+                      >
+                        {AGENUSA_RESPONSE_OPTIONS.map((response) => (
+                          <option key={response.value} value={response.value}>
+                            {response.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={getLocationPreset(row)}
+                        onChange={(e) => updateBulkLocation(row._rowId, e.target.value)}
+                        aria-label={`Lokasi transaksi ${index + 1}`}
+                      >
+                        {IP_LOCATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                        <option value="custom">IP custom</option>
+                      </select>
+                      <input
+                        className="sim-code-input"
+                        value={row.ip_address || ""}
+                        onChange={(e) => updateBulkRow(row._rowId, "ip_address", e.target.value)}
+                        placeholder="Contoh: 36.90.120.15"
+                        aria-label={`IP address transaksi ${index + 1}`}
                       />
                     </td>
                     <td>
@@ -1629,6 +1828,7 @@ const TransactionSimulator = () => {
                       <input
                         type="number"
                         min="1"
+                        step="any"
                         required
                         value={row.total_tagihan}
                         onChange={(e) =>
@@ -1644,6 +1844,7 @@ const TransactionSimulator = () => {
                       <input
                         type="number"
                         min="0"
+                        step="any"
                         value={row.payment_amount}
                         onChange={(e) =>
                           updateBulkRow(
@@ -1655,11 +1856,36 @@ const TransactionSimulator = () => {
                       />
                     </td>
                     <td>
-                      <input
+                      <select
                         value={row.channel}
                         onChange={(e) =>
                           updateBulkRow(row._rowId, "channel", e.target.value)
                         }
+                      >
+                        {NUSABILL_CHANNEL_OPTIONS.map((channel) => (
+                          <option key={channel} value={channel}>{channel}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={getLocationPreset(row)}
+                        onChange={(e) => updateBulkLocation(row._rowId, e.target.value)}
+                        aria-label={`Lokasi transaksi ${index + 1}`}
+                      >
+                        {IP_LOCATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                        <option value="custom">IP custom</option>
+                      </select>
+                      <input
+                        className="sim-code-input"
+                        value={row.ip_address || ""}
+                        onChange={(e) => updateBulkRow(row._rowId, "ip_address", e.target.value)}
+                        placeholder="Contoh: 36.90.120.15"
+                        aria-label={`IP address transaksi ${index + 1}`}
                       />
                     </td>
                     <td>
@@ -1696,10 +1922,52 @@ const TransactionSimulator = () => {
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
+      {bulkRows.length > BULK_ROWS_PER_PAGE && (
+        <div className="sim-bulk-pagination">
+          <span>
+            Menampilkan {startIndex + 1}–
+            {Math.min(startIndex + BULK_ROWS_PER_PAGE, bulkRows.length)} dari {bulkRows.length} transaksi
+          </span>
+          <div className="sim-bulk-pagination__controls">
+            <button
+              type="button"
+              aria-label="Halaman sebelumnya"
+              disabled={currentPage === 1}
+              onClick={() => setBulkPage((page) => Math.max(1, page - 1))}
+            >
+              <i className="bi bi-chevron-left" />
+            </button>
+            {Array.from({ length: totalPages }, (_, index) => index + 1).map(
+              (page) => (
+                <button
+                  key={page}
+                  type="button"
+                  className={page === currentPage ? "active" : ""}
+                  aria-current={page === currentPage ? "page" : undefined}
+                  onClick={() => setBulkPage(page)}
+                >
+                  {page}
+                </button>
+              ),
+            )}
+            <button
+              type="button"
+              aria-label="Halaman berikutnya"
+              disabled={currentPage === totalPages}
+              onClick={() => setBulkPage((page) => Math.min(totalPages, page + 1))}
+            >
+              <i className="bi bi-chevron-right" />
+            </button>
+          </div>
+        </div>
+      )}
+        </>;
+      })()}
     </div>
   );
 
@@ -1973,7 +2241,6 @@ const TransactionSimulator = () => {
           )}
           <div className="sim-form-grid">
             {renderTransactionFields()}
-            {activeTab === "manual" && anomalyField}
             {activeTab === "bulk" && (
               <>
                 <Field label="Jumlah transaksi" hint="Maksimal 150">
@@ -2179,13 +2446,14 @@ const TransactionSimulator = () => {
               <input
                 type="number"
                 min="1"
+                step="any"
                 value={replay.override_amount}
                 onChange={(e) =>
                   setReplay({ ...replay, override_amount: e.target.value })
                 }
               />
             </Field>
-            <Field label="Override timestamp" hint="Opsional">
+            <Field label="Override timestamp (WIB)" hint="Opsional">
               <input
                 type="datetime-local"
                 value={replay.override_timestamp}

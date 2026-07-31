@@ -29,6 +29,7 @@ const TYPE_OPTIONS = [
   { value: "RULE_ML", label: "Rule + ML" },
   { value: "PATTERN_ML", label: "Pattern + ML" },
   { value: "COMBINED_ML", label: "Combined + ML" },
+  { value: "SYSTEM", label: "System" },
 ];
 
 const SORT_OPTIONS = [
@@ -48,7 +49,7 @@ const AlertsFilter = ({ filters, onFilterChange, onReset, totalResults }) => {
           <input
             type="text"
             className="alerts-search-input"
-            placeholder="Cari judul, pesan, atau Transaction ID..."
+            placeholder="Cari ID transaksi, akun, merchant, terminal, IP, rule/pattern..."
             value={filters.search}
             onChange={(e) => onFilterChange({ search: e.target.value })}
           />

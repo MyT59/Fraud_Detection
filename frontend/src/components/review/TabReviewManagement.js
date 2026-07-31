@@ -54,6 +54,7 @@ const TabReviewManagement = () => {
     try {
       await api.del(`/reviews/${reviewId}`);
       setItems((prev) => prev.filter((i) => i.reviewId !== reviewId));
+      setTotal((current) => Math.max(0, current - 1));
     } catch (err) {
       alert(`Gagal menghapus review: ${err.message}`);
     } finally {
@@ -71,7 +72,9 @@ const TabReviewManagement = () => {
       await overrideReview(reviewId, { new_decision: newDecision, reason });
       setItems((prev) =>
         prev.map((i) =>
-          i.reviewId === reviewId ? { ...i, decision: newDecision } : i,
+          i.reviewId === reviewId
+            ? { ...i, decision: newDecision, finalStatus: newDecision, isOverridden: true }
+            : i,
         ),
       );
       setOverrideModal(null);

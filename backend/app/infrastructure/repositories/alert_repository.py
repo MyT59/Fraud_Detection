@@ -74,6 +74,12 @@ class AlertRepository:
         return self.db.query(func.count(FraudAlert.id))\
             .filter(FraudAlert.status == status.upper())\
             .scalar() or 0
+
+    def get_open_alert_count(self) -> int:
+        """Jumlah alert yang masih dapat dikerjakan, termasuk yang dibuka kembali."""
+        return self.db.query(func.count(FraudAlert.id)).filter(
+            FraudAlert.status.in_(["OPEN", "REOPENED"])
+        ).scalar() or 0
     
     def get_priority_distribution(self):
         """
@@ -85,5 +91,7 @@ class AlertRepository:
             func.coalesce(func.sum(case((and_(FraudAlert.priority >= 75, FraudAlert.priority < 90), 1), else_=0)), 0).label("high"),
             func.coalesce(func.sum(case((and_(FraudAlert.priority >= 50, FraudAlert.priority < 75), 1), else_=0)), 0).label("medium"),
             func.coalesce(func.sum(case(((FraudAlert.priority < 50), 1), else_=0)), 0).label("low")
-        ).filter(FraudAlert.status == "OPEN").first()
+        ).filter(
+            FraudAlert.status.in_(["OPEN", "REOPENED"])
+        ).first()
         return data

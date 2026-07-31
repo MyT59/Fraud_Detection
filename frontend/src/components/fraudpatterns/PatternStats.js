@@ -1,9 +1,6 @@
 import React from "react";
 import "./PatternStats.css";
 
-// [FIX] Menerima prop totalFlagged dari BE (/patterns/stats -> total_flagged_transactions)
-// untuk perhitungan persentase High Risk Events yang lebih akurat,
-// alih-alih membagi dengan total occurrences hasil agregasi lokal.
 const PatternStats = ({ patterns, totalFlagged = 0 }) => {
   const total = patterns.reduce((s, p) => s + p.occurrences, 0);
   const highRisk = patterns
@@ -14,34 +11,32 @@ const PatternStats = ({ patterns, totalFlagged = 0 }) => {
     patterns.reduce((s, p) => s + p.accuracy, 0) / patterns.length
   ).toFixed(1);
 
-  // Gunakan total_flagged_transactions dari BE jika tersedia (lebih akurat
-  // karena merepresentasikan basis transaksi nyata, bukan sekadar
-  // jumlah occurrences pattern yang bisa overlap).
-  const highRiskBase = totalFlagged > 0 ? totalFlagged : total;
+  // `highRisk` dan `total` sama-sama menghitung pattern matches. Menggunakan
+  // jumlah transaksi sebagai penyebut akan salah karena satu transaksi bisa
+  // cocok dengan lebih dari satu pattern dan menghasilkan persentase >100%.
+  const highRiskBase = total;
   const highRiskPct =
     highRiskBase > 0 ? ((highRisk / highRiskBase) * 100).toFixed(1) : "0.0";
 
   const cards = [
     {
       id: 1,
-      label: "Total Detections",
+      label: "Total Pattern Matches",
       value: total.toLocaleString(),
       icon: "bi-shield-exclamation",
       color: "purple",
       sub:
         totalFlagged > 0
-          ? `dari ${totalFlagged.toLocaleString()} transaksi flagged`
+          ? `pada ${totalFlagged.toLocaleString()} transaksi yang cocok pattern`
           : "All-time pattern matches",
     },
     {
       id: 2,
-      label: "Flagged Events",
+      label: "High-Risk Pattern Matches",
       value: highRisk.toLocaleString(),
       icon: "bi-exclamation-triangle-fill",
       color: "danger",
-      sub: `${highRiskPct}% dari ${
-        totalFlagged > 0 ? "transaksi flagged" : "total deteksi"
-      }`,
+      sub: `${highRiskPct}% dari total pattern matches`,
     },
     {
       id: 3,
@@ -53,11 +48,11 @@ const PatternStats = ({ patterns, totalFlagged = 0 }) => {
     },
     {
       id: 4,
-      label: "Avg. Accuracy",
+      label: "Avg. Precision",
       value: `${avgAccuracy}%`,
       icon: "bi-bullseye",
       color: "info",
-      sub: "Detection model accuracy",
+      sub: "Ketepatan deteksi yang telah direview",
     },
   ];
 

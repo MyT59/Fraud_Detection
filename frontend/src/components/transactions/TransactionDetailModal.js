@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import "./TransactionDetailModal.css";
 import transactionService from "../../services/transactionService";
+import { reportFalseNegative } from "../../services/reviewApiService";
+import useRole from "../../hooks/useRole";
 
 // ─── Maps ─────────────────────────────────────────────────────────────────────
 
@@ -49,12 +51,16 @@ const fmtDT = (ds) => {
   return new Intl.DateTimeFormat("id-ID", {
     dateStyle: "medium",
     timeStyle: "medium",
+    timeZone: "Asia/Jakarta",
   }).format(new Date(ds));
 };
 
 const fmtDate = (ds) => {
   if (!ds) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(
+  return new Intl.DateTimeFormat("id-ID", {
+    dateStyle: "medium",
+    timeZone: "Asia/Jakarta",
+  }).format(
     new Date(ds),
   );
 };
@@ -109,21 +115,49 @@ const Section = ({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
+const TransactionDetailModal = ({ transaction, isOpen, onClose, onFalseNegativeReported }) => {
   const [detailData, setDetailData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const [showFalseNegativeForm, setShowFalseNegativeForm] = useState(false);
+  const [falseNegativeReason, setFalseNegativeReason] = useState("");
+  const [falseNegativeResult, setFalseNegativeResult] = useState(null);
+  const [submittingFalseNegative, setSubmittingFalseNegative] = useState(false);
+  const { canManage } = useRole();
 
   useEffect(() => {
     if (isOpen && transaction?.id) {
+      const controller = new AbortController();
+      let active = true;
       setLoading(true);
+      setDetailError("");
       transactionService
-        .getTransactionById(transaction.id)
-        .then(setDetailData)
-        .catch(() => setDetailData(transaction))
-        .finally(() => setLoading(false));
+        .getTransactionById(transaction.id, { signal: controller.signal })
+        .then((data) => {
+          if (active) setDetailData(data);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            if (active) {
+              setDetailData(null);
+              setDetailError(err.message || "Detail transaksi tidak dapat dimuat.");
+            }
+          }
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+      return () => {
+        active = false;
+        controller.abort();
+      };
     } else {
       setDetailData(null);
+      setDetailError("");
     }
+    setShowFalseNegativeForm(false);
+    setFalseNegativeReason("");
+    setFalseNegativeResult(null);
   }, [isOpen, transaction]);
 
   // ESC to close
@@ -145,18 +179,72 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
     .toUpperCase();
   const statusMeta = STATUS_MAP[finalStatus] || STATUS_MAP.PENDING;
   const d = t.transaction_details || {};
+  const canReportFalseNegative = canManage && finalStatus === "SAFE";
+
+  const handleReportFalseNegative = async () => {
+    const reason = falseNegativeReason.trim();
+    if (reason.length < 10) {
+      setFalseNegativeResult({
+        type: "error",
+        message: "Alasan minimal 10 karakter.",
+      });
+      return;
+    }
+
+    setSubmittingFalseNegative(true);
+    setFalseNegativeResult(null);
+    try {
+      await reportFalseNegative(t.id, reason);
+      setDetailData((previous) => ({
+        ...(previous || t),
+        final_status: "FRAUD",
+        risk_level: "CRITICAL",
+        risk_score: Math.max(Number(t.risk_score || 0), 90),
+      }));
+      setFalseNegativeResult({
+        type: "success",
+        message: "Transaksi berhasil dilaporkan sebagai False Negative.",
+      });
+      onFalseNegativeReported?.();
+    } catch (err) {
+      setFalseNegativeResult({
+        type: "error",
+        message: err.message || "Gagal melaporkan False Negative.",
+      });
+    } finally {
+      setSubmittingFalseNegative(false);
+    }
+  };
 
   // Count only active rule / pattern violations. Do not treat a free-text
   // `violation_reason` as a separate count (it may duplicate info).
   const activeRuleCount = (t.violation_rule_ids || []).length;
   const activePatternCount = (t.violation_pattern_ids || []).length;
-  const violationCount = activeRuleCount + activePatternCount;
+  const blacklistMatches = Array.isArray(t.blacklist_matches)
+    ? t.blacklist_matches
+    : [];
+  // Transactions created before blacklist matches were persisted only retain
+  // the BLACKLIST entry in violation_reason. Keep them visible as well.
+  const hasLegacyBlacklistMatch =
+    blacklistMatches.length === 0 &&
+    String(t.violation_reason || "").includes("BLACKLIST:");
+  const blacklistCount = blacklistMatches.length || Number(hasLegacyBlacklistMatch);
+  const reasonEntries = String(t.violation_reason || "")
+    .split(" | ")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const structuredViolationCount = activeRuleCount + activePatternCount + blacklistCount;
+  // Some detectors (e.g. Location Jump) are behavioural checks rather than
+  // persisted fraud-pattern rows, so they only have a textual reason.
+  const violationCount = structuredViolationCount || reasonEntries.length;
 
   // Support suppressed signals returned by the backend for forensic review.
   // Backend may provide either `suppressed_patterns` (objects) or
   // `suppressed_pattern_ids` (ids). Normalize to an array of items.
   const suppressedPatternsRaw =
-    t.suppressed_patterns || t.suppressed_pattern_ids || [];
+    Array.isArray(t.suppressed_patterns) && t.suppressed_patterns.length > 0
+      ? t.suppressed_patterns
+      : t.suppressed_pattern_ids || [];
   const suppressedPatterns = Array.isArray(suppressedPatternsRaw)
     ? suppressedPatternsRaw
     : [];
@@ -212,6 +300,12 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                     Mengambil data dari server…
                   </p>
                 </div>
+              ) : detailError ? (
+                <div className="tdm-loading">
+                  <i className="bi bi-exclamation-triangle-fill" style={{ color: "#dc2626", fontSize: "2rem" }} />
+                  <p className="tdm-loading-text">Gagal memuat detail lengkap transaksi.</p>
+                  <small>{detailError}</small>
+                </div>
               ) : (
                 <>
                   {/* 1 ── Risk Banner ─────────────────────────────────── */}
@@ -250,7 +344,7 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                         )}
                         <span className="tdm-risk-chip">
                           <i className="bi bi-clock me-1" />
-                          Transaction Timestamp: {fmtDT(t.transaction_time)}
+                          Transaction Timestamp (WIB): {fmtDT(t.transaction_time)}
                         </span>
                       </div>
                       <div className="tdm-risk-legend">
@@ -260,6 +354,12 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                           blocked.
                         </small>
                       </div>
+                      {reasonEntries.length > 0 && (
+                        <div className="tdm-risk-reason">
+                          <i className="bi bi-exclamation-triangle-fill me-2" />
+                          <strong>Deteksi:</strong> {reasonEntries.join(" • ")}
+                        </div>
+                      )}
                     </div>
                     <div className="tdm-amount-block">
                       <div className="tdm-amount-value">{fmt(t.amount)}</div>
@@ -313,7 +413,13 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                             "Pattern Score",
                             t.score_breakdown.pattern_score,
                           ],
-                          ["bi-cpu", "ML Score", t.score_breakdown.ml_score],
+                          [
+                            "bi-cpu",
+                            "ML Risk Impact",
+                            t.score_breakdown.ml_risk_contribution != null
+                              ? "+" + t.score_breakdown.ml_risk_contribution
+                              : "—",
+                          ],
                           [
                             "bi-bullseye",
                             "Final Score",
@@ -327,6 +433,15 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                           </div>
                         ))}
                       </div>
+                      {t.score_breakdown.ml_score != null && (
+                        <div className="tdm-score-ml-note">
+                          <i className="bi bi-info-circle" />
+                          <span>
+                            ML Anomaly Score: <strong>{Number(t.score_breakdown.ml_score).toFixed(6)}</strong>
+                            {" "}— semakin negatif, semakin anomali. Nilai ini dikonversi menjadi dampak risiko di atas, bukan dijumlahkan langsung ke skor final.
+                          </span>
+                        </div>
+                      )}
                     </Section>
                   )}
 
@@ -402,6 +517,11 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                       <div className="tdm-divider" />
                       <div className="tdm-grid-2">
                         <Field label="Nama Customer" value={d.nama_customer} />
+                        <Field
+                          label="Kode Pembayaran / VA"
+                          value={d.kode_pembayaran}
+                          mono
+                        />
                         <Field label="SOF" value={d.sof} mono />
                         <Field label="Channel" value={d.channel} />
                         <Field
@@ -441,8 +561,24 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                           {t.violation_reason}
                         </p>
                       )}
-                      {(activeRuleCount > 0 || activePatternCount > 0) && (
+                      {(activeRuleCount > 0 || activePatternCount > 0 || blacklistCount > 0) && (
                         <div className="tdm-tag-list">
+                          {blacklistMatches.map((match, index) => (
+                            <span
+                              key={`b-${match.blacklist_id || index}`}
+                              className="tdm-tag tdm-tag-blacklist"
+                            >
+                              <i className="bi bi-slash-octagon-fill me-1" />
+                              Blacklist{match.identifier_type ? `: ${match.identifier_type}` : ""}
+                              {match.value ? ` (${match.value})` : ""}
+                            </span>
+                          ))}
+                          {hasLegacyBlacklistMatch && (
+                            <span className="tdm-tag tdm-tag-blacklist">
+                              <i className="bi bi-slash-octagon-fill me-1" />
+                              Blacklist match
+                            </span>
+                          )}
                           {(t.violation_rule_ids || []).map((id) => (
                             <span
                               key={`r-${id}`}
@@ -464,54 +600,42 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                         </div>
                       )}
 
-                      {/* Additional Signals (suppressed patterns) for forensic review */}
-                      {suppressedPatterns.length > 0 && (
-                        <Section
-                          title="Additional Signals"
-                          icon="bi-info-circle"
-                          defaultOpen={false}
-                        >
-                          <div className="tdm-tag-list">
-                            {suppressedPatterns.map((it, idx) => {
-                              // If backend returns numeric ids, render as Pattern #id
-                              if (
-                                typeof it === "number" ||
-                                typeof it === "string"
-                              ) {
-                                return (
-                                  <span
-                                    key={`s-${idx}`}
-                                    className="tdm-tag tdm-tag-suppressed"
-                                  >
-                                    <i className="bi bi-slash-circle me-1" />
-                                    Pattern #{it}
-                                  </span>
-                                );
-                              }
-
-                              // If backend returns object with name/id
-                              const label =
-                                it.name ||
-                                it.pattern_name ||
-                                it.id ||
-                                JSON.stringify(it);
-                              return (
-                                <span
-                                  key={`s-${idx}`}
-                                  className="tdm-tag tdm-tag-suppressed"
-                                >
-                                  <i className="bi bi-slash-circle me-1" />
-                                  {label}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </Section>
-                      )}
                     </Section>
                   )}
 
                   {/* 6 ── Timestamps ──────────────────────────────────── */}
+                  {suppressedPatterns.length > 0 && (
+                    <Section
+                      title="Additional Signals"
+                      icon="bi-info-circle"
+                      badge={suppressedPatterns.length}
+                      defaultOpen={false}
+                    >
+                      <p className="tdm-suppressed-note">
+                        Pattern nonaktif yang cocok dengan transaksi ini. Tidak memengaruhi skor maupun status transaksi.
+                      </p>
+                      <div className="tdm-tag-list">
+                        {suppressedPatterns.map((it, idx) => {
+                          if (typeof it === "number" || typeof it === "string") {
+                            return (
+                              <span key={"s-" + idx} className="tdm-tag tdm-tag-suppressed">
+                                <i className="bi bi-slash-circle me-1" />
+                                Pattern #{it}
+                              </span>
+                            );
+                          }
+                          const label = it.name || it.pattern_name || ("Pattern #" + it.id);
+                          return (
+                            <span key={"s-" + idx} className="tdm-tag tdm-tag-suppressed">
+                              <i className="bi bi-slash-circle me-1" />
+                              {label}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </Section>
+                  )}
+
                   <Section
                     title="Timestamps"
                     icon="bi-clock-history"
@@ -519,7 +643,7 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
                   >
                     <div className="tdm-grid-2">
                       <Field
-                        label="Waktu Transaksi"
+                        label="Waktu Transaksi (WIB)"
                         value={fmtDT(t.transaction_time)}
                       />
                       <Field
@@ -534,6 +658,37 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
               )}
             </div>
 
+            {showFalseNegativeForm && (
+              <section className="tdm-false-negative" aria-label="Laporkan False Negative">
+                <div className="tdm-false-negative__heading">
+                  <i className="bi bi-bug-fill" />
+                  <div>
+                    <strong>Laporkan False Negative</strong>
+                    <span>Transaksi #{t.id} akan ditandai FRAUD dan dicatat sebagai feedback pattern discovery.</span>
+                  </div>
+                </div>
+                <label className="tdm-false-negative__field">
+                  Alasan investigasi <span>*</span>
+                  <textarea
+                    rows={3}
+                    maxLength={1000}
+                    value={falseNegativeReason}
+                    onChange={(event) => {
+                      setFalseNegativeReason(event.target.value);
+                      setFalseNegativeResult(null);
+                    }}
+                    placeholder="Jelaskan bukti bahwa transaksi SAFE ini sebenarnya fraud..."
+                  />
+                  <small>{falseNegativeReason.length}/1000 · minimal 10 karakter</small>
+                </label>
+                {falseNegativeResult && (
+                  <div className={`tdm-false-negative__result ${falseNegativeResult.type}`}>
+                    {falseNegativeResult.message}
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* ── Footer ───────────────────────────────────────────────── */}
             <div className="txn-modal-footer">
               <span className="tdm-footer-meta">
@@ -543,6 +698,32 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose }) => {
               <button className="txn-btn txn-btn-secondary" onClick={onClose}>
                 Tutup
               </button>
+              {canReportFalseNegative && !showFalseNegativeForm && (
+                <button
+                  className="txn-btn txn-btn-danger"
+                  onClick={() => setShowFalseNegativeForm(true)}
+                >
+                  <i className="bi bi-bug-fill" /> Laporkan False Negative
+                </button>
+              )}
+              {canReportFalseNegative && showFalseNegativeForm && (
+                <>
+                  <button
+                    className="txn-btn txn-btn-secondary"
+                    onClick={() => setShowFalseNegativeForm(false)}
+                    disabled={submittingFalseNegative}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    className="txn-btn txn-btn-danger"
+                    onClick={handleReportFalseNegative}
+                    disabled={submittingFalseNegative || falseNegativeReason.trim().length < 10}
+                  >
+                    {submittingFalseNegative ? "Melaporkan..." : "Konfirmasi False Negative"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

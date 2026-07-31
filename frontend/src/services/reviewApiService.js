@@ -138,8 +138,18 @@ export const submitReview = async ({
  * @param {object} params - { page?: number, limit?: number }
  * @returns {Promise<{ total, page, limit, items }>}
  */
-export const fetchMyReviewHistory = async ({ page = 1, limit = 10 } = {}) => {
-  return api.get(`/reviews/my-history?page=${page}&limit=${limit}`);
+export const fetchMyReviewHistory = async ({
+  page = 1,
+  limit = 10,
+  decision = null,
+  search = "",
+  sortBy = "newest",
+  requestOptions = {},
+} = {}) => {
+  const params = new URLSearchParams({ page, limit, sort_by: sortBy });
+  if (decision && decision !== "all") params.set("decision", decision);
+  if (search.trim()) params.set("search", search.trim());
+  return api.get(`/reviews/my-history?${params.toString()}`, requestOptions);
 };
 
 /**
@@ -167,10 +177,16 @@ export const fetchReviewHistory = async ({
   page = 1,
   limit = 10,
   reviewedBy = null,
+  decision = null,
+  search = "",
+  sortBy = "newest",
+  requestOptions = {},
 } = {}) => {
-  const params = new URLSearchParams({ page, limit });
+  const params = new URLSearchParams({ page, limit, sort_by: sortBy });
   if (reviewedBy) params.set("reviewed_by", reviewedBy);
-  return api.get(`/reviews/history?${params.toString()}`);
+  if (decision && decision !== "all") params.set("decision", decision);
+  if (search.trim()) params.set("search", search.trim());
+  return api.get(`/reviews/history?${params.toString()}`, requestOptions);
 };
 
 export const fetchAnalystReviewHistory = async (
@@ -260,6 +276,7 @@ export const reportFalseNegative = async (transactionId, reason) => {
  */
 export const mapHistoryItem = (item) => ({
   id: item.id,
+  reviewId: item.id,
   transactionId: item.transaction_id
     ? `TRX-${String(item.transaction_id).padStart(6, "0")}`
     : `RVW-${String(item.id).padStart(6, "0")}`,
@@ -278,6 +295,7 @@ export const mapHistoryItem = (item) => ({
 
   // Override info
   isOverridden: item.is_overridden ?? false,
+  originalDecision: item.original_decision ?? null,
   overriddenBy: item.overridden_by ?? null,
   overriddenAt: item.overridden_at ?? null,
   overrideReason: item.override_reason ?? null,

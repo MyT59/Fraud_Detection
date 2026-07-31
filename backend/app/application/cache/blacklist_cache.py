@@ -21,11 +21,29 @@ Aman untuk single-process FastAPI (uvicorn workers=1).
 import logging
 import threading
 from typing import Any
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
 _lock: threading.Lock = threading.Lock()
 _blacklist_cache: list[dict[str, Any]] | None = None   # Cached plain blacklist records
+_blacklist_cache_revision: tuple[Any, int] | None = None
+
+
+def _get_revision(db) -> tuple[Any, int]:
+    """Detect changes made by another API worker before using local memory."""
+    from app.infrastructure.database.models.blacklist_items_model import BlacklistItem
+
+    updated_at, count = (
+        db.query(func.max(BlacklistItem.updated_at), func.count(BlacklistItem.id))
+        .filter(
+            BlacklistItem.is_active == True,
+            BlacklistItem.status == "APPROVED",
+            BlacklistItem.is_deleted == False,
+        )
+        .one()
+    )
+    return updated_at, int(count or 0)
 
 
 def get_cached_blacklist(db) -> list:
@@ -33,14 +51,16 @@ def get_cached_blacklist(db) -> list:
     Return semua BlacklistItem (active + approved) dari cache.
     Jika cache kosong, load dari DB dan simpan ke cache.
     """
-    global _blacklist_cache
+    global _blacklist_cache, _blacklist_cache_revision
 
-    if _blacklist_cache is not None:
+    current_revision = _get_revision(db)
+    if _blacklist_cache is not None and _blacklist_cache_revision == current_revision:
         logger.debug(f"[CACHE] BlacklistItem hit — {len(_blacklist_cache)} items")
         return _blacklist_cache
 
     with _lock:
-        if _blacklist_cache is not None:
+        current_revision = _get_revision(db)
+        if _blacklist_cache is not None and _blacklist_cache_revision == current_revision:
             return _blacklist_cache
 
         from app.infrastructure.database.models.blacklist_items_model import BlacklistItem
@@ -66,6 +86,7 @@ def get_cached_blacklist(db) -> list:
             }
             for item in rows
         ]
+        _blacklist_cache_revision = current_revision
         logger.info(f"[CACHE] BlacklistItem loaded from DB — {len(_blacklist_cache)} items")
 
     return _blacklist_cache
@@ -76,20 +97,21 @@ def invalidate_blacklist_cache():
     Kosongkan cache BlacklistItem.
     Dipanggil setiap kali ada add/approve/reject/delete blacklist item.
     """
-    global _blacklist_cache
+    global _blacklist_cache, _blacklist_cache_revision
     with _lock:
         _blacklist_cache = None
+        _blacklist_cache_revision = None
     logger.info("[CACHE] BlacklistItem cache invalidated")
 
 
-def find_match_from_cache(db, trx) -> Any | None:
+def find_matches_from_cache(db, trx) -> list[dict[str, Any]]:
     """
     Evaluasi blacklist sepenuhnya di memory — tanpa query DB.
 
     Logika sama persis dengan BlacklistRepository.find_match() tapi
     menggunakan cached list alih-alih query SQLAlchemy.
 
-    Return: BlacklistItem yang match, atau None.
+    Return seluruh blacklist item yang match.
     """
     from app.infrastructure.database.enums import BlacklistTypeEnum
 
@@ -134,12 +156,19 @@ def find_match_from_cache(db, trx) -> Any | None:
         check_map[BlacklistTypeEnum.ACCOUNT_NUMBER.value] = acc_nums
 
     if not check_map:
-        return None
+        return []
 
     # Evaluasi in-memory
+    matches = []
     for item in items:
         # Filter service scope
         if item["service_scope"] != "ALL" and item["service_scope"] != service:
+            continue
+
+        if service == "NUSABILL" and item["type"] not in {
+            BlacklistTypeEnum.CUSTOMER_ID.value,
+            BlacklistTypeEnum.IP_ADDRESS.value,
+        }:
             continue
 
         item_type  = item["type"]
@@ -155,9 +184,11 @@ def find_match_from_cache(db, trx) -> Any | None:
                 BlacklistTypeEnum.CUSTOMER_ID.value,
             ):
                 if item_value.lower() == candidate:
-                    return item
+                    matches.append(item)
+                    break
             else:
                 if item_value == candidate:
-                    return item
+                    matches.append(item)
+                    break
 
-    return None
+    return matches

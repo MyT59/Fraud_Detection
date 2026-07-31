@@ -296,7 +296,7 @@ const PatternDetailModal = ({
               >
                 {pct != null ? `${pct}%` : "—"}
               </span>
-              <span className="pdm-stat-lbl">Akurasi Deteksi</span>
+              <span className="pdm-stat-lbl">Precision Deteksi</span>
             </div>
             <div className="pdm-stat-div" />
             <div className="pdm-stat">
@@ -332,7 +332,7 @@ const PatternDetailModal = ({
             <AccuracyBar value={acc} />
             <div className="pdm-acc-meta">
               <span>
-                FP Rate:{" "}
+                False Discovery Rate:{" "}
                 <strong>
                   {pattern.false_positive_rate != null
                     ? `${Math.round(pattern.false_positive_rate * 100)}%`
@@ -343,7 +343,7 @@ const PatternDetailModal = ({
                 Min sample evaluasi: <strong>5</strong>
               </span>
               <span>
-                Cooldown reaktivasi: <strong>7 hari</strong>
+                Aktivasi ulang: <strong>persetujuan manager</strong>
               </span>
             </div>
           </div>

@@ -1,10 +1,29 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+
+BUSINESS_TIMEZONE = ZoneInfo("Asia/Jakarta")
+
+
+def _as_wib(value):
+    """Raw switching_logs timestamps from the existing table are often naive.
+
+    They represent the operational time entered by the simulator (WIB), not
+    UTC. Attach the business timezone before the shared transaction pipeline
+    sees them so it does not add another seven-hour shift.
+    """
+    if isinstance(value, datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=BUSINESS_TIMEZONE)
+    return value
+
+
 def map_agenusa(data: dict):
     return {
         "original_trx_id": data.get("rrn"),
         "service_source": "AGENUSA",
         "user_account_id": data.get("customer_ref_number"),
         "amount": float(data.get("amount", 0)),
-        "transaction_time": data.get("timestamp_db"),
+        "transaction_time": _as_wib(data.get("timestamp_db")),
         "transaction_status": "INGESTED",
         "terminal_id": data.get("terminal_id"),
         "merchant_id": data.get("merchant_id"),

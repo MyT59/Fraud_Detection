@@ -145,7 +145,7 @@ const PatternDiagnostics = () => {
               <div className="pdg-section">
                 <div className="pdg-section-title">
                   <i className="bi bi-graph-down-arrow text-danger"></i>
-                  Worst Accuracy
+                  Lowest Precision
                 </div>
                 <div className="pdg-table">
                   {worst.map((p) => (

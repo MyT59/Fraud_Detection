@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from app.infrastructure.database.models.admin_model import Admin
 from app.infrastructure.database.models.blacklist_items_model import BlacklistItem
 from app.infrastructure.database.models.retrain_history_model import RetrainHistory
 from app.infrastructure.database.models.ml_model_model import MLModel
+from app.infrastructure.database.models.global_rule_model import GlobalRule
 from app.infrastructure.ml.evaluation_loader import EvaluationLoader
 from app.infrastructure.repositories.report_repository import ReportRepository
 from app.infrastructure.storage.report_storage import ReportStorage
@@ -57,7 +59,7 @@ class ReportService:
     # ==========================================
 
     @log_performance
-    def generate_report(
+    def create_report(
         self,
         report_name: str,
         report_type: ReportTypeEnum,
@@ -134,39 +136,57 @@ class ReportService:
         self.db.commit()
         self.db.refresh(report)
 
-        # Update processing
+        return report
+
+    def process_report(self, report_id: UUID):
+        """Generate an already persisted report using this service's DB session."""
+        report = self.repo.get_by_id(report_id)
+        if not report:
+            return None
+
         self.repo.mark_processing(report)
         self.db.commit()
 
         # Dispatch
         try:
-            if report_type == ReportTypeEnum.TRANSACTION:
+            if report.report_type == ReportTypeEnum.TRANSACTION:
                 return self.generate_transaction_report(report)
 
-            elif report_type == ReportTypeEnum.FRAUD_DETECTION:
+            elif report.report_type == ReportTypeEnum.FRAUD_DETECTION:
                 return self.generate_fraud_detection_report(report)
 
-            elif report_type == ReportTypeEnum.ACTIVITY_LOG:
+            elif report.report_type == ReportTypeEnum.ACTIVITY_LOG:
                 return self.generate_activity_log_report(report)
 
-            elif report_type == ReportTypeEnum.FRAUD_PATTERN:
+            elif report.report_type == ReportTypeEnum.FRAUD_PATTERN:
                 return self.generate_fraud_pattern_report(report)
 
-            elif report_type == ReportTypeEnum.BLACKLIST:
+            elif report.report_type == ReportTypeEnum.BLACKLIST:
                 return self.generate_blacklist_report(report)
 
-            elif report_type == ReportTypeEnum.ML_PERFORMANCE:
+            elif report.report_type == ReportTypeEnum.ML_PERFORMANCE:
                 return self.generate_ml_performance_report(report)
 
-            elif report_type == ReportTypeEnum.MANUAL_REVIEW:
+            elif report.report_type == ReportTypeEnum.MANUAL_REVIEW:
                 return self.generate_manual_review_report(report)
 
-            raise ValueError(f"Unsupported report type: {report_type}")
+            elif report.report_type == ReportTypeEnum.ALERT:
+                return self.generate_alert_report(report)
+
+            elif report.report_type == ReportTypeEnum.GLOBAL_RULE:
+                return self.generate_global_rule_report(report)
+
+            raise ValueError(f"Unsupported report type: {report.report_type}")
 
         except Exception as e:
             self.repo.mark_failed(report, str(e))
             self.db.commit()
             raise
+
+    def generate_report(self, *args, **kwargs):
+        """Backward-compatible synchronous API for callers outside the HTTP route."""
+        report = self.create_report(*args, **kwargs)
+        return self.process_report(report.id)
 
     # ==========================================
     # STORAGE HELPER
@@ -488,13 +508,40 @@ class ReportService:
         total_review = trx_q().filter(
             Transaction.final_status.in_(["FLAGGED", "PENDING", "UNDER_REVIEW"])
         ).scalar() or 0
-        total_alerts  = self.db.query(func.count(FraudAlert.id)).scalar() or 0
-        total_reviews = self.db.query(func.count(ManualReview.id)).scalar() or 0
+        alert_query = self.db.query(func.count(FraudAlert.id)).join(
+            Transaction, FraudAlert.transaction_id == Transaction.id
+        ).filter(
+            FraudAlert.created_at >= report.date_from,
+            FraudAlert.created_at <= report.date_to,
+        )
+        review_query = self.db.query(func.count(ManualReview.id)).join(
+            Transaction, ManualReview.transaction_id == Transaction.id
+        ).filter(
+            ManualReview.created_at >= report.date_from,
+            ManualReview.created_at <= report.date_to,
+            ManualReview.is_deleted == False,
+        )
+        if service_source:
+            alert_query = alert_query.filter(Transaction.service_source == service_source)
+            review_query = review_query.filter(Transaction.service_source == service_source)
+
+        total_alerts = alert_query.scalar() or 0
+        total_reviews = review_query.scalar() or 0
 
         fraud_rate = round((total_fraud / total_transactions * 100) if total_transactions else 0, 2)
 
-        patterns = (
+        patterns_query = (
             self.db.query(FraudPattern)
+            .filter(
+                FraudPattern.is_deleted == False,
+                FraudPattern.created_at >= report.date_from,
+                FraudPattern.created_at <= report.date_to,
+            )
+        )
+        if service_source:
+            patterns_query = patterns_query.filter(FraudPattern.service_source == service_source)
+        patterns = (
+            patterns_query
             .order_by(FraudPattern.hit_count.desc())
             .limit(10)
             .all()
@@ -513,7 +560,7 @@ class ReportService:
             ["Total Alerts",       total_alerts],
             ["Total Reviews",      total_reviews],
             ["", ""],
-            ["Top 10 Patterns",    "Hit Count"],
+            ["Top 10 Patterns Created in Period", "Hit Count"],
         ]
 
         for pattern in patterns:
@@ -529,7 +576,11 @@ class ReportService:
     def generate_fraud_pattern_report(self, report: Report):
         filters = report.filter_criteria or {}
 
-        query = self.db.query(FraudPattern).filter(FraudPattern.is_deleted == False)
+        query = self.db.query(FraudPattern).filter(
+            FraudPattern.is_deleted == False,
+            FraudPattern.created_at >= report.date_from,
+            FraudPattern.created_at <= report.date_to,
+        )
 
         # Filter opsional
         if filters.get("risk_level"):
@@ -616,6 +667,107 @@ class ReportService:
                 for p in patterns
             ]
 
+        return self._export_and_finalize(report, headers, rows)
+
+    # ==========================================
+    # GLOBAL RULE CONFIGURATION REPORT
+    # ==========================================
+
+    @log_performance
+    def generate_global_rule_report(self, report: Report):
+        """Export Global Rule configuration and its current runtime effectiveness."""
+        filters = report.filter_criteria or {}
+        # This is a configuration snapshot. Do not hide an active rule merely
+        # because it was created outside an arbitrary reporting period.
+        query = self.db.query(GlobalRule).filter(GlobalRule.is_deleted == False)
+
+        if filters.get("service_scope"):
+            query = query.filter(GlobalRule.service_scope == filters["service_scope"])
+
+        if filters.get("is_active") is not None:
+            query = query.filter(GlobalRule.is_active == filters["is_active"])
+
+        rules = query.order_by(
+            GlobalRule.priority.desc(),
+            GlobalRule.rule_name.asc(),
+        ).all()
+
+        headers = [
+            "ID", "Rule Name", "Rule Key", "Service Scope", "Status",
+            "Action", "Severity", "Priority", "Rule Group", "Hit Count",
+            "Conditions", "Description", "Created At", "Last Updated",
+        ]
+        rows = [
+            [
+                rule.id,
+                rule.rule_name,
+                rule.rule_key,
+                rule.service_scope or "ALL",
+                "Active" if rule.is_active else "Inactive",
+                rule.action or "-",
+                rule.severity or "-",
+                rule.priority or 0,
+                rule.rule_group or "-",
+                rule.hit_count or 0,
+                json.dumps(rule.rule_config, ensure_ascii=False)
+                if rule.rule_config else "-",
+                rule.description or "-",
+                self._format_datetime(rule.created_at) if rule.created_at else "-",
+                self._format_datetime(rule.updated_at) if rule.updated_at else "-",
+            ]
+            for rule in rules
+        ]
+
+        return self._export_and_finalize(report, headers, rows)
+
+    # ==========================================
+    # ALERT REPORT
+    # ==========================================
+
+    @log_performance
+    def generate_alert_report(self, report: Report):
+        filters = report.filter_criteria or {}
+        query = self.db.query(FraudAlert).join(Transaction).filter(
+            FraudAlert.created_at >= report.date_from,
+            FraudAlert.created_at <= report.date_to,
+        )
+        if filters.get("service_source"):
+            query = query.filter(Transaction.service_source == filters["service_source"])
+
+        alerts = query.order_by(FraudAlert.created_at.desc()).all()
+        headers = (
+            ["Alert ID", "Transaction ID", "Type", "Severity", "Status", "Created At"]
+            if report.format == ReportFormatEnum.PDF
+            else [
+                "Alert ID", "Transaction ID", "Service Source", "Type", "Severity",
+                "Priority", "Status", "Title", "Message", "Created At", "Resolved At",
+            ]
+        )
+        rows = []
+        for alert in alerts:
+            common = [
+                alert.id,
+                alert.transaction_id,
+                alert.alert_type,
+                alert.severity,
+                self._get_enum_value(alert.status),
+            ]
+            if report.format == ReportFormatEnum.PDF:
+                rows.append(common + [self._format_datetime(alert.created_at)])
+            else:
+                rows.append([
+                    alert.id,
+                    alert.transaction_id,
+                    alert.transaction.service_source if alert.transaction else "-",
+                    alert.alert_type,
+                    alert.severity,
+                    alert.priority if alert.priority is not None else "-",
+                    self._get_enum_value(alert.status),
+                    alert.title or "-",
+                    alert.message or "-",
+                    self._format_datetime(alert.created_at),
+                    self._format_datetime(alert.resolved_at) if alert.resolved_at else "-",
+                ])
         return self._export_and_finalize(report, headers, rows)
 
     # ==========================================
@@ -848,7 +1000,11 @@ class ReportService:
     def generate_blacklist_report(self, report: Report):
         filters = report.filter_criteria or {}
 
-        query = self.db.query(BlacklistItem).filter(BlacklistItem.is_deleted == False)
+        query = self.db.query(BlacklistItem).filter(
+            BlacklistItem.is_deleted == False,
+            BlacklistItem.created_at >= report.date_from,
+            BlacklistItem.created_at <= report.date_to,
+        )
 
         if filters.get("type"):
             query = query.filter(BlacklistItem.type == filters["type"])

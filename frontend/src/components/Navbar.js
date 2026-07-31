@@ -38,7 +38,7 @@ const Navbar = ({ onToggleSidebar }) => {
   // Polling alert count (badge)
   const refreshCount = useCallback(async () => {
     try {
-      const res = await fetchAlertCount();
+      const res = await fetchAlertCount(undefined, true);
       setAlertCount(res?.data?.count ?? 0);
     } catch {
       // Silent fail — badge tidak kritis

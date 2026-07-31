@@ -9,6 +9,7 @@ import useRole from "../hooks/useRole";
 import {
   fetchMyReviewHistory,
   fetchMyReviewMetrics,
+  fetchReviewHistory,
   mapHistoryItem,
 } from "../services/reviewApiService";
 import "./ReviewHistory.css";
@@ -24,6 +25,9 @@ const ReviewHistory = () => {
   const [metrics, setMetrics] = useState(null);
 
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [decision, setDecision] = useState("all");
+  const [sortKey, setSortKey] = useState("createdAt-desc");
   const [totalItems, setTotalItems] = useState(0);
   const LIMIT = 10;
 
@@ -47,16 +51,17 @@ const ReviewHistory = () => {
       setLoading(true);
       try {
         let data;
+        const sortBy = sortKey === "createdAt-asc" ? "oldest" : "newest";
         if (isFraudAnalyst) {
-          data = await fetchMyReviewHistory({ page: targetPage, limit: LIMIT });
-        } else {
-          const params = new URLSearchParams({
-            page: targetPage,
-            limit: LIMIT,
+          data = await fetchMyReviewHistory({
+            page: targetPage, limit: LIMIT, decision, search, sortBy,
+            requestOptions: { signal: controller.signal },
           });
-          if (reviewedByParam) params.set("reviewed_by", reviewedByParam);
-          data = await api.get(`/reviews/history?${params.toString()}`, {
-            signal: controller.signal,
+        } else {
+          data = await fetchReviewHistory({
+            page: targetPage, limit: LIMIT, reviewedBy: reviewedByParam,
+            decision, search, sortBy,
+            requestOptions: { signal: controller.signal },
           });
         }
 
@@ -74,7 +79,7 @@ const ReviewHistory = () => {
         setLoading(false);
       }
     },
-    [isFraudAnalyst, reviewedByParam],
+    [isFraudAnalyst, reviewedByParam, decision, search, sortKey],
   );
 
   // ─── Fetch Metrics ─────────────────────────────────────────────
@@ -120,6 +125,13 @@ const ReviewHistory = () => {
     setPage(1);
     fetchHistory(1);
     fetchMetrics();
+  };
+
+  const handleFiltersChange = (next) => {
+    setSearch(next.search);
+    setDecision(next.decision);
+    setSortKey(next.sortKey);
+    setPage(1);
   };
 
   // ─── Render ────────────────────────────────────────────────────
@@ -188,6 +200,10 @@ const ReviewHistory = () => {
         onViewDetail={setSelectedItem}
         onRefresh={handleRefresh}
         apiError={apiError}
+        search={search}
+        decision={decision}
+        sortKey={sortKey}
+        onFiltersChange={handleFiltersChange}
       />
 
       {/* Modal Detail */}

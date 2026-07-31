@@ -85,16 +85,18 @@ async def run_live_simulation(domain: str, scenario: str | None):
 
             if item["src"] == "agenusa":
                 log = sw_repo.create(item["data"])
-                trx = process_transaction(map_agenusa(log.__dict__), db)
+                # Map the generator payload, not the ORM row. It preserves the
+                # timezone-aware timestamp instead of relying on a database
+                # driver's representation of DateTime values.
+                trx = process_transaction(map_agenusa(item["data"]), db)
                 if trx:
                     sw_repo.mark_processed(log.id)
             else:
                 raw_data = item["data"]
                 log = inv_repo.create(nusabill_to_db(raw_data))
-                # `channel` bukan kolom invoice_transactions. Sisipkan kembali
-                # saat mapping agar feature CHANNEL_SWITCH_TO_API dapat diuji.
-                mapped_data = {**log.__dict__, "channel": raw_data.get("channel", "API")}
-                trx = process_transaction(map_nusabill(mapped_data), db)
+                # Keep the source payload for mapping so both `channel` and
+                # timezone-aware bill/payment timestamps survive persistence.
+                trx = process_transaction(map_nusabill(raw_data), db)
                 if trx:
                     inv_repo.mark_processed(log.id)
 
@@ -263,6 +265,18 @@ def _apply_anomaly_nusabill(payload: dict, anomaly: str) -> dict:
 # MANUAL INPUT — SINGLE AGENUSA
 # ============================================================
 
+def _normalize_agenusa_transaction_semantics(payload: dict) -> dict:
+    """Keep simulator payloads aligned with Agenusa transaction semantics."""
+    msg_type = str(payload.get("msg_type") or "TRANSFER").upper()
+    payload["msg_type"] = msg_type
+    if msg_type != "TRANSFER":
+        payload["dest_account_number"] = None
+        payload["dest_bank_code"] = None
+    if msg_type == "CEK_SALDO":
+        payload["amount"] = 0
+    return payload
+
+
 async def manual_input_agenusa(payload: dict, db: Session) -> dict:
     """
     Flow: inject anomali (jika ada) → switching_logs → map → transactions_feed → ML.
@@ -274,6 +288,7 @@ async def manual_input_agenusa(payload: dict, db: Session) -> dict:
     payload_before_anomaly = payload.copy()
     if anomaly:
         payload = _apply_anomaly_agenusa(payload, anomaly)
+    payload = _normalize_agenusa_transaction_semantics(payload)
     anomaly_changes = _build_anomaly_changes(payload_before_anomaly, payload)
 
     # city/country bukan kolom switching_logs, tetapi tetap diperlukan mapper.
@@ -283,7 +298,10 @@ async def manual_input_agenusa(payload: dict, db: Session) -> dict:
     sw_repo = SwitchingLogRepository(db)
     raw_log = sw_repo.create(payload)
 
-    normalized = map_agenusa({**raw_log.__dict__, "city": city, "country": country})
+    # `timestamp_db` sent by the frontend is aware UTC (derived from a WIB
+    # input). Mapping the ORM row can lose that offset in some DB drivers and
+    # makes the displayed time appear seven hours earlier.
+    normalized = map_agenusa({**payload, "city": city, "country": country})
     trx = process_transaction(normalized, db)
 
     if not trx:
@@ -299,6 +317,7 @@ async def manual_input_agenusa(payload: dict, db: Session) -> dict:
         "original_trx_id": trx.original_trx_id,
         "service_source":  trx.service_source,
         "amount":          float(trx.amount),
+        "transaction_time": trx.transaction_time.isoformat() if trx.transaction_time else None,
         "risk_score":      trx.risk_score,
         "risk_level":      trx.risk_level,
         "final_status":    trx.final_status.value if trx.final_status else "FLAGGED",
@@ -331,7 +350,7 @@ async def manual_input_nusabill(payload: dict, db: Session) -> dict:
     inv_repo    = InvoiceTransactionRepository(db)
     raw_invoice = inv_repo.create(payload)
 
-    normalized = map_nusabill({**raw_invoice.__dict__, "channel": channel})
+    normalized = map_nusabill({**payload, "channel": channel})
     trx = process_transaction(normalized, db)
 
     if not trx:
@@ -347,6 +366,7 @@ async def manual_input_nusabill(payload: dict, db: Session) -> dict:
         "original_trx_id": trx.original_trx_id,
         "service_source":  trx.service_source,
         "amount":          float(trx.amount),
+        "transaction_time": trx.transaction_time.isoformat() if trx.transaction_time else None,
         "risk_score":      trx.risk_score,
         "risk_level":      trx.risk_level,
         "final_status":    trx.final_status.value if trx.final_status else "FLAGGED",
@@ -522,7 +542,7 @@ async def replay_transaction(
             "payment_amount":   total_tagihan,
             "tanggal_tagihan":  override_timestamp or datetime.now(timezone.utc),
             "tanggal_pembayaran": override_timestamp or datetime.now(timezone.utc),
-            "kode_pembayaran":  original.merchant_id,
+            "kode_pembayaran":  details.get("kode_pembayaran"),
             "sof":              details.get("sof", "VA_BANK"),
             "channel":          details.get("channel", "API"),
             "biaya_admin":      details.get("biaya_admin", 0),

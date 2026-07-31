@@ -19,6 +19,38 @@ def get_log_summary(
     return get_activity_log_summary(db, current_admin)
 
 
+@router.get("/audit", response_model=ActivityLogPaginatedResponse)
+def get_audit_logs(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    action_type: Optional[str] = Query(None),
+    action_types: Optional[List[str]] = Query(None),
+    severity: Optional[str] = Query(None),
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    email: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_admin=Depends(require_roles("SUPER_ADMIN")),
+):
+    """Administrative audit trail; intentionally restricted to Super Admin."""
+    combined_action_types = list(action_types or [])
+    if action_type and action_type not in combined_action_types:
+        combined_action_types.append(action_type)
+    return get_activity_logs(
+        db=db,
+        current_admin=current_admin,
+        skip=(page - 1) * limit,
+        limit=limit,
+        action_types=combined_action_types or None,
+        severity=severity,
+        start_date=start_date,
+        end_date=end_date,
+        email=email,
+        search=search,
+    )
+
+
 @router.get("/", response_model=ActivityLogPaginatedResponse)
 def get_logs(
     page: int = Query(1, ge=1),

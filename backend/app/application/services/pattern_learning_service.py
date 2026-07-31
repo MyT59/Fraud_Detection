@@ -21,19 +21,24 @@ logger = get_logger(__name__)
 # =========================
 # CONFIG THRESHOLDS
 # =========================
-TIME_WINDOW        = 5
-MIN_SUPPORT        = 3
-VELOCITY_THRESHOLD = 5
+TIME_WINDOW        = 5  # minutes
+MIN_SUPPORT        = 3  # minimum number of transactions to consider a pattern
+VELOCITY_THRESHOLD = 5  # transactions in TIME_WINDOW minutes
 AMOUNT_THRESHOLD   = 5_000_000
-FAN_IN_THRESHOLD   = 10
-FAN_OUT_THRESHOLD  = 20
+FAN_IN_THRESHOLD   = 10 # account number
+FAN_OUT_THRESHOLD  = 20 # customer
 
 
 @log_performance(label="PatternLearning.generate_patterns_from_reviews")
 def generate_patterns_from_reviews(db):
     reviews_with_trx = db.query(ManualReview, Transaction).join(
         Transaction, ManualReview.transaction_id == Transaction.id
-    ).filter(ManualReview.decision == "FRAUD").limit(100).all()
+    ).filter(
+        ManualReview.decision == "FRAUD"
+    ).order_by(
+        ManualReview.created_at.desc(),
+        ManualReview.id.desc(),
+    ).limit(100).all()
 
     if not reviews_with_trx:
         return []
@@ -76,12 +81,12 @@ def generate_patterns_from_reviews(db):
             amount_counter[key] = amount_counter.get(key, 0) + 1
 
         # 3. FAN-IN
-        terminal_id = details.get("terminal_id")
+        terminal_id = trx.terminal_id
         if terminal_id:
             distinct_accounts = db.query(
                 func.count(distinct(Transaction.transaction_details["issuer_account_number"].astext))
             ).filter(
-                Transaction.transaction_details["terminal_id"].astext == terminal_id,
+                Transaction.terminal_id == terminal_id,
                 Transaction.transaction_time >= time_threshold,
                 Transaction.transaction_time <= trx.transaction_time
             ).scalar() or 0
@@ -131,7 +136,7 @@ def generate_patterns_from_reviews(db):
                 Transaction.transaction_details["issuer_account_number"].astext == account_number,
                 Transaction.transaction_time >= time_threshold,
                 Transaction.transaction_time <= trx.transaction_time
-            ).order_by(Transaction.transaction_time.desc()).limit(10).all()
+            ).order_by(Transaction.transaction_time.asc()).limit(100).all()
 
             failure_count = 0
             success_found = False
@@ -225,8 +230,33 @@ def generate_patterns_from_reviews(db):
 # =========================
 # HASH GENERATOR & SAVER
 # =========================
+def _canonicalize_rules(value):
+    """Normalize semantically equivalent rule JSON before hashing."""
+    if isinstance(value, list):
+        return [_canonicalize_rules(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    normalized = {key: _canonicalize_rules(item) for key, item in value.items()}
+    logic = str(normalized.get("logic", "")).upper()
+    conditions = normalized.get("conditions")
+    if logic in {"AND", "OR"} and isinstance(conditions, list):
+        normalized["conditions"] = sorted(
+            conditions,
+            key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")),
+        )
+    if normalized.get("operator") in {"IN", "NOT_IN"} and isinstance(normalized.get("value"), list):
+        normalized["value"] = sorted(
+            normalized["value"],
+            key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")),
+        )
+    return normalized
+
+
 def generate_rules_hash(rules: dict):
-    normalized = json.dumps(rules, sort_keys=True)
+    normalized = json.dumps(
+        _canonicalize_rules(rules), sort_keys=True, separators=(",", ":")
+    )
     return hashlib.md5(normalized.encode()).hexdigest()
 
 
@@ -259,7 +289,7 @@ def find_duplicate_pattern(
         return duplicate
 
     legacy_query = db.query(FraudPattern).filter(
-        FraudPattern.rules_hash.is_(None),
+        (FraudPattern.rules_hash.is_(None)) | (FraudPattern.rules_hash != rules_hash),
         FraudPattern.service_source == service_source,
         FraudPattern.is_deleted == False,
     )

@@ -46,7 +46,7 @@ from app.application.services.isolation_ml_service import (
     DOMAIN_DEFAULT_THRESHOLDS,
     get_available_domains,
 )
-from app.application.services.scheduler_service import run_sla_escalation_task, run_dataset_retention_task
+from app.application.services.scheduler_service import run_dataset_retention_task
 
 # INFRASTRUCTURE & MODELS
 from app.infrastructure.database.models.fraud_patterns_model import FraudPattern
@@ -70,22 +70,6 @@ async def lifespan(app: FastAPI):
     # Ambil instance scheduler service yang sedang berjalan
     scheduler_service = get_scheduler_service()
     
-    # ==========================================
-    # REGISTRASI SLA ESCALATION ENGINE
-    # ==========================================
-    try:
-        scheduler_service.scheduler.add_job(
-            func=run_sla_escalation_task,
-            trigger="interval",
-            minutes=5,  # ⏱️ Mesin akan otomatis menyapu database setiap 5 menit
-            id="sla_escalation_job",
-            replace_existing=True,
-            name="SLA Alert Escalation Patrol"
-        )
-        print("🚀 [System] SLA Escalation Engine aktif (Patroli setiap 5 menit). ✅")
-    except Exception as e:
-        print(f"❌ [System] Gagal mendaftarkan SLA Escalation Engine: {e}")
-
     # ==========================================
     # REGISTRASI DATASET RETENTION JOB
     # ==========================================

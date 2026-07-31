@@ -42,6 +42,7 @@ class ReportRepository:
         self,
         report_type=None,
         status=None,
+        format=None,
         page=1,
         limit=20,
     ):
@@ -63,6 +64,9 @@ class ReportRepository:
             query = query.filter(
                 Report.status == status
             )
+
+        if format:
+            query = query.filter(Report.format == format)
 
         total = query.count()
 

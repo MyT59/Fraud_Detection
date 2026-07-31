@@ -42,6 +42,8 @@ const TabMyQueue = ({ onRefreshMetrics }) => {
   const [apiError, setApiError] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [query, setQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState("ALL");
 
@@ -50,8 +52,9 @@ const TabMyQueue = ({ onRefreshMetrics }) => {
       try {
         setLoading(true);
         setApiError(false);
-        const response = await fetchMyQueue({ page: 1, limit: 50 });
+        const response = await fetchMyQueue({ page, limit: 20 });
         setAlerts(extractItems(response).map(mapMyQueueAlert));
+        setTotal(response?.total ?? 0);
       } catch (err) {
         console.error("[TabMyQueue]", err.message);
         setApiError(true);
@@ -61,7 +64,7 @@ const TabMyQueue = ({ onRefreshMetrics }) => {
       }
     };
     load();
-  }, [refreshKey]);
+  }, [refreshKey, page]);
 
   const handleReview = useCallback(
     async (alert, decision, confidence, notes) => {
@@ -334,6 +337,28 @@ const TabMyQueue = ({ onRefreshMetrics }) => {
               );
             })()
           ))}
+        </div>
+      )}
+
+      {total > 20 && (
+        <div className="review-pagination-row">
+          <button
+            className="page-btn nav"
+            disabled={page === 1}
+            onClick={() => setPage((current) => current - 1)}
+          >
+            <i className="bi bi-chevron-left" /> Sebelumnya
+          </button>
+          <span className="review-muted-cell">
+            Halaman {page} dari {Math.ceil(total / 20)}
+          </span>
+          <button
+            className="page-btn nav"
+            disabled={page >= Math.ceil(total / 20)}
+            onClick={() => setPage((current) => current + 1)}
+          >
+            Berikutnya <i className="bi bi-chevron-right" />
+          </button>
         </div>
       )}
 

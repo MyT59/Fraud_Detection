@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger, log_performance
@@ -31,7 +31,9 @@ def get_fraud_distribution(db: Session = Depends(get_db)):
 
 
 @router.get("/alerts/recent")
-def get_recent_alerts(db: Session = Depends(get_db)):
+def get_recent_alerts(
+    db: Session = Depends(get_db),
+):
     return DashboardService.get_recent_alerts(db)
 
 
@@ -77,9 +79,12 @@ def get_transaction_trend_detail(
     end: str = None,
     db: Session = Depends(get_db)
 ):
-    return DashboardService.get_transaction_trend_detail(
-        db,
-        range=range,
-        start=start,
-        end=end
-    )
+    try:
+        return DashboardService.get_transaction_trend_detail(
+            db,
+            range=range,
+            start=start,
+            end=end,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

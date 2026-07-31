@@ -82,9 +82,9 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapse }) => {
               },
             ]
           : []),
-        { path: "/audit-log", icon: "bi-journal-text", label: "Audit Log" },
         ...(isSuperAdmin
           ? [
+              { path: "/audit-log", icon: "bi-journal-text", label: "Audit Log" },
               {
                 path: "/retrain-schedule",
                 icon: "bi-cpu",

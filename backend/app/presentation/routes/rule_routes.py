@@ -20,6 +20,7 @@ from app.presentation.schemas.rule_schema import (
     RuleResponse,
     RuleBuilderRequest
 )
+from app.infrastructure.database.enums import ServiceScopeEnum, RuleSeverityEnum
 
 router = APIRouter(prefix="/rules", tags=["Rule Management"])
 
@@ -32,10 +33,10 @@ def create_rule_api(data: RuleCreate, db: Session = Depends(get_db),
 
 @router.get("/", response_model=list[RuleResponse])
 def get_rules_api(
-    service_scope: Optional[str] = Query(None),
+    service_scope: Optional[ServiceScopeEnum] = Query(None),
     is_active: Optional[bool] = Query(None),
     rule_group: Optional[str] = Query(None),
-    severity: Optional[str] = Query(None),
+    severity: Optional[RuleSeverityEnum] = Query(None),
     db: Session = Depends(get_db),
     current_admin=Depends(require_roles("SUPER_ADMIN", "RISK_MANAGER"))):
     filters = {

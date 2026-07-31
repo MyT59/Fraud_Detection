@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.infrastructure.database.enums import (
     ReportTypeEnum,
@@ -19,7 +19,7 @@ from app.infrastructure.database.enums import (
 # ==========================================
 
 class ReportGenerateRequest(BaseModel):
-    report_name: str
+    report_name: str = Field(min_length=1, max_length=255)
 
     report_type: ReportTypeEnum
     format: ReportFormatEnum
@@ -55,6 +55,36 @@ class ReportGenerateRequest(BaseModel):
 
     # filters - manual review
     reviewer_id: Optional[int] = None
+
+    @field_validator("report_name")
+    @classmethod
+    def validate_report_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Report name cannot be empty")
+        return value
+
+    @model_validator(mode="after")
+    def validate_date_range(self):
+        if self.date_from.tzinfo is None or self.date_from.utcoffset() is None:
+            raise ValueError("date_from must include a timezone offset")
+        if self.date_to.tzinfo is None or self.date_to.utcoffset() is None:
+            raise ValueError("date_to must include a timezone offset")
+        if self.date_from > self.date_to:
+            raise ValueError("date_to must be later than or equal to date_from")
+        if self.min_amount is not None and self.min_amount < 0:
+            raise ValueError("min_amount cannot be negative")
+        if self.max_amount is not None and self.max_amount < 0:
+            raise ValueError("max_amount cannot be negative")
+        if self.min_amount is not None and self.max_amount is not None and self.min_amount > self.max_amount:
+            raise ValueError("max_amount must be greater than or equal to min_amount")
+        if self.min_risk_score is not None and not 0 <= self.min_risk_score <= 100:
+            raise ValueError("min_risk_score must be between 0 and 100")
+        if self.max_risk_score is not None and not 0 <= self.max_risk_score <= 100:
+            raise ValueError("max_risk_score must be between 0 and 100")
+        if self.min_risk_score is not None and self.max_risk_score is not None and self.min_risk_score > self.max_risk_score:
+            raise ValueError("max_risk_score must be greater than or equal to min_risk_score")
+        return self
 
 
 # ==========================================
@@ -139,3 +169,4 @@ class FraudAnalystOptionResponse(BaseModel):
     is_active: bool = True
 
     model_config = ConfigDict(from_attributes=True)
+

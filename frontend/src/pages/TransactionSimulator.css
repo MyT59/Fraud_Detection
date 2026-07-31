@@ -874,6 +874,11 @@
   max-width: 82px;
 }
 
+.sim-bulk-table .sim-response-select {
+  min-width: 172px;
+  max-width: 172px;
+}
+
 .sim-bulk-table .sim-time-input {
   min-width: 170px;
 }
@@ -894,6 +899,51 @@
 
 .sim-row-delete:disabled {
   opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.sim-bulk-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 16px;
+  border-top: 1px solid #e2e8f0;
+  background: #fafafa;
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.sim-bulk-pagination__controls {
+  display: flex;
+  gap: 4px;
+}
+
+.sim-bulk-pagination__controls button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  font: inherit;
+}
+
+.sim-bulk-pagination__controls button:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.sim-bulk-pagination__controls button.active {
+  border-color: #e11d48;
+  background: #e11d48;
+  color: #fff;
+}
+
+.sim-bulk-pagination__controls button:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 

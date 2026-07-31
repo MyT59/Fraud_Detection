@@ -1,4 +1,5 @@
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -97,7 +98,7 @@ class PdfExporter:
                 else:
                     current_style = style_cell
 
-                formatted_row.append(Paragraph(cell_text, current_style))
+                formatted_row.append(Paragraph(escape(cell_text), current_style))
 
             table_data.append(formatted_row)
 
