@@ -297,6 +297,15 @@ class MLRealtimeService:
         logger.debug(f"[ML_REALTIME] tx_id={transaction_id} scoring_result={scoring_result}")
 
         if not scoring_result:
+            # Jangan biarkan UI menampilkan status queued selamanya bila model,
+            # snapshot, atau fitur gagal diproses di worker.
+            failed_breakdown = dict(transaction.score_breakdown or {})
+            failed_breakdown.update({
+                "ml_runtime_status": "FAILED",
+                "ml_failed_at": datetime.now(timezone.utc).isoformat(),
+            })
+            transaction.score_breakdown = failed_breakdown
+            self.db.commit()
             logger.error(f"[ML_REALTIME] tx_id={transaction_id} ML scoring gagal — status=ml_error")
             return {
                 "transaction_id": transaction_id,
@@ -408,6 +417,11 @@ class MLRealtimeService:
                 "ml_processed_at": datetime.now(timezone.utc).isoformat(),
                 "ml_runtime_status": "PROCESSED",
                 "is_anomaly": is_anomaly,
+                # Level ML berasal dari threshold dinamis model hasil retrain.
+                # Simpan dengan nama eksplisit agar UI tidak menebak dari
+                # anomaly score menggunakan batas angka statis.
+                "ml_risk_level": risk_level,
+                # Kompatibilitas untuk data/konsumen lama.
                 "risk_level": risk_level,
                 "patterns": patterns,
                 "thresholds": thresholds,
@@ -620,6 +634,9 @@ class MLRealtimeService:
                 "ml_processed_at": datetime.now(timezone.utc).isoformat(),
                 "ml_runtime_status": "PROCESSED",
                 "is_anomaly": is_anomaly,
+                # Level ML berasal dari threshold dinamis model hasil retrain.
+                "ml_risk_level": risk_level,
+                # Kompatibilitas untuk data/konsumen lama.
                 "risk_level": risk_level,
                 "patterns": patterns,
                 "thresholds": thresholds,
@@ -777,7 +794,7 @@ async def process_transaction_ml_async(
 │  ML REALTIME SERVICE - INTEGRATION GUIDE                   │
 └─────────────────────────────────────────────────────────────┘
 
-🔥 CRITICAL: ASYNCIO.TO_THREAD() WAJIB DIGUNAKAN!
+CRITICAL: ASYNCIO.TO_THREAD() WAJIB DIGUNAKAN!
 
 Masalah:
   - Isolation Forest scikit-learn bersifat BLOCKING (synchronous)
@@ -806,9 +823,9 @@ async def score_transaction(
     \"\"\"
     Real-time ML scoring endpoint.
     
-    ✅ Async → asyncio.to_thread() → blocking ML dipindahkan ke thread pool
-    ✅ Event loop tetap responsive
-    ✅ Multiple requests bisa diproses concurrent
+    Async → asyncio.to_thread() → blocking ML dipindahkan ke thread pool
+    Event loop tetap responsive
+    Multiple requests bisa diproses concurrent
     \"\"\"
     result = await process_transaction_ml_async(db, tx_id)
     return result
@@ -847,7 +864,7 @@ async def create_transaction(
     return {"transaction_id": tx.id, "status": "queued_for_scoring"}
 
 
-█ ===== CONTOH 3: CELERY TASK (Future) =====
+ ===== CONTOH 3: CELERY TASK (Future) =====
 
 from celery import shared_task
 from app.application.services.ml_realtime_service import process_transaction_ml
@@ -916,8 +933,8 @@ Untuk debugging:
 █ ===== PERFORMANCE TIPS =====
 
 1. Jangan panggil _run_ml_scoring_sync() langsung dari async context!
-   ❌ BAD:  await _run_ml_scoring_sync(tx_id)
-   ✅ GOOD: await asyncio.to_thread(_run_ml_scoring_sync, tx_id)
+   BAD:  await _run_ml_scoring_sync(tx_id)
+   GOOD: await asyncio.to_thread(_run_ml_scoring_sync, tx_id)
 
 2. Gunakan BackgroundTasks atau Queue jika ingin non-blocking:
    background_tasks.add_task(process_transaction_ml, db, tx_id)

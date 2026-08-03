@@ -290,7 +290,13 @@ const SnapshotSection = ({ snap }) => {
           {[
             ["Rule", snap.score_breakdown.rule_score, "#16a34a"],
             ["Pattern", snap.score_breakdown.pattern_score, "#d97706"],
-            ["ML", snap.score_breakdown.ml_score, "#7c3aed"],
+            [
+              "ML Impact",
+              snap.score_breakdown.ml_risk_contribution != null
+                ? `+${snap.score_breakdown.ml_risk_contribution}`
+                : null,
+              "#7c3aed",
+            ],
             ["Final", snap.score_breakdown.final_score, "#dc2626"],
           ]
             .filter(([, v]) => v != null && !isNaN(v))

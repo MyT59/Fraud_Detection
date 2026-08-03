@@ -390,7 +390,7 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose, onFalseNegativeR
                       <Field label="Terminal ID" value={t.terminal_id} mono />
                       <Field label="IP Address" value={t.ip_address} mono />
                       <Field
-                        label="Lokasi"
+                        label={t.service_source === "NUSABILL" ? "Lokasi IP" : "Lokasi"}
                         value={
                           [t.city, t.country].filter(Boolean).join(", ") || "—"
                         }
@@ -433,7 +433,21 @@ const TransactionDetailModal = ({ transaction, isOpen, onClose, onFalseNegativeR
                           </div>
                         ))}
                       </div>
-                      {t.score_breakdown.ml_score != null && (
+                      {t.score_breakdown.ml_runtime_status === "QUEUED" ? (
+                        <div className="tdm-score-ml-note">
+                          <i className="bi bi-hourglass-split" />
+                          <span>
+                            ML scoring sedang diproses. Refresh detail transaksi beberapa saat lagi untuk melihat hasilnya.
+                          </span>
+                        </div>
+                      ) : t.score_breakdown.ml_runtime_status === "FAILED" ? (
+                        <div className="tdm-score-ml-note">
+                          <i className="bi bi-exclamation-triangle" />
+                          <span>
+                            ML scoring gagal diproses. Periksa log backend atau jalankan rescore bila diperlukan.
+                          </span>
+                        </div>
+                      ) : t.score_breakdown.ml_score != null && (
                         <div className="tdm-score-ml-note">
                           <i className="bi bi-info-circle" />
                           <span>

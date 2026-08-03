@@ -43,6 +43,7 @@ const FIELD_LABEL = {
   tx_count: "Jumlah transaksi",
   distinct_account_count: "Jumlah kartu berbeda",
   distinct_customer_count: "Jumlah customer berbeda",
+  distinct_customer_name_count: "Konflik nama pada customer ID",
   failure_count: "Jumlah gagal",
   has_success_after_failure: "Ada sukses setelah gagal",
   chain_decline_success_burst: "Chain decline→sukses burst",

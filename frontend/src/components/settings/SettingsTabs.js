@@ -20,12 +20,6 @@ const SettingsTabs = ({ activeTab, onTabChange, onLogout }) => {
       label: "Notifications",
       description: "Preferensi notifikasi",
     },
-    {
-      id: "system",
-      icon: "sliders",
-      label: "System",
-      description: "Pengaturan sistem",
-    },
   ];
 
   return (

@@ -15,7 +15,8 @@ STATIC_FIELDS = {
 }
 WINDOW_FIELDS = {
     "tx_count", "total_amount", "distinct_account_count",
-    "distinct_customer_count", "failure_count", "has_success_after_failure",
+    "distinct_customer_count", "distinct_customer_name_count",
+    "failure_count", "has_success_after_failure",
     "chain_decline_success_burst",
 }
 KNOWN_FIELDS = STATIC_FIELDS | WINDOW_FIELDS

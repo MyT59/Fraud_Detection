@@ -10,6 +10,7 @@ from app.application.services.report_exporters.csv_exporter import CsvExporter
 from app.application.services.report_exporters.excel_exporter import ExcelExporter
 from app.application.services.report_exporters.pdf_exporter import PdfExporter
 from app.infrastructure.database.enums import (
+    PatternSourceEnum,
     ReportFormatEnum,
     ReportStatusEnum,
     ReportTypeEnum,
@@ -896,33 +897,56 @@ class ReportService:
         rows.append(["", ""])
 
         # ==========================================
-        # 3. PATTERN DISCOVERY
+        # 3. ML PATTERN DISCOVERY
         # ==========================================
-        rows.append(["=== 3. PATTERN DISCOVERY ===", ""])
+        rows.append(["=== 3. ML PATTERN DISCOVERY ===", ""])
 
+        # Laporan performa ML tidak boleh mengatribusikan pattern yang dibuat
+        # melalui form manual ataupun generator Manual Review sebagai hasil
+        # discovery model. Section ini khusus pattern yang dibuat Retrain ML.
+        discovery_sources = [PatternSourceEnum.RETRAIN_ML]
         top_patterns = (
             self.db.query(FraudPattern)
+            .filter(
+                FraudPattern.pattern_source.in_(discovery_sources),
+                FraudPattern.is_deleted == False,
+            )
             .order_by(FraudPattern.hit_count.desc())
             .limit(10)
             .all()
         )
 
-        rows.append(["Top 10 Patterns | Category | Risk Score | Hit Count", ""])
-        for p in top_patterns:
-            rows.append([
-                f"  {p.pattern_name}",
-                f"category={p.pattern_category or '-'}, risk_score={p.risk_score or 0}, hits={p.hit_count or 0}",
-            ])
+        rows.append(["Top 10 ML-Discovered Patterns | Category | Risk Score | Hit Count", ""])
+        if top_patterns:
+            for p in top_patterns:
+                rows.append([
+                    f"  {p.pattern_name}",
+                    f"category={p.pattern_category or '-'}, "
+                    f"risk_score={p.risk_score or 0}, hits={p.hit_count or 0}",
+                ])
+        else:
+            rows.append(["  (belum ada pattern hasil Retrain ML)", ""])
         rows.append(["", ""])
 
-        total_patterns_db = self.db.query(func.count(FraudPattern.id)).scalar() or 0
-        active_patterns_db = (
+        total_patterns_db = (
             self.db.query(func.count(FraudPattern.id))
-            .filter(FraudPattern.is_active == True)
+            .filter(
+                FraudPattern.pattern_source.in_(discovery_sources),
+                FraudPattern.is_deleted == False,
+            )
             .scalar() or 0
         )
-        rows.append(["Total Patterns in System", total_patterns_db])
-        rows.append(["Active Patterns", active_patterns_db])
+        active_patterns_db = (
+            self.db.query(func.count(FraudPattern.id))
+            .filter(
+                FraudPattern.pattern_source.in_(discovery_sources),
+                FraudPattern.is_deleted == False,
+                FraudPattern.is_active == True,
+            )
+            .scalar() or 0
+        )
+        rows.append(["Total ML-Discovered Patterns", total_patterns_db])
+        rows.append(["Active ML-Discovered Patterns", active_patterns_db])
         rows.append(["", ""])
 
         # ==========================================

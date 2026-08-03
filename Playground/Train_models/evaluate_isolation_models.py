@@ -27,7 +27,10 @@ MODELS_DIR = ROOT_DIR / "Playground" / "models"
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from backend.app.infrastructure.ml.feature_builder import build_features
+from backend.app.infrastructure.ml.feature_builder import (
+    align_runtime_features,
+    build_features,
+)
 from backend.app.infrastructure.ml.model_loader import DOMAIN_ISO_CONFIG, load_isolation_model, load_isolation_meta
 
 
@@ -84,6 +87,10 @@ def evaluate_domain(domain: str, data_path: Path) -> dict[str, Any]:
     df = pd.read_csv(data_path)
     feat = build_features(domain, df)
     x = feat.drop(columns=["IS_FRAUD", *config["drop_cols"]], errors="ignore")
+    # Gunakan schema yang sama dengan training dan realtime scoring. Tanpa
+    # alignment ini evaluator masih mengirim kolom dataset mentah yang tidak
+    # dipakai model hasil retrain terbaru.
+    x = align_runtime_features(domain, x)
 
     # Check if labeled data exists
     has_labels = "IS_FRAUD" in feat.columns and feat["IS_FRAUD"].sum() > 0

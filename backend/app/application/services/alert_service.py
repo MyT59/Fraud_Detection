@@ -344,12 +344,14 @@ def get_alert_detail_service(db, alert_id: int):
         raise HTTPException(status_code=404, detail="Alert tidak ditemukan")
 
     ml_score   = None
+    ml_risk_level = None
     is_anomaly = getattr(a.transaction, "is_flagged_ml", False) if a.transaction else False
     ml_patterns = []
 
     if a.transaction and a.transaction.score_breakdown:
         breakdown   = a.transaction.score_breakdown or {}
         ml_score    = breakdown.get("ml_score")
+        ml_risk_level = breakdown.get("ml_risk_level") or breakdown.get("risk_level")
         ml_patterns = breakdown.get("patterns", [])
 
     txn_data = None
@@ -423,7 +425,8 @@ def get_alert_detail_service(db, alert_id: int):
         "title": format_title(a), "message": a.message, "created_at": a.created_at,
         "claimed_at": a.claimed_at, "claimed_by": a.claimed_by, "claimed_by_name": claimed_by_name,
         "resolved_at": a.resolved_at, "resolved_by": a.resolved_by, "resolved_by_name": resolved_by_name,
-        "ml_score": ml_score, "is_anomaly": is_anomaly, "ml_patterns": ml_patterns,
+        "ml_score": ml_score, "ml_risk_level": ml_risk_level,
+        "is_anomaly": is_anomaly, "ml_patterns": ml_patterns,
         "review": review_data, "transaction": txn_data
     }
 

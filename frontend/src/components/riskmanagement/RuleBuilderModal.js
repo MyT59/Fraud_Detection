@@ -25,6 +25,18 @@ const FLD = {
     },
   ],
   AGENUSA: [
+    {
+      l: "Kode pemrosesan",
+      f: "transaction_details.processing_code",
+      t: "sel",
+      o: [
+        { value: "200000", label: "Transfer - 200000" },
+        { value: "010000", label: "Tarik Saldo - 010000" },
+        { value: "310000", label: "Cek Saldo - 310000" },
+      ],
+      j: true,
+      d: "Processing Code",
+    },
     { l: "ID agen / merchant", f: "merchant_id", t: "text", d: "Merchant ID" },
     { l: "ID terminal / EDC", f: "terminal_id", t: "text", d: "Terminal ID" },
     { l: "Nomor rekening asal", f: "account_number", t: "text", d: "Source Account" },
@@ -127,6 +139,11 @@ const RULE_GROUPS_BY_SCOPE = {
 // Sentinel value for "custom input" option
 const CUSTOM_VALUE = "__CUSTOM__";
 
+const optionValue = (option) =>
+  typeof option === "string" ? option : option.value;
+const optionLabel = (option) =>
+  typeof option === "string" ? option : option.label;
+
 function getFields(scope) {
   const base = [...FLD.ALL];
   if (scope === "AGENUSA") return [...base, ...FLD.AGENUSA];
@@ -156,6 +173,12 @@ function smartParseValue(raw) {
   if (trimmed.toLowerCase() === "false") return false;
   if (trimmed !== "" && !isNaN(trimmed)) return Number(trimmed);
   return raw;
+}
+
+function parseRuleValue(field, raw, scope) {
+  // Processing Code is an identifier, not a numeric amount. Keep its leading
+  // zeroes intact (for example, "010000" for Tarik Saldo).
+  return fieldMeta(field, scope)?.t === "number" ? smartParseValue(raw) : raw;
 }
 
 const Combobox = ({ options, value, onChange, placeholder, className }) => {
@@ -314,7 +337,6 @@ const ConditionRow = ({
   const fields = getFields(scope);
   const meta = fieldMeta(cond.field, scope);
   const effectiveMeta = meta || (cond.field ? { t: "text" } : null);
-  const isJsonb = meta?.j || (cond.field && cond.field.includes("."));
   const timestampHint = getTimestampHint(cond.field);
   const supportsOrderedComparison =
     meta?.t === "number" || cond.field === "transaction_time";
@@ -326,7 +348,7 @@ const ConditionRow = ({
       ...cond,
       field: f,
       operator: newMeta?.t === "number" || f === "transaction_time" ? cond.operator : "=",
-      value: newMeta?.t === "sel" ? newMeta.o[0] || "" : "",
+      value: newMeta?.t === "sel" ? optionValue(newMeta.o[0]) || "" : "",
     });
   };
 
@@ -370,8 +392,8 @@ const ConditionRow = ({
               onChange={(e) => onChange({ ...cond, value: e.target.value })}
             >
               {effectiveMeta.o.map((o) => (
-                <option key={o} value={o}>
-                  {o}
+                <option key={optionValue(o)} value={optionValue(o)}>
+                  {optionLabel(o)}
                 </option>
               ))}
             </select>
@@ -411,11 +433,6 @@ const ConditionRow = ({
           </button>
         )}
       </div>
-      {isJsonb && (
-        <div className="rbm-jsonb-badge">
-          <i className="bi bi-check2" /> JSONB - dot-notation traversal aktif
-        </div>
-      )}
     </div>
   );
 };
@@ -832,14 +849,14 @@ const RuleBuilderModal = ({
     conditionsValid() &&
     !keyError;
 
-  // Req 3: smart type parser for value
+  // Parse only numeric fields; textual identifiers must stay strings.
   // Req 4: wrap array under {AND: [...]} or {OR: [...]} key
   const buildRuleConfig = () => {
     if (mode === "simple") {
       const mapped = simpleConditions.map((c) => ({
         field: c.field,
         operator: c.operator,
-        value: smartParseValue(c.value),
+        value: parseRuleValue(c.field, c.value, form.service_scope),
       }));
 
       if (mapped.length === 1) {
@@ -854,7 +871,10 @@ const RuleBuilderModal = ({
         [logic]: (g[logic] || []).map((item) =>
           "AND" in item || "OR" in item
             ? parseGroup(item)
-            : { ...item, value: smartParseValue(item.value) },
+            : {
+                ...item,
+                value: parseRuleValue(item.field, item.value, form.service_scope),
+              },
         ),
       };
     };
@@ -875,26 +895,6 @@ const RuleBuilderModal = ({
     if (form.description.trim()) p.description = form.description.trim();
     return p;
   };
-
-  const hasDotFields = () => {
-    const fields =
-      mode === "simple"
-        ? simpleConditions.map((c) => c.field)
-        : (() => {
-            const collect = (g) => {
-              const logic = g.AND ? "AND" : "OR";
-              return (g[logic] || []).flatMap((item) =>
-                "AND" in item || "OR" in item ? collect(item) : [item.field],
-              );
-            };
-            return collect(advancedGroup);
-          })();
-    return fields.filter(
-      (f) => fieldMeta(f, form.service_scope)?.j || (f && f.includes(".")),
-    );
-  };
-
-  const dotFields = hasDotFields();
 
   const execSave = async () => {
     const p = buildPayload();
@@ -1071,9 +1071,7 @@ const RuleBuilderModal = ({
                   <option value="NUSABILL">NUSABILL - Tagihan &amp; VA</option>
                 </select>
                 <div className="rbm-field-hint">
-                  Field kondisi akan disaring sesuai layanan. Field teknis
-                  mentah tetap bisa dipakai lewat dot-notation kustom jika
-                  benar-benar dibutuhkan.
+                  Field kondisi akan disaring sesuai layanan.
                 </div>
               </div>
 
@@ -1100,22 +1098,6 @@ const RuleBuilderModal = ({
             <span>Penyusun kondisi risiko</span>
           </div>
           <div className="rbm-card">
-            {dotFields.length > 0 && (
-              <div className="rbm-jsonb-banner">
-                <i className="bi bi-check-circle-fill" />
-                <div>
-                  Field{" "}
-                  <strong>
-                    {dotFields.map((f) => (
-                      <code key={f}>{f}</code>
-                    ))}
-                  </strong>{" "}
-                  membaca JSONB nested - dot-notation traversal sudah aktif di
-                  engine.
-                </div>
-              </div>
-            )}
-
             <div className="rbm-mode-tabs">
               <button
                 className={`rbm-mode-tab ${mode === "simple" ? "active" : ""}`}

@@ -469,33 +469,6 @@
   gap: 4px;
 }
 
-/* ─── JSONB banner ──────────────────────────────────────────────────────────── */
-.rbm-jsonb-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-radius: 8px;
-  padding: 9px 12px;
-  font-size: 0.785rem;
-  color: #15803d;
-  font-weight: 500;
-  line-height: 1.5;
-}
-.rbm-jsonb-banner i {
-  font-size: 0.875rem;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-.rbm-jsonb-banner code {
-  font-family: "Courier New", monospace;
-  font-size: 0.72rem;
-  background: #dcfce7;
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-
 /* ─── Mode tabs ─────────────────────────────────────────────────────────────── */
 .rbm-mode-tabs {
   display: flex;
@@ -575,19 +548,6 @@
 }
 .rbm-remove-btn--group {
   margin-left: auto;
-}
-
-.rbm-jsonb-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.69rem;
-  color: #15803d;
-  background: #f0fdf4;
-  border-radius: 4px;
-  padding: 2px 6px;
-  margin-top: 6px;
-  font-weight: 500;
 }
 
 .rbm-simple-footer {

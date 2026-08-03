@@ -73,7 +73,7 @@ def _apply_hard_block(
     score_breakdown.update({
         "rule_score": rule_score or 0,
         "pattern_score": 0,
-        "ml_score": 0,
+        "ml_runtime_status": "QUEUED",
         "final_score": trx.risk_score,
         "rule_names": [v["name"] for v in violations if v.get("type") == "RULE"],
         "pattern_names": [],
@@ -464,7 +464,7 @@ def process_transaction(data: dict, db: Session):
         trx.score_breakdown = {
             "rule_score":    rule_score,
             "pattern_score": pattern_score,
-            "ml_score":      ml_score,
+            "ml_runtime_status": "QUEUED",
             "final_score":   trx.risk_score,
             "pattern_names": [v["name"] for v in violations if v["type"] == "PATTERN"],
             "pattern_ids":   pattern_ids,

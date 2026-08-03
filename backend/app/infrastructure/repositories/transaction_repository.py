@@ -386,13 +386,21 @@ class TransactionRepository:
         query = self.db.query(Transaction)
 
         if search:
+            # Identitas tertentu bersifat spesifik layanan dan disimpan di
+            # transaction_details. Satu pencarian mencakup kedua layanan.
             query = query.filter(
                 or_(
                     Transaction.original_trx_id.ilike(f"%{search}%"),
                     Transaction.user_account_id.ilike(f"%{search}%"),
                     Transaction.account_number.ilike(f"%{search}%"),
                     Transaction.merchant_id.ilike(f"%{search}%"),
+                    Transaction.terminal_id.ilike(f"%{search}%"),
                     Transaction.ip_address.ilike(f"%{search}%"),
+                    Transaction.transaction_details["nama_customer"].astext.ilike(f"%{search}%"),
+                    Transaction.transaction_details["issuer_bank"].astext.ilike(f"%{search}%"),
+                    Transaction.transaction_details["kode_pembayaran"].astext.ilike(f"%{search}%"),
+                    # Format audit: "RULE:<nama> | PATTERN:<nama>".
+                    Transaction.violation_reason.ilike(f"%{search}%"),
                 )
             )
 

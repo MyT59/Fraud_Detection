@@ -174,7 +174,6 @@ def get_rule_weight(rule):
 def run_rule_engine(db, trx):
     violations     = []
     risk_score     = 0
-    rule_hit_count = 0
     rule_groups    = set()
     rule_actions   = []
 
@@ -220,8 +219,8 @@ def run_rule_engine(db, trx):
         action = normalize_rule_action(rule.action)
         violations.append({"type": "RULE", "name": rule.rule_name, "rule_id": rule.id})
         rule_actions.append(action)
-        rule_hit_count += 1
-        rule_groups.add(group)
+        if group:
+            rule_groups.add(group)
 
         log_severity = {
             "CRITICAL": SeverityLevelEnum.CRITICAL,
@@ -255,9 +254,12 @@ def run_rule_engine(db, trx):
         if action == "BLOCK":
             return violations, risk_score, rule_actions
 
-    if rule_hit_count >= 2: risk_score += 10
-    if rule_hit_count >= 3: risk_score += 20
-    if len(rule_groups) >= 2: risk_score += 10
+    # Reward independent fraud signals from explicitly configured groups.
+    # Rules in the same explicit group are already mutually exclusive above.
+    if len(rule_groups) >= 3:
+        risk_score += 20
+    elif len(rule_groups) >= 2:
+        risk_score += 10
 
     risk_score = min(risk_score, 100)
 

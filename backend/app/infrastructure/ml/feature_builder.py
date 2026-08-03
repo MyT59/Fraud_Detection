@@ -9,6 +9,59 @@ from ...core.logging import get_logger
 logger = get_logger(__name__)
 BUSINESS_TIMEZONE = ZoneInfo("Asia/Jakarta")
 
+# Kolom yang benar-benar tersedia saat realtime inference. Batch training
+# sebelumnya ikut menyertakan kolom mentah dataset (mis. ISSUER_BANK,
+# VIOLATION_REASON, RISK_SCORE), padahal snapshot transaksi tidak menyediakan
+# semuanya. Model hasil training dengan kolom itu tidak dapat dipakai runtime.
+RUNTIME_FEATURE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "agenusa": (
+        "TERMINAL_ID", "MERCHANT_ID", "AMOUNT", "RESPONSE_CODE",
+        "PROCESSING_CODE", "DEST_ACCOUNT_NUMBER", "MTI", "TX_HOUR",
+        "TX_DAYOFWEEK", "IS_NIGHT_TX", "GAP_MINUTES", "PREV_TERMINAL",
+        "TERMINAL_SWITCH_FAST", "AVG_AMOUNT_5", "AMOUNT_OVER_AVG_RATIO",
+        "IS_DECLINED", "IS_BRUTE_PATTERN", "IS_MONEY_MULE_DEST",
+        "IS_HIGH_AMOUNT_PATTERN", "MIDNIGHT_AMOUNT_SPIKE",
+        "RAPID_RETRY_DECLINED",
+    ),
+    "nusabill": (
+        "PAYMENT_AMOUNT", "BILL_AMOUNT", "CHANNEL", "BILL_STATUS",
+        "PAYMENT_DELAY_DAYS", "PAYMENT_TO_BILL_RATIO", "UNDERPAY_FLAG",
+        "HIGH_SPIKE_FLAG", "CHANNEL_API_FLAG", "CHANNEL_SWITCH_TO_API",
+        "PAYMENT_GAP_MINUTES", "BURST_FLAG", "EARLY_PAYMENT_ANOMALY",
+        "REFUND_FLAG",
+    ),
+}
+
+RUNTIME_NUMERIC_FEATURES: dict[str, frozenset[str]] = {
+    "agenusa": frozenset({
+        "AMOUNT", "TX_HOUR", "TX_DAYOFWEEK", "IS_NIGHT_TX", "GAP_MINUTES",
+        "TERMINAL_SWITCH_FAST", "AVG_AMOUNT_5", "AMOUNT_OVER_AVG_RATIO",
+        "IS_DECLINED", "IS_BRUTE_PATTERN", "IS_MONEY_MULE_DEST",
+        "IS_HIGH_AMOUNT_PATTERN", "MIDNIGHT_AMOUNT_SPIKE", "RAPID_RETRY_DECLINED",
+    }),
+    "nusabill": frozenset({
+        "PAYMENT_AMOUNT", "BILL_AMOUNT", "PAYMENT_DELAY_DAYS",
+        "PAYMENT_TO_BILL_RATIO", "UNDERPAY_FLAG", "HIGH_SPIKE_FLAG",
+        "CHANNEL_API_FLAG", "CHANNEL_SWITCH_TO_API", "PAYMENT_GAP_MINUTES",
+        "BURST_FLAG", "EARLY_PAYMENT_ANOMALY", "REFUND_FLAG",
+    }),
+}
+
+
+def align_runtime_features(domain: str, feature_df: pd.DataFrame) -> pd.DataFrame:
+    """Return the fixed inference schema used by both training and scoring."""
+    if domain not in RUNTIME_FEATURE_COLUMNS:
+        raise ValueError(f"Domain tidak dikenal: {domain}")
+
+    aligned = feature_df.reindex(columns=RUNTIME_FEATURE_COLUMNS[domain]).copy()
+    numeric = RUNTIME_NUMERIC_FEATURES[domain]
+    for column in aligned.columns:
+        if column in numeric:
+            aligned[column] = pd.to_numeric(aligned[column], errors="coerce").fillna(0.0)
+        else:
+            aligned[column] = aligned[column].fillna("UNKNOWN").astype(str)
+    return aligned
+
 # ========================================================================
 # SNAPSHOT-BASED FEATURE ENGINEERING (NEW)
 # ========================================================================
@@ -311,7 +364,16 @@ def build_nusabill_features_from_snapshot(snapshot: dict) -> dict:
 # ========================================================================
 
 def _safe_divide_series(a: pd.Series, b: pd.Series) -> pd.Series:
-    out = np.where(b.to_numpy() == 0, 0.0, a.to_numpy() / b.to_numpy())
+    # Data dari CSV biasanya sudah numerik, sedangkan feedback dari database
+    # membawa Decimal SQLAlchemy. Samakan keduanya menjadi float sebelum
+    # melakukan operasi NumPy agar Decimal / float tidak gagal saat retrain.
+    numerator = pd.to_numeric(a, errors="coerce").fillna(0.0).astype(float)
+    denominator = pd.to_numeric(b, errors="coerce").fillna(0.0).astype(float)
+    out = np.where(
+        denominator.to_numpy() == 0,
+        0.0,
+        numerator.to_numpy() / denominator.to_numpy(),
+    )
     return pd.Series(out, index=a.index, dtype=float)
 
 def build_agenusa_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -357,6 +419,9 @@ def build_agenusa_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 🚀 3. FEATURE ENGINEERING
     data["TIMESTAMP_DB"] = pd.to_datetime(data["TIMESTAMP_DB"], errors="coerce", utc=True)
+    # MLFeedbackLog menyimpan amount sebagai Decimal; fitur rolling dan rasio
+    # di bawah harus selalu bekerja dengan tipe numerik pandas/NumPy.
+    data["AMOUNT"] = pd.to_numeric(data["AMOUNT"], errors="coerce").fillna(0.0).astype(float)
     data = data.sort_values(["ACCOUNT_NUMBER", "TIMESTAMP_DB"]).reset_index(drop=True)
 
     business_time = data["TIMESTAMP_DB"].dt.tz_convert(BUSINESS_TIMEZONE)
@@ -448,6 +513,12 @@ def build_nusabill_features(df: pd.DataFrame) -> pd.DataFrame:
     # 🚀 3. FEATURE ENGINEERING
     data["BILL_DATE"] = pd.to_datetime(data["BILL_DATE"], errors="coerce")
     data["PAYMENT_DATE"] = pd.to_datetime(data["PAYMENT_DATE"], errors="coerce")
+    data["PAYMENT_AMOUNT"] = pd.to_numeric(
+        data["PAYMENT_AMOUNT"], errors="coerce"
+    ).fillna(0.0).astype(float)
+    data["BILL_AMOUNT"] = pd.to_numeric(
+        data["BILL_AMOUNT"], errors="coerce"
+    ).fillna(0.0).astype(float)
     data = data.sort_values(["CUSTOMER_ID", "PAYMENT_DATE"]).reset_index(drop=True)
     status_mapping = {
         "terbayar": "Paid",

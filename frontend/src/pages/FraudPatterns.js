@@ -97,6 +97,7 @@ function mapBackendPattern(bp, index) {
 
     indicators: bp.indicators ?? generateIndicators(bp, category),
     recommendedActions: bp.recommended_actions ?? generateActions(bp, category),
+    patternRules: bp.pattern_rules ?? null,
 
     _raw: bp,
   };

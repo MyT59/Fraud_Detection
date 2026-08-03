@@ -1063,32 +1063,11 @@ const AlertDetailModal = ({
                                   </span>
                                 </DetailRow>
                               )}
-                              {t.score_breakdown.ml_score != null && (
-                                <DetailRow label="ML Score">
-                                  <code
-                                    className="adm-code"
-                                    style={{
-                                      color: "#7c3aed",
-                                      borderColor: "#c4b5fd",
-                                    }}
-                                  >
-                                    {typeof t.score_breakdown.ml_score ===
-                                    "number"
-                                      ? t.score_breakdown.ml_score.toFixed(6)
-                                      : t.score_breakdown.ml_score}
-                                  </code>
-                                </DetailRow>
-                              )}
-                              {t.score_breakdown.anomaly_score != null && (
-                                <DetailRow label="Anomaly Score">
-                                  <code className="adm-code">
-                                    {typeof t.score_breakdown.anomaly_score ===
-                                    "number"
-                                      ? t.score_breakdown.anomaly_score.toFixed(
-                                          6,
-                                        )
-                                      : t.score_breakdown.anomaly_score}
-                                  </code>
+                              {t.score_breakdown.ml_risk_contribution != null && (
+                                <DetailRow label="ML Risk Impact">
+                                  <span style={{ fontWeight: 700, color: "#7c3aed" }}>
+                                    +{t.score_breakdown.ml_risk_contribution}
+                                  </span>
                                 </DetailRow>
                               )}
                               {t.score_breakdown.final_score != null && (
@@ -1110,6 +1089,20 @@ const AlertDetailModal = ({
                                 </DetailRow>
                               )}
                             </div>
+                            {t.score_breakdown.ml_score != null && (
+                              <div
+                                style={{ marginTop: 10, fontSize: ".78rem", color: "#6b7280" }}
+                              >
+                                <i className="bi bi-info-circle me-1" />
+                                ML Anomaly Score{" "}
+                                <code className="adm-code" style={{ color: "#7c3aed", borderColor: "#c4b5fd" }}>
+                                  {typeof t.score_breakdown.ml_score === "number"
+                                    ? t.score_breakdown.ml_score.toFixed(6)
+                                    : t.score_breakdown.ml_score}
+                                </code>
+                                {" "}adalah nilai mentah model; tidak dijumlahkan langsung ke Final Score.
+                              </div>
+                            )}
                           </div>
                         )}
 

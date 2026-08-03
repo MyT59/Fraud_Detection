@@ -20,11 +20,16 @@ from app.infrastructure.repositories.invoice_transaction_repository import Invoi
 # ============================================================
 # CONSTANTS & POOLS
 # ============================================================
-IP_POOL  = ["114.10.20.30", "180.250.50.60", "36.90.120.15"]
+IP_LOCATIONS = [
+    {"ip": "36.90.120.15", "city": "Jakarta", "country": "ID"},
+    {"ip": "114.10.20.30", "city": "Surabaya", "country": "ID"},
+    {"ip": "180.250.50.60", "city": "Bandung", "country": "ID"},
+]
 SOF_POOL = ["VIRTUAL_ACCOUNT", "EWALLET", "CREDIT_CARD"]
 
 # ⚠️ Pastikan sudah ada di tabel blacklist_items sebelum demo
 BLACKLISTED_IP       = "99.99.99.99"    # type = IP_ADDRESS
+BLACKLISTED_IP_LOCATION = {"city": "Richardson", "country": "US"}
 BLACKLISTED_CUSTOMER = "CUST-BL-00001"  # type = CUSTOMER_ID
 
 
@@ -49,6 +54,7 @@ def _base_invoice(time_override=None) -> dict:
     """
     now = time_override or datetime.now(timezone.utc)
     total_tagihan = round(random.uniform(20_000, 500_000), 2)
+    ip_location = random.choice(IP_LOCATIONS)
     return {
         "no_invoice":         _generate_invoice_no(),
         "tanggal_tagihan":    now - timedelta(days=1),
@@ -67,7 +73,9 @@ def _base_invoice(time_override=None) -> dict:
         "status_akhir":       "SUCCESS",
         "tanggal_rekon":      now + timedelta(hours=1),
         "keterangan":         "Simulasi Nusabill",
-        "ip_address":         random.choice(IP_POOL),
+        "ip_address":         ip_location["ip"],
+        "city":               ip_location["city"],
+        "country":            ip_location["country"],
         # channel: BUKAN kolom DB, tapi dibaca map_nusabill() → transaction_details
         "channel":            random.choice(["MOBILE_BANKING", "WEB", "ATM"]),
     }
@@ -75,7 +83,7 @@ def _base_invoice(time_override=None) -> dict:
 
 # field yang ada di generator dict tapi BUKAN kolom InvoiceTransaction
 # → di-strip sebelum bulk_create, tapi sudah dibaca map_nusabill() sebelumnya
-_NON_MODEL_FIELDS = {"channel"}
+_NON_MODEL_FIELDS = {"channel", "city", "country"}
 
 def _to_db(record: dict) -> dict:
     """Strip field non-kolom sebelum InvoiceTransaction(**record)."""
@@ -97,6 +105,7 @@ def generate_normal(count: int = 20) -> list[dict]:
 def generate_blacklist_ip() -> list[dict]:
     inv = _base_invoice()
     inv["ip_address"] = BLACKLISTED_IP
+    inv.update(BLACKLISTED_IP_LOCATION)
     return [inv]
 
 

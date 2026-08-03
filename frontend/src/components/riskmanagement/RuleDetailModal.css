@@ -357,6 +357,24 @@
   border: 1px solid #e5e7eb;
   border-radius: 9px;
 }
+.rdm-config-preview {
+  display: block;
+  height: 190px;
+  margin-top: 10px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+.rdm-config-preview::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.rdm-config-preview::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 6px;
+}
 .rdm-condition-icon {
   width: 32px;
   height: 32px;

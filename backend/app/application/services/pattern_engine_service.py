@@ -1,52 +1,3 @@
-"""
-pattern_engine_service.py
-=========================
-Optimasi P3 + P4:
-  - FraudPattern diambil dari cache (get_cached_patterns)
-  - window_cache deduplicate query window per field
-  - detect_pattern_location_jump: cache last_trx per user_account_id
-    menggunakan request-scoped dict (bukan global cache)
-  - Tidak ada db.commit() — commit di process_transaction()
-
-FIXES:
-  [BUG #1] distinct_account_count: terminal_id diambil dari trx.terminal_id
-           (top-level column), bukan dari details JSON yang tidak punya field ini.
-  [BUG #2] chain_decline_success_burst: cache_key kini berbasis account_number
-           (issuer_account_number) agar konsisten dengan query di dalamnya.
-           State machine SUCCESS juga diperbaiki: tidak break saat rc != "00",
-           melainkan reset ke DECLINE agar chain multi-wave tetap terdeteksi.
-  [BUG #3] tx_count untuk pattern berbasis kartu kini di-query per
-           issuer_account_number, bukan per user_account_id, agar konsisten
-           dengan field carding lainnya. Cache key juga diubah ke account_number.
-  [BUG #4] failure_count / has_success_after_failure: cache key disamakan ke
-           account_number agar tidak bertabrakan dengan key tx_count user lain.
-
-REFACTOR — Field Registry (P5):
-  Menggantikan rantai if/elif untuk static fields dengan STATIC_FIELD_REGISTRY:
-  dict[field_name → resolver(trx, details)].
-
-  Keuntungan:
-    - Tambah field baru dari feature_builder cukup daftarkan 1 entry di registry,
-      tanpa menyentuh logika engine sama sekali.
-    - Setiap resolver bisa diuji unit test secara independen.
-    - Engine loop tetap bersih — tidak tumbuh setiap sprint ML menambah fitur baru.
-
-  Field yang masuk registry (static, sudah terkompute di transaction_details):
-    Existing  : amount, service_source
-    AGENUSA   : PROCESSING_CODE, RESPONSE_CODE, IS_NIGHT_TX, AMOUNT_OVER_AVG_RATIO,
-                IS_DECLINED, GAP_MINUTES, dest_account_number, TERMINAL_SWITCH_FAST
-    NUSABILL  : PAYMENT_GAP_MINUTES, PAYMENT_TO_BILL_RATIO, CHANNEL, CHANNEL_API_FLAG,
-                PAYMENT_DELAY_DAYS, CHANNEL_SWITCH_TO_API
-
-  Window-based fields (butuh DB query + time_window_minutes) tetap dihandle
-  di blok `elif window_ms:` yang sudah ada — tidak berubah sama sekali.
-
-  Cara menambah field baru di masa depan:
-    Cukup tambahkan satu baris ke STATIC_FIELD_REGISTRY di bawah, contoh:
-      "NAMA_FIELD_BARU": lambda trx, det: det.get("nama_field_baru"),
-    Engine akan otomatis mengevaluasinya tanpa perubahan lain.
-"""
-
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
 from datetime import timedelta
@@ -68,6 +19,12 @@ logger = get_logger(__name__)
 _location_cache: dict[str, tuple] = {}
 
 
+def _normalized_customer_name_expression():
+    """Normalisasi nama agar variasi kapitalisasi/spasi tidak menjadi mismatch."""
+    raw_name = Transaction.transaction_details["nama_customer"].astext
+    return func.lower(func.trim(func.regexp_replace(raw_name, r"\s+", " ", "g")))
+
+
 def reset_location_cache():
     """
     Kosongkan location cache.
@@ -77,32 +34,6 @@ def reset_location_cache():
     global _location_cache
     _location_cache.clear()
     logger.debug("[CACHE] Location jump cache reset")
-
-
-# ── Static Field Registry ────────────────────────────────────────────────────
-# Memetakan nama field (string) ke resolver function: (trx, details) → value.
-#
-# Digunakan oleh engine untuk field yang nilainya sudah tersedia secara langsung
-# tanpa perlu query DB tambahan (tidak bergantung pada time_window_minutes).
-#
-# Konvensi resolver:
-#   - Kembalikan None jika field tidak tersedia → engine akan evaluate sebagai False.
-#   - Cast eksplisit (float/int) untuk field numerik agar evaluate_condition bekerja
-#     benar saat membandingkan dengan target bertipe str dari JSON rules.
-#
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │ CARA MENAMBAH FIELD BARU                                                │
-# │ Daftarkan satu entry di dict ini. Engine tidak perlu disentuh.         │
-# │                                                                         │
-# │ Contoh field numerik dari details:                                      │
-# │   "NAMA_FIELD": lambda trx, det: _to_float(det.get("nama_field")),     │
-# │                                                                         │
-# │ Contoh field string dari details:                                       │
-# │   "NAMA_FIELD": lambda trx, det: det.get("nama_field"),                │
-# │                                                                         │
-# │ Contoh field dari kolom top-level trx:                                  │
-# │   "NAMA_FIELD": lambda trx, det: trx.nama_kolom,                       │
-# └─────────────────────────────────────────────────────────────────────────┘
 
 def _to_float(v) -> float | None:
     """Cast nilai ke float. Kembalikan None jika None atau tidak bisa di-cast."""
@@ -128,11 +59,11 @@ _FieldResolver = Callable[[Any, dict], Any]
 
 STATIC_FIELD_REGISTRY: dict[str, _FieldResolver] = {
 
-    # ── Existing static fields ───────────────────────────────────────────────
+    # ── Existing static fields 
     "amount":          lambda trx, det: _to_float(trx.amount),
     "service_source":  lambda trx, det: trx.service_source,
 
-    # ── AGENUSA: field dari feature_builder ─────────────────────────────────
+    # ── AGENUSA: field dari feature_builder 
     # Digunakan oleh pattern AI Discovery baru di PatternDiscoveryService.
 
     # Kode jenis transaksi ISO-8583 (e.g. "300000" = PIN change/inquiry)
@@ -335,7 +266,7 @@ def run_pattern_engine(db, trx):
                 time_thresh = trx.transaction_time - timedelta(minutes=window_ms)
 
                 # ── tx_count ──────────────────────────────────────────────────
-                # [FIX #5] tx_count sadar konteks pattern:
+                # tx_count sadar konteks pattern:
                 # - Kalau pattern berbasis terminal (ada distinct_account_count)
                 #   → hitung tx per terminal_id agar konsisten dengan Fan-In/EDC
                 # - Kalau pattern berbasis kartu → hitung per issuer_account_number
@@ -377,7 +308,7 @@ def run_pattern_engine(db, trx):
 
                 # ── total_amount ───────────────────────────────────────────────
                 elif field == "total_amount":
-                    # [FIX #6] total_amount sadar konteks pattern:
+                    # total_amount sadar konteks pattern:
                     # - Kalau pattern berbasis kartu (ada failure_count/has_success_after_failure)
                     #   → hitung per issuer_account_number agar akumulasi benar (Super Pattern)
                     # - Kalau pattern berbasis terminal → hitung per terminal_id
@@ -420,7 +351,7 @@ def run_pattern_engine(db, trx):
                             window_cache[cache_key] = float(res)
 
                 # ── distinct_account_count ────────────────────────────────────
-                # [FIX #1] terminal_id diambil dari trx.terminal_id (kolom
+                # terminal_id diambil dari trx.terminal_id (kolom
                 # top-level), bukan dari details JSON — map_agenusa() tidak
                 # menaruh terminal_id ke dalam transaction_details.
                 elif field == "distinct_account_count":
@@ -452,8 +383,24 @@ def run_pattern_engine(db, trx):
                         ).scalar() or 0
                         window_cache[cache_key] = res
 
+                elif field == "distinct_customer_name_count":
+                    customer_id = trx.user_account_id
+                    cache_key = (field, window_ms, customer_id)
+                    if cache_key not in window_cache:
+                        if customer_id and (trx.service_source or "").upper() == "NUSABILL":
+                            window_cache[cache_key] = db.query(func.count(distinct(
+                                _normalized_customer_name_expression()
+                            ))).filter(
+                                Transaction.service_source == "NUSABILL",
+                                Transaction.user_account_id == customer_id,
+                                Transaction.transaction_time >= time_thresh,
+                                Transaction.transaction_time <= trx.transaction_time,
+                            ).scalar() or 0
+                        else:
+                            window_cache[cache_key] = 0
+
                 # ── failure_count + has_success_after_failure ─────────────────
-                # [FIX #4] Cache key berbasis account_number, bukan user_account_id,
+                # Cache key berbasis account_number, bukan user_account_id,
                 # agar tidak bertabrakan dengan key dari transaksi user lain.
                 elif field in ["failure_count", "has_success_after_failure"]:
                     f_key = ("failure_count", window_ms, issuer_account_number)
@@ -464,7 +411,7 @@ def run_pattern_engine(db, trx):
                         s_found = False
 
                         if issuer_account_number:
-                            # [FIX #7] limit dinaikkan 100 agar tidak kehabisan slot
+                            # limit dinaikkan 100 agar tidak kehabisan slot
                             # untuk pattern dengan banyak tx (Super Pattern = 16 tx)
                             recent_trxs = db.query(Transaction).filter(
                                 Transaction.transaction_details["issuer_account_number"].astext == issuer_account_number,
@@ -490,7 +437,7 @@ def run_pattern_engine(db, trx):
                     cache_key = f_key if field == "failure_count" else s_key
 
                 # ── chain_decline_success_burst ────────────────────────────────
-                # [FIX #2] cache_key berbasis issuer_account_number (konsisten
+                # cache_key berbasis issuer_account_number (konsisten
                 # dengan query). State machine SUCCESS diperbaiki: jika ada
                 # decline di tengah burst, reset ke DECLINE (bukan break) agar
                 # chain multi-wave tetap bisa terdeteksi.
@@ -597,7 +544,6 @@ def run_pattern_engine(db, trx):
             if action:
                 actions.append(action)
 
-            # ── Update hit_count di tabel fraud_patterns ──────────────────────
             try:
                 db.query(FraudPattern).filter(FraudPattern.id == pattern.id).update(
                     {"hit_count": FraudPattern.hit_count + 1},
@@ -757,6 +703,21 @@ def detect_suppressed_patterns(db: Session, trx: Transaction) -> list:
                             Transaction.transaction_time >= time_thresh,
                             Transaction.transaction_time <= trx.transaction_time,
                         ).scalar() or 0
+                elif field == "distinct_customer_name_count":
+                    customer_id = trx.user_account_id
+                    cache_key = (field, window_ms, customer_id)
+                    if cache_key not in window_cache:
+                        if customer_id and (trx.service_source or "").upper() == "NUSABILL":
+                            window_cache[cache_key] = db.query(func.count(distinct(
+                                _normalized_customer_name_expression()
+                            ))).filter(
+                                Transaction.service_source == "NUSABILL",
+                                Transaction.user_account_id == customer_id,
+                                Transaction.transaction_time >= time_thresh,
+                                Transaction.transaction_time <= trx.transaction_time,
+                            ).scalar() or 0
+                        else:
+                            window_cache[cache_key] = 0
                 elif field in ("failure_count", "has_success_after_failure"):
                     failure_key = ("failure_count", window_ms, issuer_account_number)
                     success_key = ("has_success_after_failure", window_ms, issuer_account_number)

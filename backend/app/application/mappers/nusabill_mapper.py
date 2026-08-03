@@ -53,8 +53,10 @@ def map_nusabill(data: dict):
         # merchant_id atau biller_id yang dapat dipakai untuk rule/blacklist.
         "merchant_id": None,
         "ip_address": data.get("ip_address"),
-        "city": None,
-        "country": None,
+        # Lokasi ini merepresentasikan resolusi IP pembayar untuk audit, bukan
+        # alamat customer/biller. Nusabill tidak memakai location-jump pattern.
+        "city": data.get("city"),
+        "country": data.get("country"),
         "transaction_details": {
             "nama_customer":  data.get("nama_customer"),
             "customer_id": customer_id,

@@ -35,7 +35,7 @@ const FIELD_GROUPS = [
     group: "Metrik Distribusi Invoice & VA (Khusus Nusabill)",
     services: ["NUSABILL"],
     items: [
-      { l: "Jumlah Customer Unik Tagihan (distinct_customer_count)", f: "distinct_customer_count", t: "number", w: true, hint: "Jumlah customer tagihan berbeda dalam Time Window. Contoh: >= 20 dalam 5 menit.", example: ">= 20" },
+      { l: "Konflik Nama pada Customer ID (distinct_customer_name_count)", f: "distinct_customer_name_count", t: "number", w: true, hint: "Jumlah nama_customer berbeda untuk customer_id yang sama dalam Time Window. Gunakan >= 2 untuk mendeteksi potensi konflik identitas.", example: ">= 2" },
       { l: "Jeda Pembayaran (menit)", f: "PAYMENT_GAP_MINUTES", t: "number", w: false, hint: "Jarak dari pembayaran sebelumnya. Untuk mendeteksi burst, gunakan <= 5.", example: "<= 5" },
       { l: "Rasio Pembayaran vs Tagihan", f: "PAYMENT_TO_BILL_RATIO", t: "number", w: false, hint: "1 = sesuai tagihan; < 0.3 = underpayment; > 4 = overpayment mencurigakan.", example: "< 0.3 atau > 4" },
       { l: "Channel Pembayaran", f: "CHANNEL", t: "text", w: false, hint: "Isi persis sesuai channel transaksi, misalnya API, WEB, MOBILE, atau ATM.", op: "==", example: "== API" },
