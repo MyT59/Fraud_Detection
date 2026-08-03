@@ -26,7 +26,13 @@ MIN_SUPPORT        = 3  # minimum number of transactions to consider a pattern
 VELOCITY_THRESHOLD = 5  # transactions in TIME_WINDOW minutes
 AMOUNT_THRESHOLD   = 5_000_000
 FAN_IN_THRESHOLD   = 10 # account number
-FAN_OUT_THRESHOLD  = 20 # customer
+IDENTITY_MISMATCH_THRESHOLD = 2
+
+
+def _normalized_customer_name_expression():
+    """Normalisasi nama di database agar beda kapital/spasi bukan mismatch."""
+    raw_name = Transaction.transaction_details["nama_customer"].astext
+    return func.lower(func.trim(func.regexp_replace(raw_name, r"\s+", " ", "g")))
 
 
 @log_performance(label="PatternLearning.generate_patterns_from_reviews")
@@ -94,17 +100,21 @@ def generate_patterns_from_reviews(db):
                 key = ("FAN_IN", service, FAN_IN_THRESHOLD)
                 network_counter[key] = network_counter.get(key, 0) + 1
 
-        # 4. FAN-OUT
-        if trx.user_account_id:
-            distinct_customers = db.query(
-                func.count(distinct(Transaction.transaction_details["nama_customer"].astext))
+        # 4. NUSABILL CUSTOMER IDENTITY MISMATCH
+        # Satu customer_id yang tercatat menggunakan beberapa nama customer
+        # berbeda dalam window pendek. Ini bukan Fan-Out: Nusabill tidak
+        # memodelkan relasi pengirim dana ke banyak penerima.
+        if service == "NUSABILL" and trx.user_account_id:
+            distinct_names = db.query(
+                func.count(distinct(_normalized_customer_name_expression()))
             ).filter(
                 Transaction.user_account_id == trx.user_account_id,
+                Transaction.service_source == "NUSABILL",
                 Transaction.transaction_time >= time_threshold,
                 Transaction.transaction_time <= trx.transaction_time
             ).scalar() or 0
-            if distinct_customers >= FAN_OUT_THRESHOLD:
-                key = ("FAN_OUT", service, FAN_OUT_THRESHOLD)
+            if distinct_names >= IDENTITY_MISMATCH_THRESHOLD:
+                key = ("IDENTITY_MISMATCH", service, IDENTITY_MISMATCH_THRESHOLD)
                 network_counter[key] = network_counter.get(key, 0) + 1
 
         # 5. DECLINE VELOCITY
@@ -191,13 +201,13 @@ def generate_patterns_from_reviews(db):
                         "conditions": [{"field": "distinct_account_count", "operator": ">=", "value": threshold}]},
                     "risk_score": 80, "action": "BLOCK", "service_source": srv
                 })
-            elif ptype == "FAN_OUT":
+            elif ptype == "IDENTITY_MISMATCH":
                 patterns_created.append({
-                    "pattern_name": f"Fan-Out Network {srv} ({threshold}+ customers in {TIME_WINDOW}m)",
-                    "pattern_category": "NETWORK_FAN_OUT",
+                    "pattern_name": f"Customer Identity Mismatch {srv} ({threshold}+ names in {TIME_WINDOW}m)",
+                    "pattern_category": "CREDENTIAL",
                     "pattern_rules": {"logic": "AND", "time_window_minutes": TIME_WINDOW,
-                        "conditions": [{"field": "distinct_customer_count", "operator": ">=", "value": threshold}]},
-                    "risk_score": 70, "action": "BLOCK", "service_source": srv
+                        "conditions": [{"field": "distinct_customer_name_count", "operator": ">=", "value": threshold}]},
+                    "risk_score": 70, "action": "FLAG", "service_source": srv
                 })
 
     for (ptype, service, threshold), count in decline_counter.items():

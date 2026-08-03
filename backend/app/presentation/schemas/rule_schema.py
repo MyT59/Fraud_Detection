@@ -15,6 +15,7 @@ RULE_FIELDS = frozenset({
     "risk_score", "anomaly_score", "risk_level", "merchant_id",
     "terminal_id", "account_number", "transaction_details.issuer_bank",
     "transaction_details.issuer_account_number", "transaction_details.dest_account_number",
+    "transaction_details.processing_code",
     "transaction_details.sof", "transaction_details.channel",
     "transaction_details.bill_amount", "transaction_details.payment_amount",
     "transaction_details.biaya_admin", "transaction_details.bill_status",
@@ -31,7 +32,7 @@ UNIVERSAL_RULE_FIELDS = frozenset({
 AGENUSA_RULE_FIELDS = UNIVERSAL_RULE_FIELDS | frozenset({
     "merchant_id", "terminal_id", "account_number",
     "transaction_details.issuer_bank", "transaction_details.issuer_account_number",
-    "transaction_details.dest_account_number",
+    "transaction_details.dest_account_number", "transaction_details.processing_code",
 })
 NUSABILL_RULE_FIELDS = UNIVERSAL_RULE_FIELDS | frozenset({
     "transaction_details.sof", "transaction_details.channel",

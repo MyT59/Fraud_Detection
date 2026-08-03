@@ -15,7 +15,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from ...paths import DATA_DIR, MODELS_DIR, PROJECT_ROOT
-from .feature_builder import build_features
+from .feature_builder import build_features, align_runtime_features
 from .model_loader import DOMAIN_ISO_CONFIG
 from ...core.logging import get_logger, log_performance
 
@@ -93,6 +93,7 @@ def train_one(
     data = pd.read_csv(csv_path)
     feature_df = build_features(domain, data)
     x = feature_df.drop(columns=["IS_FRAUD", *config["drop_cols"]], errors="ignore")
+    x = align_runtime_features(domain, x)
 
     pipeline, numeric_cols, categorical_cols = _build_pipeline(x, contamination=contamination)
     pipeline.fit(x)
@@ -131,6 +132,8 @@ def train_one(
         },
         "numeric_features": numeric_cols,
         "categorical_features": categorical_cols,
+        "feature_schema": "snapshot_runtime_v1",
+        "feature_names": list(x.columns),
         "model_path": str(model_path.relative_to(PROJECT_ROOT)),
     }
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -192,6 +195,7 @@ def train_from_dataframe(
     # Feature builder biasanya sudah dipanggil di retrain_service, 
     # tapi kita pastikan kolom yang tidak perlu di-drop
     x = df.drop(columns=["IS_FRAUD", *config["drop_cols"]], errors="ignore")
+    x = align_runtime_features(domain, x)
 
     pipeline, numeric_cols, categorical_cols = _build_pipeline(x, contamination=contamination)
     pipeline.fit(x)
@@ -228,6 +232,8 @@ def train_from_dataframe(
         },
         "numeric_features": numeric_cols,
         "categorical_features": categorical_cols,
+        "feature_schema": "snapshot_runtime_v1",
+        "feature_names": list(x.columns),
         "model_path": str(model_path.relative_to(PROJECT_ROOT)),
     }
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")

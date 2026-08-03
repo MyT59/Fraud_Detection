@@ -239,13 +239,7 @@ const RuleDetailModal = ({
 
           {rule.rule_config && (
             <pre
-              className="rdm-condition-box"
-              style={{
-                marginTop: 10,
-                whiteSpace: "pre-wrap",
-                overflowWrap: "anywhere",
-                fontSize: "0.76rem",
-              }}
+              className="rdm-condition-box rdm-config-preview"
             >
               {JSON.stringify(rule.rule_config, null, 2)}
             </pre>

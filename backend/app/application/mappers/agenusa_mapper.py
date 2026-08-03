@@ -29,8 +29,11 @@ def map_agenusa(data: dict):
         "merchant_id": data.get("merchant_id"),
         "account_number": data.get("account_number"),
         "ip_address": data.get("ip_address"),
-        "city": data.get("city") or "Jakarta",
-        "country": data.get("country") or "ID",
+        # Lokasi harus berasal dari source/GeoIP metadata. Jangan memberi
+        # fallback Jakarta/ID karena dapat menampilkan lokasi palsu untuk IP
+        # asing atau data yang memang belum mempunyai resolusi lokasi.
+        "city": data.get("city"),
+        "country": data.get("country"),
 
         "transaction_details": {
             "stan": data.get("stan"),

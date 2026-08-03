@@ -13,6 +13,23 @@ const STATUS_META = {
   review: { label: "Needs Review", bg: "#fef3c7", color: "#92400e" },
 };
 
+const FIELD_LABELS = {
+  amount: "Nominal transaksi",
+  total_amount: "Total nominal",
+  tx_count: "Jumlah transaksi",
+  distinct_account_count: "Jumlah rekening berbeda",
+  distinct_customer_count: "Jumlah customer berbeda",
+  distinct_customer_name_count: "Jumlah nama customer berbeda",
+  failure_count: "Jumlah transaksi gagal",
+  service_source: "Layanan",
+  processing_code: "Processing code",
+  response_code: "Response code",
+  channel: "Channel",
+};
+
+const formatConditionValue = (value) =>
+  Array.isArray(value) ? value.join(", ") : String(value);
+
 // [FIX] Export sederhana untuk satu pattern sebagai JSON.
 // Tombol "Export Report" sebelumnya tidak punya handler sama sekali.
 function exportPatternReport(pattern) {
@@ -29,6 +46,7 @@ function exportPatternReport(pattern) {
     share_of_flagged_pct: pattern.trend,
     last_updated: pattern.lastUpdated,
     indicators: pattern.indicators,
+    pattern_rules: pattern.patternRules,
     recommended_actions: pattern.recommendedActions,
   };
 
@@ -53,6 +71,9 @@ const PatternDetailModal = ({ pattern, onClose }) => {
   if (!pattern) return null;
   const risk = RISK_META[pattern.riskLevel] || RISK_META.medium;
   const status = STATUS_META[pattern.status] || STATUS_META.active;
+  const rules = pattern.patternRules || {};
+  const conditions = Array.isArray(rules.conditions) ? rules.conditions : [];
+  const logic = rules.logic || "AND";
 
   return (
     <div className="pdm-overlay" onClick={onClose}>
@@ -131,6 +152,39 @@ const PatternDetailModal = ({ pattern, onClose }) => {
               ))}
             </ul>
           </div>
+
+          {conditions.length > 0 && (
+            <div className="pdm-section">
+              <div className="pdm-section-title">
+                <i className="bi bi-diagram-3"></i>Kondisi Pattern
+              </div>
+              <div className="pdm-condition-list">
+                {conditions.map((condition, index) => (
+                  <React.Fragment key={`${condition.field}-${index}`}>
+                    {index > 0 && (
+                      <span className="pdm-condition-logic">{logic}</span>
+                    )}
+                    <div className="pdm-condition-row">
+                      <span className="pdm-condition-field">
+                        {FIELD_LABELS[condition.field] || condition.field}
+                      </span>
+                      <span className="pdm-condition-operator">
+                        {condition.operator}
+                      </span>
+                      <code className="pdm-condition-value">
+                        {formatConditionValue(condition.value)}
+                      </code>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+              {rules.time_window_minutes && (
+                <div className="pdm-condition-window">
+                  Dalam jendela waktu {rules.time_window_minutes} menit
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="pdm-section">
             <div className="pdm-section-title">

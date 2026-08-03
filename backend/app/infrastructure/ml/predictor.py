@@ -3,6 +3,7 @@ from typing import Any, Optional
 from .feature_builder import (
     build_features,
     build_features_from_snapshot,
+    align_runtime_features,
     get_matched_patterns,
 )
 from .model_loader import load_isolation_model, DOMAIN_ISO_CONFIG
@@ -81,10 +82,7 @@ class IsolationPredictor:
             columns=["IS_FRAUD", *config["drop_cols"]],
             errors="ignore"
         )
-
-        # Ensure feature order matches model training
-        required_features = config.get("feature_names", x.columns.tolist())
-        x = x[required_features]
+        x = align_runtime_features(domain, x)
 
         if hasattr(model, "feature_names_in_"):
             trained_features = set(model.feature_names_in_)
@@ -162,6 +160,7 @@ class IsolationPredictor:
             columns=["IS_FRAUD", *config["drop_cols"]],
             errors="ignore"
         )
+        x = align_runtime_features(domain, x)
 
         scores = model.decision_function(x)
         preds = model.predict(x)

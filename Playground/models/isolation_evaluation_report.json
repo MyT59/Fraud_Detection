@@ -1,28 +1,27 @@
 {
-  "generated_at_utc": "2026-07-26T12:34:13.201368+00:00",
+  "generated_at_utc": "2026-08-02T21:50:50.558880+00:00",
   "notes": "Evaluasi isolation memakai dataset berlabel untuk benchmarking offline.",
   "domains": {
     "agenusa": {
       "data_type": "unlabeled",
       "notes": "Dataset tidak memiliki label IS_FRAUD. Hanya report thresholds dari training.",
       "dataset_size": 5000,
-      "anomaly_count_at_default": 250,
-      "anomaly_rate": 0.05,
+      "anomaly_count_at_default": 985,
+      "anomaly_rate": 0.197,
       "training_metadata": {
+        "version": "agenusa_v20260802203943141845",
+        "model_version": "agenusa_v20260802203943141845",
         "domain": "agenusa",
         "dataset": "retrain_hybrid_dataset",
-        "rows": 5000,
-        "contamination": 0.05,
-        "anomaly_rate_fit_data": 0.05,
+        "rows": 5005,
+        "contamination": 0.08,
+        "anomaly_rate_fit_data": 0.08012,
         "thresholds": {
-          "review_score_threshold": 0.004,
-          "high_risk_score_threshold": -0.0026
+          "review_score_threshold": 0.0023,
+          "high_risk_score_threshold": -0.0064
         },
         "numeric_features": [
           "AMOUNT",
-          "PROCESSING_CODE",
-          "RESPONSE_CODE",
-          "MTI",
           "TX_HOUR",
           "TX_DAYOFWEEK",
           "IS_NIGHT_TX",
@@ -40,9 +39,37 @@
         "categorical_features": [
           "TERMINAL_ID",
           "MERCHANT_ID",
-          "DEST_ACCOUNT_NUMBER"
+          "RESPONSE_CODE",
+          "PROCESSING_CODE",
+          "DEST_ACCOUNT_NUMBER",
+          "MTI",
+          "PREV_TERMINAL"
         ],
-        "model_path": "backend\\app\\infrastructure\\ml\\models\\agenusa_isolation_forest.pkl"
+        "feature_schema": "snapshot_runtime_v1",
+        "feature_names": [
+          "TERMINAL_ID",
+          "MERCHANT_ID",
+          "AMOUNT",
+          "RESPONSE_CODE",
+          "PROCESSING_CODE",
+          "DEST_ACCOUNT_NUMBER",
+          "MTI",
+          "TX_HOUR",
+          "TX_DAYOFWEEK",
+          "IS_NIGHT_TX",
+          "GAP_MINUTES",
+          "PREV_TERMINAL",
+          "TERMINAL_SWITCH_FAST",
+          "AVG_AMOUNT_5",
+          "AMOUNT_OVER_AVG_RATIO",
+          "IS_DECLINED",
+          "IS_BRUTE_PATTERN",
+          "IS_MONEY_MULE_DEST",
+          "IS_HIGH_AMOUNT_PATTERN",
+          "MIDNIGHT_AMOUNT_SPIKE",
+          "RAPID_RETRY_DECLINED"
+        ],
+        "model_path": "backend\\app\\infrastructure\\ml\\models\\.staging\\agenusa_agenusa_v20260802203943141845\\agenusa_isolation_forest.pkl"
       },
       "evaluation": {
         "default_model_boundary": {
@@ -52,8 +79,8 @@
           "f1_fraud": null
         },
         "review_threshold_boundary": {
-          "threshold": 0.004,
-          "predictions": 499
+          "threshold": 0.0023,
+          "predictions": 1828
         },
         "tuned_threshold_on_eval_data": {
           "notes": "Tidak bisa di-tune tanpa ground truth",
@@ -66,37 +93,56 @@
       "data_type": "unlabeled",
       "notes": "Dataset tidak memiliki label IS_FRAUD. Hanya report thresholds dari training.",
       "dataset_size": 5000,
-      "anomaly_count_at_default": 250,
-      "anomaly_rate": 0.05,
+      "anomaly_count_at_default": 499,
+      "anomaly_rate": 0.0998,
       "training_metadata": {
+        "version": "nusabill_v20260803044619799150",
+        "model_version": "nusabill_v20260803044619799150",
         "domain": "nusabill",
         "dataset": "retrain_hybrid_dataset",
         "rows": 5000,
-        "contamination": 0.05,
-        "anomaly_rate_fit_data": 0.05,
+        "contamination": 0.1,
+        "anomaly_rate_fit_data": 0.0998,
         "thresholds": {
-          "review_score_threshold": 0.0357,
-          "high_risk_score_threshold": -0.0298
+          "review_score_threshold": 0.0,
+          "high_risk_score_threshold": -0.0629
         },
         "numeric_features": [
-          "BILL_AMOUNT",
           "PAYMENT_AMOUNT",
-          "REFUND_FLAG",
+          "BILL_AMOUNT",
           "PAYMENT_DELAY_DAYS",
           "PAYMENT_TO_BILL_RATIO",
           "UNDERPAY_FLAG",
           "HIGH_SPIKE_FLAG",
           "CHANNEL_API_FLAG",
+          "CHANNEL_SWITCH_TO_API",
           "PAYMENT_GAP_MINUTES",
           "BURST_FLAG",
-          "CHANNEL_SWITCH_TO_API",
-          "EARLY_PAYMENT_ANOMALY"
+          "EARLY_PAYMENT_ANOMALY",
+          "REFUND_FLAG"
         ],
         "categorical_features": [
           "CHANNEL",
           "BILL_STATUS"
         ],
-        "model_path": "backend\\app\\infrastructure\\ml\\models\\nusabill_isolation_forest.pkl"
+        "feature_schema": "snapshot_runtime_v1",
+        "feature_names": [
+          "PAYMENT_AMOUNT",
+          "BILL_AMOUNT",
+          "CHANNEL",
+          "BILL_STATUS",
+          "PAYMENT_DELAY_DAYS",
+          "PAYMENT_TO_BILL_RATIO",
+          "UNDERPAY_FLAG",
+          "HIGH_SPIKE_FLAG",
+          "CHANNEL_API_FLAG",
+          "CHANNEL_SWITCH_TO_API",
+          "PAYMENT_GAP_MINUTES",
+          "BURST_FLAG",
+          "EARLY_PAYMENT_ANOMALY",
+          "REFUND_FLAG"
+        ],
+        "model_path": "backend\\app\\infrastructure\\ml\\models\\.staging\\nusabill_nusabill_v20260803044619799150\\nusabill_isolation_forest.pkl"
       },
       "evaluation": {
         "default_model_boundary": {
@@ -106,7 +152,7 @@
           "f1_fraud": null
         },
         "review_threshold_boundary": {
-          "threshold": 0.0357,
+          "threshold": 0.0,
           "predictions": 501
         },
         "tuned_threshold_on_eval_data": {

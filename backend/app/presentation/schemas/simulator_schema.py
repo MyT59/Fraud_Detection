@@ -223,6 +223,17 @@ class NusabillManualInput(BaseModel):
 
     # === NETWORK ===
     ip_address: str = Field(default="127.0.0.1", description="IP address customer.", example="114.122.88.55")
+    city: Optional[str] = Field(
+        default=None,
+        description="Kota hasil resolusi IP customer untuk kebutuhan audit; bukan alamat customer.",
+        example="Jakarta",
+    )
+    country: Optional[str] = Field(
+        default=None,
+        max_length=2,
+        description="Kode negara hasil resolusi IP customer (ISO 3166-1 alpha-2).",
+        example="ID",
+    )
 
     # === ANOMALY INJECTION ===
     inject_anomaly: Optional[AnomalyType] = Field(

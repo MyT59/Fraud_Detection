@@ -84,11 +84,21 @@ async def run_live_simulation(domain: str, scenario: str | None):
                 break
 
             if item["src"] == "agenusa":
-                log = sw_repo.create(item["data"])
+                # `city` dan `country` dibutuhkan oleh mapper untuk membentuk
+                # Transaction, tetapi bukan kolom pada tabel switching_logs.
+                # Jangan mengubah payload sumber karena payload yang sama dipakai
+                # lagi tepat di bawah saat proses mapping.
+                source_data = item["data"]
+                switching_data = {
+                    key: value
+                    for key, value in source_data.items()
+                    if key not in {"city", "country"}
+                }
+                log = sw_repo.create(switching_data)
                 # Map the generator payload, not the ORM row. It preserves the
                 # timezone-aware timestamp instead of relying on a database
                 # driver's representation of DateTime values.
-                trx = process_transaction(map_agenusa(item["data"]), db)
+                trx = process_transaction(map_agenusa(source_data), db)
                 if trx:
                     sw_repo.mark_processed(log.id)
             else:
@@ -216,6 +226,10 @@ def _apply_anomaly_agenusa(payload: dict, anomaly: str) -> dict:
     elif anomaly == "FOREIGN_IP":
         prefix = random.choice(_FOREIGN_IP_POOLS)
         p["ip_address"] = f"{prefix}{random.randint(1, 254)}"
+        # TEST-NET tidak memiliki lokasi GeoIP nyata; tandai eksplisit sebagai
+        # lokasi luar negeri simulasi agar tidak mewarisi Jakarta/ID.
+        p["city"] = "Simulated Foreign"
+        p["country"] = "US"
 
     elif anomaly == "DIFF_CITY":
         p["city"] = random.choice(_CITIES)
@@ -257,6 +271,8 @@ def _apply_anomaly_nusabill(payload: dict, anomaly: str) -> dict:
     elif anomaly == "FOREIGN_IP":
         prefix = random.choice(_FOREIGN_IP_POOLS)
         p["ip_address"] = f"{prefix}{random.randint(1, 254)}"
+        p["city"] = "Simulated Foreign"
+        p["country"] = "US"
 
     return p
 
@@ -344,13 +360,22 @@ async def manual_input_nusabill(payload: dict, db: Session) -> dict:
         payload = _apply_anomaly_nusabill(payload, anomaly)
     anomaly_changes = _build_anomaly_changes(payload_before_anomaly, payload)
 
-    # channel bukan kolom invoice_transactions, tetapi merupakan feature mapper.
+    # Field berikut bukan kolom invoice_transactions. Channel adalah feature
+    # mapper, sementara city/country adalah hasil resolusi IP yang hanya
+    # disimpan pada canonical transaction untuk kebutuhan audit.
     channel = payload.pop("channel", "API")
+    city = payload.pop("city", None)
+    country = payload.pop("country", None)
 
     inv_repo    = InvoiceTransactionRepository(db)
     raw_invoice = inv_repo.create(payload)
 
-    normalized = map_nusabill({**payload, "channel": channel})
+    normalized = map_nusabill({
+        **payload,
+        "channel": channel,
+        "city": city,
+        "country": country,
+    })
     trx = process_transaction(normalized, db)
 
     if not trx:

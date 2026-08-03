@@ -25,6 +25,7 @@ const PROCESSING_CODE_MAP = {
 const RISK_LEVEL_META = {
   CRITICAL: { color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
   HIGH: { color: "#d97706", bg: "#fff7ed", border: "#fed7aa" },
+  WARNING: { color: "#d97706", bg: "#fff7ed", border: "#fed7aa" },
   MEDIUM: { color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
   LOW: { color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
 };
@@ -74,13 +75,10 @@ const procLabel = (code) => {
   return lbl ? `${code} — ${lbl}` : String(code);
 };
 
-// Isolation Forest: semakin negatif = semakin anomali
-const getRiskFromMLScore = (mlScore) => {
-  if (mlScore == null) return null;
-  if (mlScore <= -0.1) return "CRITICAL";
-  if (mlScore <= -0.05) return "HIGH";
-  if (mlScore <= 0.0) return "MEDIUM";
-  return "LOW";
+const formatMLRiskLevel = (level) => {
+  const normalized = String(level || "").toUpperCase();
+  if (normalized === "WARNING") return "REVIEW";
+  return normalized || "BELUM TERSEDIA";
 };
 
 // ─── Sub-components ───────────────────────────────────────────────
@@ -374,6 +372,14 @@ const AlertModal = ({ alert, onClose, onReview }) => {
   const trx = detail?.transaction ?? null;
   const td = trx?.transaction_details ?? {};
   const mlScore = detail?.ml_score;
+  // Ditentukan backend dari anomaly score vs threshold dinamis model retrain.
+  // Fallback `risk_level` dipakai hanya untuk data lama sebelum `ml_risk_level`
+  // disimpan secara eksplisit.
+  const mlRiskLevel =
+    detail?.ml_risk_level ??
+    trx?.score_breakdown?.ml_risk_level ??
+    trx?.score_breakdown?.risk_level ??
+    null;
   const isAnomaly = detail?.is_anomaly;
   const mlPatterns = detail?.ml_patterns ?? [];
   const isAgenusa =
@@ -382,7 +388,8 @@ const AlertModal = ({ alert, onClose, onReview }) => {
     (detail?.service ?? alert.service ?? "").toUpperCase() === "NUSABILL";
   const duration = calcDuration(detail?.claimed_at);
 
-  const riskKey = getRiskFromMLScore(mlScore) || trx?.risk_level?.toUpperCase();
+  const riskKey =
+    String(mlRiskLevel || trx?.risk_level || "LOW").toUpperCase();
   const riskMeta = RISK_LEVEL_META[riskKey] || RISK_LEVEL_META.LOW;
   const prioKey = (alert.priorityLabel || "LOW").toUpperCase();
   const prioMeta = PRIORITY_META[prioKey] || PRIORITY_META.LOW;
@@ -490,7 +497,7 @@ const AlertModal = ({ alert, onClose, onReview }) => {
                           <i
                             className={`bi ${isAnomaly ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill"}`}
                           />
-                          {riskKey}{" "}
+                          {formatMLRiskLevel(riskKey)}{" "}
                           {isAnomaly ? "— Anomaly Detected" : "— Normal"}
                         </div>
                         {trx?.anomaly_score != null && (
@@ -537,7 +544,13 @@ const AlertModal = ({ alert, onClose, onReview }) => {
                             trx.score_breakdown.pattern_score,
                             "#d97706",
                           ],
-                          ["ML", trx.score_breakdown.ml_score, "#7c3aed"],
+                          [
+                            "ML Impact",
+                            trx.score_breakdown.ml_risk_contribution != null
+                              ? `+${trx.score_breakdown.ml_risk_contribution}`
+                              : null,
+                            "#7c3aed",
+                          ],
                           ["Final", trx.score_breakdown.final_score, "#dc2626"],
                         ]
                           .filter(([, v]) => v != null)
@@ -547,9 +560,7 @@ const AlertModal = ({ alert, onClose, onReview }) => {
                                 className="am-score-card__num"
                                 style={{ color }}
                               >
-                                {typeof val === "number" && val < 1
-                                  ? val.toFixed(4)
-                                  : val}
+                                {typeof val === "number" && val < 1 ? val.toFixed(4) : val}
                               </div>
                               <div className="am-score-card__lbl">{lbl}</div>
                             </div>

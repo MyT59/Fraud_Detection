@@ -358,7 +358,7 @@ const Transactions = () => {
               <input
                 type="text"
                 className="txn-search-input"
-                placeholder="Cari Transaction ID atau User Account…"
+                placeholder="Cari ID, akun, terminal, customer, bank, kode bayar, rule/pattern…"
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
               />

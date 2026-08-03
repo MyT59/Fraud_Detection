@@ -27,10 +27,15 @@ ISO_BY_MSG_TYPE = {
     "CEK_SALDO": {"mti": "0100", "processing_code": "310000"},
 }
 BANK_CODES      = ["014", "008", "009", "002"]
-IP_POOL         = ["36.90.120.15", "114.10.20.30", "180.250.50.60"]
+IP_LOCATIONS = [
+    {"ip": "36.90.120.15", "city": "Jakarta", "country": "ID"},
+    {"ip": "114.10.20.30", "city": "Surabaya", "country": "ID"},
+    {"ip": "180.250.50.60", "city": "Bandung", "country": "ID"},
+]
 
 # ⚠️ Pastikan sudah ada di tabel blacklist_items sebelum demo
 BLACKLISTED_IP       = "99.99.99.99"     # type = IP_ADDRESS
+BLACKLISTED_IP_LOCATION = {"city": "Richardson", "country": "US"}
 BLACKLISTED_USER     = "USER-BL-00001"   # type = USER_ID (customer_ref_number)
 BLACKLISTED_ACCOUNT  = "card_bl_000001"  # type = ACCOUNT_NUMBER
 BLACKLISTED_TERMINAL = "TRM_BL_00001"    # type = TERMINAL_ID
@@ -54,6 +59,7 @@ def _base_trx(time_override=None, msg_type: str = "TRANSFER") -> dict:
     """
     msg_type = str(msg_type or "TRANSFER").upper()
     iso = ISO_BY_MSG_TYPE.get(msg_type, ISO_BY_MSG_TYPE["TRANSFER"])
+    ip_location = random.choice(IP_LOCATIONS)
     trx = {
         "rrn":                  _generate_rrn(),
         "timestamp_db":         time_override or datetime.now(timezone.utc),
@@ -72,7 +78,9 @@ def _base_trx(time_override=None, msg_type: str = "TRANSFER") -> dict:
         "issuer_bank":          random.choice(BANK_CODES),
         "dest_bank_code":       random.choice(BANK_CODES),
         "acquirer_code":        "014",
-        "ip_address":           random.choice(IP_POOL),
+        "ip_address":           ip_location["ip"],
+        "city":                 ip_location["city"],
+        "country":              ip_location["country"],
         "issuer_account_number": "CARD" + "".join(random.choices(string.digits, k=8)),
         "fep_id":               "FEP-SIM-01",
     }
@@ -124,6 +132,7 @@ def generate_blacklist_user() -> list[dict]:
 def generate_blacklist_ip() -> list[dict]:
     trx = _base_trx()
     trx["ip_address"] = BLACKLISTED_IP
+    trx.update(BLACKLISTED_IP_LOCATION)
     return [trx]
 
 

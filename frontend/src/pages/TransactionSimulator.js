@@ -93,6 +93,8 @@ const initialNusabill = {
   status_akhir: "SUCCESS",
   keterangan: "",
   ip_address: "127.0.0.1",
+  city: "Jakarta",
+  country: "ID",
   inject_anomaly: "",
 };
 
@@ -868,6 +870,18 @@ const parseAmount = (value) => {
       return next;
     });
 
+  const updateNusabillLocation = (preset) => {
+    if (preset === "custom") return;
+    const location = IP_LOCATION_OPTIONS.find((option) => option.value === preset);
+    if (!location) return;
+    setNusabillForm((current) => ({
+      ...current,
+      ip_address: location.ip,
+      city: location.city,
+      country: location.country,
+    }));
+  };
+
   const makeBulkRows = useCallback(
     (count = bulkCount, source = service) => {
       const base =
@@ -1076,7 +1090,7 @@ const parseAmount = (value) => {
           if (helper === "same-customer") {
             return { ...row, ...timeFields, customer_id: customerId };
           }
-          if (helper === "unique-names") {
+          if (helper === "identity-mismatch") {
             return {
               ...row,
               ...timeFields,
@@ -1548,7 +1562,21 @@ const parseAmount = (value) => {
             onChange={(e) => updateForm("status_akhir", e.target.value)}
           />
         </Field>
-        <Field label="IP address">
+        <Field
+          label="Lokasi IP"
+          hint="Untuk audit lokasi IP, bukan alamat customer. Tidak dipakai oleh pattern location Nusabill."
+        >
+          <select
+            value={getLocationPreset(nusabillForm)}
+            onChange={(e) => updateNusabillLocation(e.target.value)}
+          >
+            {IP_LOCATION_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+            <option value="custom">IP custom</option>
+          </select>
+        </Field>
+        <Field label="IP address" hint="IP customer; lokasi di atas akan mengisi otomatis.">
           <input
             value={nusabillForm.ip_address}
             onChange={(e) => updateForm("ip_address", e.target.value)}
@@ -2359,11 +2387,11 @@ const parseAmount = (value) => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => applyBulkHelper("unique-names")}
+                          onClick={() => applyBulkHelper("identity-mismatch")}
                         >
                           <i className="bi bi-people" />
-                          Unique names
-                          <small>Untuk distinct_customer_count</small>
+                          Customer identity mismatch
+                          <small>Same ID, different names</small>
                         </button>
                         <button
                           type="button"

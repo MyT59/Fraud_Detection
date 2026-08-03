@@ -469,18 +469,18 @@ _LEGACY_SCENARIO_CATALOG = {
         },
 
         "fan_out_spam": {
-            "title": "Fan-Out Spam Billing",
-            "category": "Spam & Fake Invoice",
+            "title": "Customer Identity Mismatch",
+            "category": "Identity Conflict",
             "description": (
-                "1 customer ('CUST-HACKER-001') membayar tagihan untuk 22 nama customer "
-                "berbeda dalam < 2 menit (interval ~3 detik). Pola ini mengindikasikan "
-                "akun biller digunakan untuk mengirim spam tagihan ke banyak identitas berbeda."
+                "Satu customer ID digunakan dengan beberapa nama customer yang berbeda "
+                "dalam waktu singkat. Ini dapat menunjukkan konflik identitas atau "
+                "manipulasi data customer dan perlu diperiksa oleh analyst."
             ),
             "target_engines": ["Pattern Engine"],
-            "trigger_conditions": ["distinct_customer_count >= 20 dalam 5 menit"],
+            "trigger_conditions": ["distinct_customer_name_count >= 2 dalam 5 menit"],
             "fraud_pattern": None,
-            "expected_result": "FRAUD",
-            "transaction_count": 22,
+            "expected_result": "FLAGGED / perlu review",
+            "transaction_count": 3,
         },
 
         "burst_payment": {
@@ -607,13 +607,13 @@ _LEGACY_SCENARIO_CATALOG = {
                 "skrip bot untuk menembakkan tagihan VA palsu secara massal ke nomor "
                 "WhatsApp masyarakat acak. Pelaku berharap ada korban yang panik dan "
                 "langsung membayar tagihan tersebut. "
-                "Perbedaan dari fan_out_spam: tiap invoice minimal Rp 250.000 (ada threshold amount). "
+                "Skema data saat ini belum memiliki biller_id/merchant_id yang valid untuk pattern khusus ini. "
                 "Scenario: 22 invoice ke 22 nama berbeda, masing-masing 250–500 ribu, dalam < 5 menit."
             ),
-            "target_engines": ["Pattern Engine"],
+            "target_engines": ["ML Engine", "Manual Review"],
             "trigger_conditions": [
-                "distinct_customer_count >= 20 dalam 6 menit",
-                "amount >= 250,000 per invoice",
+                "Tidak ada pattern biller-spesifik pada skema data saat ini",
+                "Analyst menilai bukti invoice dan perilaku transaksi",
             ],
             "fraud_pattern": None,
             "expected_result": "FRAUD",

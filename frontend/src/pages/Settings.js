@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import ProfileSettings from "../components/settings/ProfileSettings";
 import SecuritySettings from "../components/settings/SecuritySettings";
 import NotificationSettings from "../components/settings/NotificationSettings";
-import SystemSettings from "../components/settings/SystemSettings";
 import ApiSettings from "../components/settings/ApiSettings";
 import SettingsTabs from "../components/settings/SettingsTabs";
 import "./Settings.css";
@@ -27,14 +26,6 @@ const Settings = () => {
       phone: u?.phone_number || "",
       avatar: null,
     };
-  });
-
-  const [systemData, setSystemData] = useState({
-    language: "id",
-    timezone: "Asia/Jakarta",
-    dateFormat: "DD/MM/YYYY",
-    currency: "IDR",
-    theme: "light",
   });
 
   const [apiData, setApiData] = useState({
@@ -108,9 +99,6 @@ const Settings = () => {
     setSaveStatus("saving");
     setTimeout(() => {
       switch (tab) {
-        case "system":
-          setSystemData(data);
-          break;
         case "api":
           setApiData(data);
           break;
@@ -149,13 +137,6 @@ const Settings = () => {
         return <SecuritySettings />;
       case "notifications":
         return <NotificationSettings />;
-      case "system":
-        return (
-          <SystemSettings
-            data={systemData}
-            onSave={(d) => handleSave("system", d)}
-          />
-        );
       case "api":
         return (
           <ApiSettings data={apiData} onSave={(d) => handleSave("api", d)} />

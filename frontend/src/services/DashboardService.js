@@ -10,8 +10,7 @@ export const dashboardService = {
    * Satu endpoint untuk semua data dashboard sekaligus.
    * Pakai ini di load awal Dashboard.
    */
-  getSummary: (signal) =>
-    api.get("/dashboard/summary", { signal }),
+  getSummary: (signal) => api.get("/dashboard/summary", { signal }),
 
   /**
    * GET /dashboard/transactions/trend/detail

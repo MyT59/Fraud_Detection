@@ -208,6 +208,49 @@
   margin-top: -0.05rem;
 }
 
+.pdm-condition-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pdm-condition-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+.pdm-condition-field {
+  color: #334155;
+  font-weight: 600;
+}
+.pdm-condition-operator {
+  color: #7c3aed;
+  font-weight: 700;
+}
+.pdm-condition-value {
+  color: #0f172a;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.75rem;
+}
+.pdm-condition-logic {
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: #ede9fe;
+  color: #6d28d9;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+.pdm-condition-window {
+  margin-top: 0.55rem;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
 .pdm-actions-list {
   display: flex;
   flex-direction: column;

@@ -52,6 +52,7 @@ def get_pattern_statistics(db: Session):
             "risk_score": pattern.risk_score,
             "action": pattern.action,
             "service_source": pattern.service_source,
+            "pattern_rules": pattern.pattern_rules,
             "is_active": pattern.is_active,
             "is_deleted": pattern.is_deleted,
             "updated_at": pattern.updated_at.isoformat() if pattern.updated_at else None,
@@ -128,8 +129,8 @@ def get_pattern_diagnostics_service(db):
                 "pattern_name": p.pattern_name,
                 "suggestion_type": "SUGGEST_ACTIVATION",
                 "reason": (
-                    f"Sistem mendeteksi pola kluster otomatis ini berhasil menjaring sebanyak {p.hit_count} hit "
-                    f"pada basis data manual review (Ambang batas konfigurasi saat ini: {settings.AUTO_PATTERN_ACTIVATION_THRESHOLD} hit). "
+                    f"Pattern kandidat ini cocok pada {p.hit_count} transaksi saat masih nonaktif "
+                    f"(suppressed signals). Ambang aktivasi konfigurasi saat ini: {settings.AUTO_PATTERN_ACTIVATION_THRESHOLD} hit. "
                     f"Direkomendasikan untuk segera diaktifkan ke status LIVE."
                 )
             })
