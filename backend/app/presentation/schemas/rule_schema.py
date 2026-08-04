@@ -12,7 +12,7 @@ from app.infrastructure.database.enums import (
 
 RULE_FIELDS = frozenset({
     "amount", "transaction_time", "ip_address", "city", "country",
-    "risk_score", "anomaly_score", "risk_level", "merchant_id",
+    "risk_score", "risk_level", "merchant_id",
     "terminal_id", "account_number", "transaction_details.issuer_bank",
     "transaction_details.issuer_account_number", "transaction_details.dest_account_number",
     "transaction_details.processing_code",
@@ -21,13 +21,13 @@ RULE_FIELDS = frozenset({
     "transaction_details.biaya_admin", "transaction_details.bill_status",
 })
 NUMERIC_RULE_FIELDS = frozenset({
-    "amount", "risk_score", "anomaly_score", "transaction_details.bill_amount",
+    "amount", "risk_score", "transaction_details.bill_amount",
     "transaction_details.payment_amount", "transaction_details.biaya_admin",
 })
 TEXT_RULE_FIELDS = RULE_FIELDS - NUMERIC_RULE_FIELDS - {"transaction_time"}
 UNIVERSAL_RULE_FIELDS = frozenset({
     "amount", "transaction_time", "ip_address", "city", "country",
-    "risk_score", "anomaly_score", "risk_level",
+    "risk_score", "risk_level",
 })
 AGENUSA_RULE_FIELDS = UNIVERSAL_RULE_FIELDS | frozenset({
     "merchant_id", "terminal_id", "account_number",

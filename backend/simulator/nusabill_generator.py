@@ -334,8 +334,16 @@ def generate_high_amount() -> list[dict]:
 # ============================================================
 # SCENARIO 15 — RULE: NUSABILL REPAYMENT BLOCK
 # Target rule : rule_nusabill_repayment_block (Global Rule)
-# Trigger     : status_tagihan == "PAID"
+# Trigger     : status_tagihan == "terbayar"
 # ============================================================
+def generate_rule_nusabill_repayment_block() -> list[dict]:
+    """Simulasikan percobaan membayar ulang invoice yang sudah lunas."""
+    inv = _base_invoice()
+    inv["status_tagihan"] = "terbayar"
+    inv["keterangan"] = "Simulasi percobaan pembayaran ulang invoice yang sudah lunas"
+    return [inv]
+
+
 # ============================================================
 # SCENARIO 16 — RULE: NUSABILL MAX UNVERIFIED BILL
 # Target rule : rule_nusabill_max_unverified_bill (Global Rule)
@@ -615,6 +623,30 @@ def get_scenario_catalog() -> dict[str, dict]:
             "expected_result": "FLAGGED",
             "transaction_count": 1,
         },
+        "rule_nusabill_repayment_block": {
+            "title": "Nusabill - Penolakan Pembayaran Invoice Lunas",
+            "category": "INVOICE_STATUS",
+            "description": (
+                "Mencoba membayar invoice yang sudah berstatus terbayar. "
+                "Skenario ini menguji pencegahan pembayaran ganda."
+            ),
+            "target_engines": ["Rule Engine"],
+            "trigger_conditions": ["bill_status == 'terbayar'"],
+            "global_rule": {
+                "rule_key": "rule_nusabill_repayment_block",
+                "rule_group": "INVOICE_STATUS",
+                "action": "BLOCK",
+                "severity": "HIGH",
+                "priority": 90,
+                "rule_config": {
+                    "field": "transaction_details.bill_status",
+                    "value": "terbayar",
+                    "operator": "=",
+                },
+            },
+            "expected_result": "BLOCKED",
+            "transaction_count": 1,
+        },
     }
     for scenario in catalog.values():
         for target_key in ("fraud_pattern", "global_rule"):
@@ -645,6 +677,7 @@ def get_all_scenarios() -> dict[str, list[dict]]:
         "ml_early_payment_anomaly": generate_early_payment_anomaly(),
         "ml_unknown_mixed_outlier": generate_ml_unknown_mixed_outlier(),
         "rule_nusabill_max_unverified_bill": generate_rule_nusabill_max_unverified_bill(),
+        "rule_nusabill_repayment_block": generate_rule_nusabill_repayment_block(),
     }
 
 

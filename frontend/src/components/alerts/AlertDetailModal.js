@@ -450,22 +450,42 @@ const AlertDetailModal = ({
 
   // Track status lokal untuk update optimistic di badge header
   const [localStatus, setLocalStatus] = useState(null);
+  const [isOverrideOpen, setIsOverrideOpen] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideError, setOverrideError] = useState("");
+  const [isOverriding, setIsOverriding] = useState(false);
+  const overrideReasonRef = useRef(null);
   const displayStatus = localStatus || detail?.status;
 
   // Reset localStatus setiap modal buka dengan alert baru
   useEffect(() => {
-    if (open) setLocalStatus(null);
+    if (open) {
+      setLocalStatus(null);
+      setIsOverrideOpen(false);
+      setOverrideReason("");
+      setOverrideError("");
+    }
   }, [open, detail?.id]);
+
+  useEffect(() => {
+    if (isOverrideOpen) overrideReasonRef.current?.focus();
+  }, [isOverrideOpen]);
 
   // Close on Escape
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (isOverrideOpen) {
+        setIsOverrideOpen(false);
+        setOverrideError("");
+      } else {
+        onClose();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  }, [open, onClose, isOverrideOpen]);
 
   // Prevent body scroll
   useEffect(() => {
@@ -504,17 +524,32 @@ const AlertDetailModal = ({
     transaction: detail?.transaction,
   });
 
-  const handleOverride = async () => {
-    const reason = window.prompt(
-      "Alasan override wajib diisi. Contoh: duplicate alert atau approved business exception.",
-    );
-    if (!reason?.trim()) return;
+  const openOverrideModal = () => {
+    setOverrideReason("");
+    setOverrideError("");
+    setIsOverrideOpen(true);
+  };
 
+  const handleOverride = async (e) => {
+    e.preventDefault();
+    const reason = overrideReason.trim();
+    if (!reason) {
+      setOverrideError("Alasan override wajib diisi untuk kebutuhan audit.");
+      overrideReasonRef.current?.focus();
+      return;
+    }
+
+    setIsOverriding(true);
+    setOverrideError("");
     try {
-      await updateAlertStatus(detail.id, "OVERRIDDEN", reason.trim());
+      await updateAlertStatus(detail.id, "OVERRIDDEN", reason);
       handleStatusUpdated("OVERRIDDEN");
+      setIsOverrideOpen(false);
+      setOverrideReason("");
     } catch (err) {
-      window.alert(err.message || "Gagal override alert.");
+      setOverrideError(err.message || "Gagal override alert.");
+    } finally {
+      setIsOverriding(false);
     }
   };
 
@@ -1300,7 +1335,7 @@ const AlertDetailModal = ({
               {canOverrideTransaction && (
                 <button
                   className="adm-btn adm-btn--ghost"
-                  onClick={handleOverride}
+                  onClick={openOverrideModal}
                   disabled={!!pendingOp}
                   title="Tutup kasus khusus dengan alasan audit"
                   style={{ borderColor: "#dc2626", color: "#b91c1c" }}
@@ -1351,6 +1386,80 @@ const AlertDetailModal = ({
           </div>
         )}
       </div>
+
+      {isOverrideOpen && (
+        <div
+          className="adm-override-overlay"
+          onClick={() => !isOverriding && setIsOverrideOpen(false)}
+          role="presentation"
+        >
+          <form
+            className="adm-override-modal"
+            onSubmit={handleOverride}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="adm-override-title"
+          >
+            <div className="adm-override-modal__header">
+              <span className="adm-override-modal__icon" aria-hidden="true">
+                <i className="bi bi-shield-fill-exclamation" />
+              </span>
+              <div>
+                <p className="adm-override-modal__eyebrow">Aksi sensitif</p>
+                <h3 id="adm-override-title">Konfirmasi Override Alert</h3>
+              </div>
+            </div>
+
+            <p className="adm-override-modal__description">
+              Alert akan ditandai sebagai <strong>Overridden</strong>. Masukkan
+              alasan untuk jejak audit.
+            </p>
+
+            <label className="adm-override-modal__label" htmlFor="override-reason">
+              Alasan override <span aria-hidden="true">*</span>
+            </label>
+            <textarea
+              ref={overrideReasonRef}
+              id="override-reason"
+              className={`adm-override-modal__textarea${overrideError ? " is-invalid" : ""}`}
+              value={overrideReason}
+              onChange={(e) => {
+                setOverrideReason(e.target.value);
+                if (overrideError) setOverrideError("");
+              }}
+              placeholder="Contoh: duplicate alert atau approved business exception."
+              rows={4}
+              disabled={isOverriding}
+              aria-invalid={Boolean(overrideError)}
+              aria-describedby={overrideError ? "override-reason-error" : undefined}
+            />
+            {overrideError && (
+              <p id="override-reason-error" className="adm-override-modal__error" role="alert">
+                <i className="bi bi-exclamation-circle-fill" /> {overrideError}
+              </p>
+            )}
+
+            <div className="adm-override-modal__actions">
+              <button
+                type="button"
+                className="adm-btn adm-btn--ghost"
+                onClick={() => setIsOverrideOpen(false)}
+                disabled={isOverriding}
+              >
+                Batal
+              </button>
+              <button type="submit" className="adm-btn adm-btn--override" disabled={isOverriding}>
+                {isOverriding ? (
+                  <><i className="bi bi-arrow-repeat adm-spin" /> Menyimpan…</>
+                ) : (
+                  <><i className="bi bi-shield-fill-exclamation" /> Konfirmasi Override</>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

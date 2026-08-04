@@ -16,42 +16,7 @@ predictor = IsolationPredictor()
 def score_transaction_snapshot(
     snapshot: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    Score satu transaksi dari snapshot JSON.
 
-    Ini adalah entry point utama untuk ML inference real-time.
-    Snapshot berisi transaksi current + historical context.
-
-    Args:
-        snapshot: JSON snapshot dengan struktur:
-            {
-                "transaction": {
-                    "id": 123,
-                    "domain": "agenusa",
-                    "account_number": "ACC123",
-                    ...
-                },
-                "historical_context": {
-                    "recent_account_transactions": [...]
-                },
-                "metadata": {...}
-            }
-
-    Returns:
-        Dict dengan scoring results:
-        {
-            "transaction_id": 123,
-            "domain": "agenusa",
-            "score": 0.123456,
-            "is_anomaly": False,
-            "patterns": ["pattern1"],
-            "thresholds": {...},
-            "risk_level": "low"  # calculated dari score & thresholds
-        }
-
-    Raises:
-        ValueError: Jika snapshot invalid atau domain unknown
-    """
     if not snapshot:
         logger.error("[SCORE] Snapshot kosong — request ditolak")
         raise ValueError("Snapshot kosong")
@@ -70,15 +35,6 @@ def score_transaction_snapshot(
 
     # ===== LOAD METADATA & THRESHOLDS =====
     meta = load_isolation_meta(domain)
-
-    # ===== DETERMINE RISK LEVEL =====
-    # Isolation Forest decision_function() menghasilkan nilai di mana:
-    #   NEGATIF = anomali (semakin negatif = semakin mencurigakan)
-    #   POSITIF = normal
-    #
-    # Key threshold di meta JSON:
-    #   "high_risk_score_threshold": -0.0053  (score <= ini → HIGH_RISK)
-    #   "review_score_threshold"   :  0.0014  (score <= ini → REVIEW)
     score = prediction["score"]
     thresholds = meta.get("thresholds", {})
 

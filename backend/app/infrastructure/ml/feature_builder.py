@@ -9,10 +9,6 @@ from ...core.logging import get_logger
 logger = get_logger(__name__)
 BUSINESS_TIMEZONE = ZoneInfo("Asia/Jakarta")
 
-# Kolom yang benar-benar tersedia saat realtime inference. Batch training
-# sebelumnya ikut menyertakan kolom mentah dataset (mis. ISSUER_BANK,
-# VIOLATION_REASON, RISK_SCORE), padahal snapshot transaksi tidak menyediakan
-# semuanya. Model hasil training dengan kolom itu tidak dapat dipakai runtime.
 RUNTIME_FEATURE_COLUMNS: dict[str, tuple[str, ...]] = {
     "agenusa": (
         "TERMINAL_ID", "MERCHANT_ID", "AMOUNT", "RESPONSE_CODE",
@@ -63,7 +59,7 @@ def align_runtime_features(domain: str, feature_df: pd.DataFrame) -> pd.DataFram
     return aligned
 
 # ========================================================================
-# SNAPSHOT-BASED FEATURE ENGINEERING (NEW)
+# SNAPSHOT-BASED FEATURE ENGINEERING
 # ========================================================================
 
 def _safe_divide(a: float, b: float, default: float = 0.0) -> float:
@@ -103,7 +99,7 @@ def _get_minutes_since_last_transaction(
     if not current_dt or not historical_transactions:
         return 9999.0
     
-    # Historical transactions are already sorted by time (most recent first)
+    # Historical transactions are already sorted by time
     if len(historical_transactions) > 0:
         most_recent = historical_transactions[0]
         prev_dt = _parse_datetime(most_recent.get("transaction_time"))
@@ -255,19 +251,6 @@ def build_agenusa_features_from_snapshot(snapshot: dict) -> dict:
 
 
 def build_nusabill_features_from_snapshot(snapshot: dict) -> dict:
-    """
-    Build Nusabill features from a single transaction snapshot.
-    
-    Snapshot structure:
-    {
-        "transaction": { current transaction data },
-        "historical_context": {
-            "recent_account_transactions": [ list of past transactions ]
-        }
-    }
-    
-    Returns: dict with all calculated features
-    """
     current_tx = snapshot.get("transaction", {})
     historical_context = snapshot.get("historical_context", {})
     # Ambil data mentahnya
@@ -360,7 +343,7 @@ def build_nusabill_features_from_snapshot(snapshot: dict) -> dict:
 
 
 # ========================================================================
-# LEGACY PANDAS-BASED FUNCTIONS (DEPRECATED)
+# LEGACY PANDAS-BASED FUNCTIONS
 # ========================================================================
 
 def _safe_divide_series(a: pd.Series, b: pd.Series) -> pd.Series:
@@ -379,7 +362,7 @@ def _safe_divide_series(a: pd.Series, b: pd.Series) -> pd.Series:
 def build_agenusa_features(df: pd.DataFrame) -> pd.DataFrame:
     data = df.copy()
 
-    # 🔥 1. NORMALIZATION
+    #  NORMALIZATION
     COLUMN_ALIASES = {
         "timestamp_db": "TIMESTAMP_DB",
         "transaction_time": "TIMESTAMP_DB",
@@ -395,7 +378,7 @@ def build_agenusa_features(df: pd.DataFrame) -> pd.DataFrame:
         if old_col in data.columns and new_col not in data.columns:
             data[new_col] = data[old_col]
 
-    # ✅ 2. VALIDATION
+    # VALIDATION
     required_cols = [
         "TIMESTAMP_DB", 
         "ACCOUNT_NUMBER", 
@@ -417,7 +400,7 @@ def build_agenusa_features(df: pd.DataFrame) -> pd.DataFrame:
             f"Available columns: {list(data.columns)}"
         )
 
-    # 🚀 3. FEATURE ENGINEERING
+    # FEATURE ENGINEERING
     data["TIMESTAMP_DB"] = pd.to_datetime(data["TIMESTAMP_DB"], errors="coerce", utc=True)
     # MLFeedbackLog menyimpan amount sebagai Decimal; fitur rolling dan rasio
     # di bawah harus selalu bekerja dengan tipe numerik pandas/NumPy.
@@ -465,7 +448,7 @@ def build_agenusa_features(df: pd.DataFrame) -> pd.DataFrame:
 def build_nusabill_features(df: pd.DataFrame) -> pd.DataFrame:
     data = df.copy()
 
-    # 🔥 1. NORMALIZATION
+    # NORMALIZATION
     COLUMN_ALIASES = {
         "bill_date": "BILL_DATE",
         "payment_date": "PAYMENT_DATE",
@@ -489,7 +472,7 @@ def build_nusabill_features(df: pd.DataFrame) -> pd.DataFrame:
     if customer_id.notna().any():
         data["CUSTOMER_ID"] = customer_id
 
-    # ✅ 2. VALIDATION
+    # VALIDATION
     required_cols = [
         "BILL_DATE", 
         "PAYMENT_DATE", 
@@ -510,7 +493,7 @@ def build_nusabill_features(df: pd.DataFrame) -> pd.DataFrame:
             f"Available columns: {list(data.columns)}"
         )
 
-    # 🚀 3. FEATURE ENGINEERING
+    # FEATURE ENGINEERING
     data["BILL_DATE"] = pd.to_datetime(data["BILL_DATE"], errors="coerce")
     data["PAYMENT_DATE"] = pd.to_datetime(data["PAYMENT_DATE"], errors="coerce")
     data["PAYMENT_AMOUNT"] = pd.to_numeric(
@@ -588,17 +571,6 @@ def _pattern_reasons(domain: str, features: dict[str, Any] | pd.Series) -> list[
 
 
 def get_matched_patterns(domain: str, features: dict[str, Any] | pd.Series) -> list[str]:
-    """
-    Extract fraud pattern reasons from features.
-    Supports both snapshot-based dict and legacy pd.Series formats.
-    
-    Args:
-        domain: "agenusa" or "nusabill"
-        features: Feature dict from snapshot-based builder OR pd.Series from legacy builder
-    
-    Returns:
-        List of matched fraud pattern reasons
-    """
     return _pattern_reasons(domain, features)
 
 
@@ -607,25 +579,6 @@ def get_matched_patterns(domain: str, features: dict[str, Any] | pd.Series) -> l
 # ========================================================================
 
 def build_features_from_snapshot(domain: str, snapshot: dict) -> dict[str, Any]:
-    """
-    Build fraud detection features from a single transaction snapshot.
-    
-    Args:
-        domain: "agenusa" or "nusabill"
-        snapshot: Transaction snapshot dict with structure:
-            {
-                "transaction": { transaction data },
-                "historical_context": {
-                    "recent_account_transactions": [ historical transactions ]
-                }
-            }
-    
-    Returns:
-        Dict of calculated features for the current transaction
-    
-    Raises:
-        ValueError if domain is unknown
-    """
     if domain == "agenusa":
         return build_agenusa_features_from_snapshot(snapshot)
     elif domain == "nusabill":
@@ -640,10 +593,6 @@ def build_features_from_snapshot(domain: str, snapshot: dict) -> dict[str, Any]:
 # ========================================================================
 
 def build_features(domain: str, df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Legacy function: Build fraud detection features from Pandas DataFrame.
-    Sering digunakan oleh retrain_service.py untuk memproses data batch (CSV + DB).
-    """
     df = df.copy()
     # 1. Paksa lowercase di awal agar alias kolom dari berbagai source seragam
     df.columns = df.columns.str.lower()
@@ -656,12 +605,7 @@ def build_features(domain: str, df: pd.DataFrame) -> pd.DataFrame:
         logger.error(f"[FEATURE_BUILD] Domain tidak dikenal — domain={domain}")
         raise ValueError(f"Domain tidak dikenal: {domain}")
 
-    # 🔥 FIX AKURASI: Paksa seluruh kolom hasil akhir menjadi UPPERCASE
     processed_df.columns = processed_df.columns.str.upper()
-    
-    # 👇 ====== TAMBAHKAN BARIS INI ====== 👇
-    # Hapus duplikat kolom akibat bentrokan huruf besar/kecil dari proses di atas
     processed_df = processed_df.loc[:, ~processed_df.columns.duplicated()]
-    # 👆 ================================= 👆
     
     return processed_df

@@ -82,6 +82,72 @@ const PATTERN_CATEGORY_OPTIONS = [
 ];
 
 // ─── Komponen Row Kondisi Dinamis ─────────────────────────────────────────────
+const ConditionFieldSelect = ({ groups, value, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef(null);
+  const selected = ALL_FIELDS_FLAT.find((field) => field.f === value);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event) => {
+      if (!selectRef.current?.contains(event.target)) setIsOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
+  return (
+    <div className="pfm-field-select" ref={selectRef}>
+      <button
+        type="button"
+        className={`pfm-field-select__trigger ${isOpen ? "is-open" : ""}`}
+        onClick={() => setIsOpen((open) => !open)}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+      >
+        <span className={selected ? "" : "pfm-field-select__placeholder"}>
+          {selected?.l || "— Pilih Indikator Matriks —"}
+        </span>
+        <i className={`bi bi-chevron-down ${isOpen ? "is-open" : ""}`} aria-hidden="true" />
+      </button>
+
+      {isOpen && (
+        <div className="pfm-field-select__menu" role="listbox" aria-label="Pilih indikator matriks">
+          {groups.map((group) => (
+            <div className="pfm-field-select__group" key={group.group}>
+              <div className="pfm-field-select__group-title">{group.group}</div>
+              {group.items.map((field) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={field.f === value}
+                  className={`pfm-field-select__option ${field.f === value ? "is-selected" : ""}`}
+                  key={field.f}
+                  onClick={() => {
+                    onChange(field.f);
+                    setIsOpen(false);
+                  }}
+                >
+                  <span>{field.l}</span>
+                  <code>{field.f}</code>
+                  {field.f === value && <i className="bi bi-check2" aria-hidden="true" />}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const CondRow = ({ cond, currentService, onChange, onRemove, showRemove }) => {
   const availableGroups = FIELD_GROUPS.filter((g) =>
     g.services.includes(currentService),
@@ -102,20 +168,11 @@ const CondRow = ({ cond, currentService, onChange, onRemove, showRemove }) => {
     <div className="pfm-cond-row">
       <label className="pfm-cond-control pfm-cond-control--metric">
         <span>Indikator</span>
-        <select className="pfm-select" value={cond.field} onChange={(e) => handleFieldChange(e.target.value)}>
-        <option value="" disabled>
-          — Pilih Indikator Matriks —
-        </option>
-        {availableGroups.map((grp) => (
-          <optgroup key={grp.group} label={grp.group}>
-            {grp.items.map((f) => (
-              <option key={f.f} value={f.f}>
-                {f.l}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-        </select>
+        <ConditionFieldSelect
+          groups={availableGroups}
+          value={cond.field}
+          onChange={handleFieldChange}
+        />
       </label>
 
       <label className="pfm-cond-control pfm-cond-control--operator">
