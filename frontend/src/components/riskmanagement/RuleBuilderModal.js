@@ -15,7 +15,6 @@ const FLD = {
     { l: "Kota asal", f: "city", t: "text", d: "GeoIP City" },
     { l: "Negara asal", f: "country", t: "text", d: "GeoIP Country" },
     { l: "Skor risiko sistem", f: "risk_score", t: "number", d: "Risk Score" },
-    { l: "Skor anomali AI", f: "anomaly_score", t: "number", d: "ML Anomaly Score" },
     {
       l: "Tingkat risiko",
       f: "risk_level",
@@ -48,7 +47,7 @@ const FLD = {
       d: "Issuer Bank",
     },
     {
-      l: "Nomor rekening penerbit",
+      l: "Akun dari issuer",
       f: "transaction_details.issuer_account_number",
       t: "text",
       j: true,

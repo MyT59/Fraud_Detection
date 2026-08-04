@@ -974,7 +974,10 @@ const parseAmount = (value) => {
   const updateBulkLocation = (rowId, preset) => {
     setBulkRows((rows) =>
       rows.map((row) => {
-        if (row._rowId !== rowId || preset === "custom") return row;
+        if (row._rowId !== rowId) return row;
+        if (preset === "custom") {
+          return { ...row, city: "", country: "" };
+        }
         const location = IP_LOCATION_OPTIONS.find((option) => option.value === preset);
         return location
           ? {
@@ -985,6 +988,16 @@ const parseAmount = (value) => {
             }
           : row;
       }),
+    );
+  };
+
+  const updateBulkCustomIp = (rowId, ipAddress) => {
+    setBulkRows((rows) =>
+      rows.map((row) =>
+        row._rowId === rowId
+          ? { ...row, ip_address: ipAddress, city: "", country: "" }
+          : row,
+      ),
     );
   };
 
@@ -1202,6 +1215,20 @@ const parseAmount = (value) => {
 
   const normalizeBulkRow = (row) => {
       const payload = cleanPayload(row);
+      const hasLocationPreset = IP_LOCATION_OPTIONS.some(
+        (option) =>
+          option.ip === row.ip_address &&
+          option.city === row.city &&
+          option.country === row.country,
+      );
+
+      // Custom IP tidak boleh mewarisi city/country dari preset sebelumnya.
+      // Backend dapat melakukan GeoIP lookup sendiri bila lokasi diperlukan.
+      if (!hasLocationPreset) {
+        delete payload.city;
+        delete payload.country;
+      }
+
       if (service === "agenusa") {
         payload.amount = parseAmount(payload.amount);
       if (payload.timestamp_db)
@@ -1621,14 +1648,24 @@ const parseAmount = (value) => {
                 service === "agenusa"
                   ? previous.timestamp_db
                   : previous.tanggal_pembayaran || previous.tanggal_tagihan;
+              const previousBillTimestamp =
+                service === "nusabill" ? previous.tanggal_tagihan : "";
               const nextTimestamp = previousTimestamp
-                  ? toWibDateTimeInput(
-                      new Date(
+                ? toWibDateTimeInput(
+                    new Date(
                         wibDateTimeToDate(previousTimestamp).getTime() +
                           Number(bulkIntervalSeconds) * 1000,
                       ),
                     )
                   : "";
+              const nextBillTimestamp = previousBillTimestamp
+                ? toWibDateTimeInput(
+                    new Date(
+                      wibDateTimeToDate(previousBillTimestamp).getTime() +
+                        Number(bulkIntervalSeconds) * 1000,
+                    ),
+                  )
+                : nextTimestamp;
               return [
                 ...rows,
                 {
@@ -1636,7 +1673,7 @@ const parseAmount = (value) => {
                   ...(service === "agenusa"
                     ? { timestamp_db: nextTimestamp }
                     : {
-                        tanggal_tagihan: nextTimestamp,
+                        tanggal_tagihan: nextBillTimestamp,
                         tanggal_pembayaran: nextTimestamp,
                       }),
                   _rowId: `${Date.now()}-${Math.random()}`,
@@ -1674,7 +1711,8 @@ const parseAmount = (value) => {
                   <th>Pembayaran</th>
                   <th>Channel</th>
                   <th>IP / Lokasi</th>
-                  <th>Timestamp</th>
+                  <th>Tgl Tagihan</th>
+                  <th>Tgl Pembayaran</th>
                 </>
               )}
               <th aria-label="Aksi" />
@@ -1802,7 +1840,7 @@ const parseAmount = (value) => {
                       <input
                         className="sim-code-input"
                         value={row.ip_address || ""}
-                        onChange={(e) => updateBulkRow(row._rowId, "ip_address", e.target.value)}
+                        onChange={(e) => updateBulkCustomIp(row._rowId, e.target.value)}
                         placeholder="Contoh: 36.90.120.15"
                         aria-label={`IP address transaksi ${index + 1}`}
                       />
@@ -1911,7 +1949,7 @@ const parseAmount = (value) => {
                       <input
                         className="sim-code-input"
                         value={row.ip_address || ""}
-                        onChange={(e) => updateBulkRow(row._rowId, "ip_address", e.target.value)}
+                        onChange={(e) => updateBulkCustomIp(row._rowId, e.target.value)}
                         placeholder="Contoh: 36.90.120.15"
                         aria-label={`IP address transaksi ${index + 1}`}
                       />
@@ -1921,19 +1959,31 @@ const parseAmount = (value) => {
                         className="sim-time-input"
                         type="datetime-local"
                         required
-                        value={row.tanggal_pembayaran}
-                        onChange={(e) => {
-                          updateBulkRow(
-                            row._rowId,
-                            "tanggal_pembayaran",
-                            e.target.value,
-                          );
+                        value={row.tanggal_tagihan}
+                        onChange={(e) =>
                           updateBulkRow(
                             row._rowId,
                             "tanggal_tagihan",
                             e.target.value,
-                          );
-                        }}
+                          )
+                        }
+                        aria-label={`Tanggal tagihan transaksi ${index + 1}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="sim-time-input"
+                        type="datetime-local"
+                        required
+                        value={row.tanggal_pembayaran}
+                        onChange={(e) =>
+                          updateBulkRow(
+                            row._rowId,
+                            "tanggal_pembayaran",
+                            e.target.value,
+                          )
+                        }
+                        aria-label={`Tanggal pembayaran transaksi ${index + 1}`}
                       />
                     </td>
                   </>

@@ -64,8 +64,7 @@ STATIC_FIELD_REGISTRY: dict[str, _FieldResolver] = {
     "service_source":  lambda trx, det: trx.service_source,
 
     # ── AGENUSA: field dari feature_builder 
-    # Digunakan oleh pattern AI Discovery baru di PatternDiscoveryService.
-
+    # Dipakai untuk pattern AI Discovery baru di PatternDiscoveryService.
     # Kode jenis transaksi ISO-8583 (e.g. "300000" = PIN change/inquiry)
     "PROCESSING_CODE":      lambda trx, det: det.get("processing_code"),
 
@@ -89,9 +88,8 @@ STATIC_FIELD_REGISTRY: dict[str, _FieldResolver] = {
     # Rekening tujuan transfer (untuk deteksi money mule destination)
     "dest_account_number":  lambda trx, det: det.get("dest_account_number"),
 
-    # ── NUSABILL: field dari feature_builder ────────────────────────────────
-    # Digunakan oleh pattern AI Discovery baru di PatternDiscoveryService.
-
+    # NUSABILL: field dari feature_builder 
+    # Dipakai untuk pattern AI Discovery baru di PatternDiscoveryService.
     # Selisih waktu (menit) antar pembayaran tagihan pada biller yang sama
     "PAYMENT_GAP_MINUTES":  lambda trx, det: _to_float(det.get("payment_gap_minutes")),
 
@@ -166,7 +164,14 @@ def detect_pattern_location_jump(db: Session, current_trx: Transaction) -> tuple
         ).order_by(Transaction.transaction_time.desc()).first()
 
         if not last_trx:
-            _location_cache[user_id] = (None, None, None)
+            # Transaksi pertama menjadi titik pembanding untuk transaksi
+            # berikutnya dalam batch yang sama. Sebelumnya cache diisi None,
+            # sehingga transaksi kedua tidak pernah bisa mendeteksi city jump.
+            _location_cache[user_id] = (
+                current_trx.city,
+                current_trx.country,
+                current_trx.transaction_time,
+            )
             return False, ""
 
         last_city    = last_trx.city

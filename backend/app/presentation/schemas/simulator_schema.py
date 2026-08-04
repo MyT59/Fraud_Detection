@@ -123,8 +123,10 @@ class AgenusaManualInput(BaseModel):
 
     # === LOKASI / NETWORK ===
     ip_address: str  = Field(default="127.0.0.1", description="IP address terminal.", example="192.168.1.100")
-    city: str        = Field(default="Jakarta",   description="Kota lokasi transaksi.", example="Surabaya")
-    country: str     = Field(default="ID",        description="Kode negara (ISO 3166-1 alpha-2).", example="ID")
+    # Tidak boleh default Jakarta/ID: bulk dengan IP custom perlu membiarkan
+    # backend mengisi lokasi dari GeoIP, bukan mewarisi preset sebelumnya.
+    city: Optional[str] = Field(default=None, description="Kota lokasi transaksi.", example="Surabaya")
+    country: Optional[str] = Field(default=None, max_length=2, description="Kode negara (ISO 3166-1 alpha-2).", example="ID")
 
     # === ANOMALY INJECTION ===
     inject_anomaly: Optional[AnomalyType] = Field(

@@ -16,10 +16,6 @@ _NUSABILL_SIGNATURE = {
 }
 
 def detect_domain(columns: List[str]) -> Optional[str]:
-    """
-    Auto-detect domain dari kolom dataset.
-    Return 'agenusa', 'nusabill', atau None jika tidak cocok.
-    """
     # CSV header is case-insensitive; normalize before comparing signatures.
     col_set = {str(column).strip().upper() for column in columns}
     

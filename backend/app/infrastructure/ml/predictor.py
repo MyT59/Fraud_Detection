@@ -13,12 +13,6 @@ logger = get_logger(__name__)
 
 
 class IsolationPredictor:
-    """
-    Predictor untuk Isolation Forest model.
-    Mendukung dua mode:
-    1. Snapshot-based: satu transaksi dengan riwayat (NEW - recommended)
-    2. Batch-based: list flat dictionaries (LEGACY - deprecated)
-    """
 
     # =====================================================================
     # NEW API: SNAPSHOT-BASED (Real-time inference)
@@ -29,29 +23,6 @@ class IsolationPredictor:
         self,
         snapshot: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Score satu transaksi dari snapshot JSON.
-
-        Args:
-            snapshot: Nested JSON snapshot dengan struktur:
-                {
-                    "transaction": { ... },
-                    "historical_context": { ... },
-                    "metadata": { ... }
-                }
-
-        Returns:
-            Dict dengan score dan anomaly flag:
-            {
-                "score": 0.123456,
-                "is_anomaly": False,
-                "patterns": ["pattern1", "pattern2"],
-                "transaction_id": 123
-            }
-
-        Raises:
-            ValueError: Jika domain unknown atau snapshot invalid
-        """
         # Validasi
         if not snapshot:
             logger.error("[PREDICT] Snapshot kosong — request ditolak")
@@ -124,7 +95,7 @@ class IsolationPredictor:
         return result
 
     # =====================================================================
-    # LEGACY API: BATCH-BASED (Deprecated)
+    # LEGACY API: BATCH-BASED
     # =====================================================================
 
     @log_performance(label="ML.predict_scores_batch")
@@ -133,19 +104,6 @@ class IsolationPredictor:
         domain: str,
         records: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """
-        DEPRECATED: Gunakan predict_score_from_snapshot() untuk real-time.
-
-        Score list of records menggunakan batch processing.
-        Fungsi ini dipertahankan untuk backward compatibility.
-
-        Args:
-            domain: "agenusa" atau "nusabill"
-            records: List of flat dictionaries (old format)
-
-        Returns:
-            List of prediction results
-        """
         if domain not in DOMAIN_ISO_CONFIG:
             raise ValueError(f"Domain tidak dikenal: {domain}")
         if not records:

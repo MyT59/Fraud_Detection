@@ -192,8 +192,6 @@ def train_from_dataframe(
 
     config = DOMAIN_ISO_CONFIG[domain]
     
-    # Feature builder biasanya sudah dipanggil di retrain_service, 
-    # tapi kita pastikan kolom yang tidak perlu di-drop
     x = df.drop(columns=["IS_FRAUD", *config["drop_cols"]], errors="ignore")
     x = align_runtime_features(domain, x)
 
@@ -208,7 +206,7 @@ def train_from_dataframe(
     high_risk_th = _round_threshold(float(np.quantile(scores, 0.03)), decimals=4)
     review_th = _round_threshold(float(np.quantile(scores, 0.10)), decimals=4)
 
-    # Identifikasi baris mana yang dianggap anomali untuk pattern discovery
+    # Identifikasi anomali untuk pattern discovery
     df_result = df.copy()
     df_result["IS_ANOMALY"] = (pred == -1).astype(int)
     anomaly_df = df_result[df_result["IS_ANOMALY"] == 1]

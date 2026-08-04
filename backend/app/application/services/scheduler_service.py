@@ -65,11 +65,11 @@ def run_sla_escalation_task():
             )
             
         db.commit()
-        logger.info(f"⚡ [SLA Engine] Berhasil mengeksalasi {len(overdue_alerts)} alert yang terlantar ke puncak antrean.")
+        logger.info(f"[SLA Engine] Berhasil mengeksalasi {len(overdue_alerts)} alert yang terlantar ke puncak antrean.")
         
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ [SLA Engine] Kebobolan error saat mengeksalasi SLA: {e}")
+        logger.error(f"[SLA Engine] Kebobolan error saat mengeksalasi SLA: {e}")
     finally:
         db.close()
 
