@@ -529,6 +529,9 @@ def update_alert_status_service(
 def claim_alert_service(db, alert_id, admin_id, background_tasks: BackgroundTasks):
     alert = db.query(FraudAlert).filter(FraudAlert.id == alert_id).with_for_update().first()
     if not alert: raise HTTPException(status_code=404, detail="Alert not found")
+    trx = db.query(Transaction).filter(Transaction.id == alert.transaction_id).first()
+    if not trx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
     if alert.status not in {AlertStatusEnum.OPEN, AlertStatusEnum.REOPENED}:
         raise HTTPException(status_code=400, detail=f"Cannot claim alert. Current status is {alert.status}")
     if alert.claimed_by:
@@ -547,6 +550,7 @@ def claim_alert_service(db, alert_id, admin_id, background_tasks: BackgroundTask
         severity=SeverityLevelEnum.INFO,
         target_type=TargetType.ALERT, target_id=alert.id,
         details={"claimed_by_id": admin_id, "transaction_id": alert.transaction_id,
+                 "mode": "FINAL_REVIEW" if trx.final_status == TransactionStatusEnum.FLAGGED else "POST_BLOCK_INVESTIGATION",
                  "status": "INVESTIGATION_STARTED"}
     )
     db.commit()
@@ -571,10 +575,6 @@ def release_alert_service(db, alert_id, admin_id, user_role="FRAUD_ANALYST"):
     alert.claimed_at = None
     alert.status     = "OPEN"
 
-    trx_repo = TransactionRepository(db)
-    trx      = trx_repo.get_by_id(alert.transaction_id)
-    if trx: trx.final_status = TransactionStatusEnum.FLAGGED
-
     actor_admin = db.query(Admin).filter(Admin.id == admin_id).first()
     log_activity(
         db=db, admin=actor_admin,
@@ -588,6 +588,77 @@ def release_alert_service(db, alert_id, admin_id, user_role="FRAUD_ANALYST"):
     db.commit()
     db.refresh(alert)
     return {"message": "Alert successfully released", "alert_id": alert.id}
+
+
+@log_performance(label="AlertService.complete_blocked_investigation")
+def complete_blocked_investigation_service(
+    db,
+    alert_id: int,
+    analyst_id: int,
+    assessment: str,
+    confidence: str,
+    note: str,
+    background_tasks: BackgroundTasks | None = None,
+):
+    """Close a post-block investigation without changing the fraud decision."""
+    alert = db.query(FraudAlert).filter(FraudAlert.id == alert_id).with_for_update().first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    if alert.status != AlertStatusEnum.IN_PROGRESS or alert.claimed_by != analyst_id:
+        raise HTTPException(status_code=403, detail="Alert must be claimed by you before completing the investigation")
+
+    trx = db.query(Transaction).filter(Transaction.id == alert.transaction_id).first()
+    if not trx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if trx.final_status == TransactionStatusEnum.FLAGGED:
+        raise HTTPException(status_code=409, detail="FLAGGED transactions must be completed through final analyst review")
+
+    assessment = assessment.upper()
+    confidence = confidence.upper()
+    note = note.strip()
+    if assessment not in {"VALID_BLOCK", "POTENTIAL_FALSE_POSITIVE"} or not note:
+        raise HTTPException(status_code=422, detail="A valid assessment and investigation note are required")
+
+    # Post-block findings are labelled feedback for every pattern that matched
+    # this transaction.  VALID_BLOCK increments TP; a potential false positive
+    # increments FP, which in turn refreshes precision and false-discovery rate.
+    from app.application.services.review_service import update_pattern_accuracy
+    is_confirmed_fraud = assessment == "VALID_BLOCK"
+    update_pattern_accuracy(db, trx, is_confirmed_fraud)
+
+    analyst = db.query(Admin).filter(Admin.id == analyst_id).first()
+    alert.status = AlertStatusEnum.RESOLVED
+    alert.resolved_by = analyst_id
+    alert.resolved_at = datetime.now(timezone.utc)
+    log_activity(
+        db=db,
+        admin=analyst,
+        action_type=ActivityActionEnum.ALERT_UPDATED,
+        module_source=EventSourceEnum.MANUAL_REVIEW,
+        severity=SeverityLevelEnum.INFO,
+        target_type=TargetType.ALERT,
+        target_id=alert.id,
+        details={
+            "mode": "POST_BLOCK_INVESTIGATION",
+            "assessment": assessment,
+            "confidence": confidence,
+            "note": note,
+            "pattern_feedback": "TRUE_POSITIVE" if is_confirmed_fraud else "FALSE_POSITIVE",
+            "pattern_ids": trx.violation_pattern_ids or [],
+            "transaction_id": trx.id,
+            "transaction_final_status": trx.final_status.value if hasattr(trx.final_status, "value") else str(trx.final_status),
+            "decision_unchanged": True,
+        },
+    )
+    db.commit()
+    db.refresh(alert)
+    if background_tasks:
+        background_tasks.add_task(
+            safe_redis_publish,
+            {"event": "BLOCKED_INVESTIGATION_COMPLETED", "alert_id": alert.id, "status": "RESOLVED"},
+            task_type="BLOCKED_INVESTIGATION_COMPLETED",
+        )
+    return {"message": "Blocked-transaction investigation completed", "alert_id": alert.id}
 
 
 # ============================================================

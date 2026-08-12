@@ -1,4 +1,5 @@
 from app.infrastructure.database.enums import TransactionStatusEnum
+from app.core.config import settings
 from app.core.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
@@ -69,7 +70,7 @@ def run_ensemble_engine(
     # =========================================================================
     # Non-BLOCK detections must not stop the transaction. High scores without
     # an explicit BLOCK action are flagged for post-transaction review.
-    if total_score >= 50 or "FLAG" in actions or "REVIEW" in actions:
+    if total_score >= settings.REVIEW_RISK_SCORE_THRESHOLD or "FLAG" in actions or "REVIEW" in actions:
         status = TransactionStatusEnum.FLAGGED.value
     else:
         status = "SAFE"

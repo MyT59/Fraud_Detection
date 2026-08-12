@@ -70,6 +70,12 @@ def review_transaction(db, alert_id: int, reviewer_id: int, decision: str, note:
             raise HTTPException(status_code=404, 
                                 detail="Transaction not found")
 
+        if trx.final_status != TransactionStatusEnum.FLAGGED:
+            raise HTTPException(
+                status_code=409,
+                detail="Only FLAGGED transactions can receive a final analyst review.",
+            )
+
         try:
             target_status = TransactionStatusEnum(decision)
         except ValueError:

@@ -27,4 +27,10 @@ class Settings:
 
     AUTO_PATTERN_ACTIVATION_THRESHOLD = int(os.getenv("AUTO_PATTERN_ACTIVATION_THRESHOLD", 3))
 
+    # Centralised transaction-decision policy.  Values are deliberately kept
+    # in configuration so Risk can calibrate the baseline without changing the
+    # engine implementation.
+    REVIEW_RISK_SCORE_THRESHOLD = int(os.getenv("REVIEW_RISK_SCORE_THRESHOLD", 50))
+    AUTO_FRAUD_SCORE_THRESHOLD = int(os.getenv("AUTO_FRAUD_SCORE_THRESHOLD", 90))
+
 settings = Settings()

@@ -18,6 +18,15 @@ from app.application.services.blacklist_service import run_blacklist_check
 from app.application.services.ensemble_engine_service import run_ensemble_engine
 from app.application.services.activity_log_service import log_activity
 from app.application.services.ml_realtime_service import process_transaction_ml_async
+from app.application.services.auto_blacklist_service import (
+    auto_blacklist_transaction_identity,
+    invalidate_auto_blacklist_cache,
+)
+from app.application.services.fraud_decision_service import (
+    decide_score_based_status,
+    decision_thresholds,
+    reached_auto_fraud_threshold,
+)
 from app.domain.entities.target_type import TargetType
 from app.infrastructure.repositories.transaction_repository import TransactionRepository
 from app.infrastructure.database.models.global_rule_model import GlobalRule
@@ -407,7 +416,6 @@ def process_transaction(data: dict, db: Session):
 
         if isinstance(pattern_actions, str):
             pattern_actions = [pattern_actions]
-        has_block_action = "BLOCK" in set((rule_actions or []) + (pattern_actions or []))
 
         # =========================
         # 6. ENSEMBLE ENGINE
@@ -445,10 +453,20 @@ def process_transaction(data: dict, db: Session):
         if any("Fan-In" in v["name"] or "Syndicate" in v["name"] for v in violations):
             trx.risk_score = min(100, trx.risk_score + 10)
 
-        if trx.risk_score >= 90 and has_block_action:
-            trx.final_status = TransactionStatusEnum.FRAUD
-        elif trx.risk_score >= 90 and trx.final_status != TransactionStatusEnum.FRAUD:
-            trx.final_status = TransactionStatusEnum.FLAGGED
+        if trx.final_status != TransactionStatusEnum.FRAUD:
+            # One policy point for automatic decisions.  FLAGGED is the only
+            # state that requires analyst approval; a score at the auto-fraud
+            # threshold is blocked without waiting for manual review.
+            trx.final_status = decide_score_based_status(
+                trx.risk_score,
+                requires_review=(
+                    is_jump or ensemble_status == TransactionStatusEnum.FLAGGED
+                ),
+            )
+
+        auto_blacklist_changed = False
+        if reached_auto_fraud_threshold(trx.risk_score):
+            _, auto_blacklist_changed = auto_blacklist_transaction_identity(db, trx)
 
         # =========================
         # 8. FINALIZE
@@ -466,6 +484,10 @@ def process_transaction(data: dict, db: Session):
             "pattern_score": pattern_score,
             "ml_runtime_status": "QUEUED",
             "final_score":   trx.risk_score,
+            "decision_policy": decision_thresholds(),
+            "decision_mode": "AUTO_FRAUD" if trx.final_status == TransactionStatusEnum.FRAUD else (
+                "ANALYST_REVIEW" if trx.final_status == TransactionStatusEnum.FLAGGED else "AUTO_SAFE"
+            ),
             "pattern_names": [v["name"] for v in violations if v["type"] == "PATTERN"],
             "pattern_ids":   pattern_ids,
             "rule_names":    [v["name"] for v in violations if v["type"] == "RULE"],
@@ -495,6 +517,7 @@ def process_transaction(data: dict, db: Session):
 
         _tick("commit")
         db.commit()
+        invalidate_auto_blacklist_cache(auto_blacklist_changed)
         db.refresh(trx)
         _perf_commit = _tock("commit")
 

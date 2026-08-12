@@ -6,6 +6,7 @@ from app.core.security import get_current_user
 
 from app.application.services.alert_service import (
     claim_alert_service,
+    complete_blocked_investigation_service,
     get_all_alerts,
     get_alert_metrics_service,
     get_alert_detail_service,
@@ -18,7 +19,7 @@ from app.core.rbac import get_role_name, require_roles
 from app.infrastructure.database.models.fraud_alert_model import FraudAlert
 from app.application.services.alert_service import get_open_alert_count, get_open_queue_service
 from app.application.services.notification_service import should_send_fraud_alert
-from app.presentation.schemas.alert_schema import AlertStatusUpdate, AlertPriorityDistributionResponse
+from app.presentation.schemas.alert_schema import AlertStatusUpdate, AlertPriorityDistributionResponse, BlockedInvestigationRequest
 from app.infrastructure.database.enums import AlertStatusEnum
 
 OPERATIONS_ROLES = ("SUPER_ADMIN", "RISK_MANAGER", "FRAUD_ANALYST")
@@ -155,6 +156,25 @@ def claim_alert_route(
         alert_id=alert_id, 
         admin_id=user.id,
         background_tasks=background_tasks 
+    )
+
+
+@router.post("/{alert_id}/investigate")
+def complete_blocked_investigation(
+    alert_id: int,
+    payload: BlockedInvestigationRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user=Depends(require_roles("FRAUD_ANALYST")),
+):
+    return complete_blocked_investigation_service(
+        db=db,
+        alert_id=alert_id,
+        analyst_id=user.id,
+        assessment=payload.assessment,
+        confidence=payload.confidence,
+        note=payload.note,
+        background_tasks=background_tasks,
     )
 
 @router.post("/{alert_id}/release")
